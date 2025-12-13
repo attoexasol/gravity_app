@@ -1,0 +1,36 @@
+<div className="px-4 sm:px-6 md:px-8 -mt-6 mb-2">
+          <motion.div
+            className="bg-white/80 backdrop-blur-sm rounded-2xl px-4 py-2 flex items-center justify-between max-w-7xl mx-auto shadow-sm"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="flex items-center gap-2">
+              {healthMetrics.syncStatus === 'syncing' ? (
+                <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
+              ) : healthMetrics.syncStatus === 'error' ? (
+                <AlertCircle className="w-4 h-4 text-red-500" />
+              ) : (
+                <div className="w-2 h-2 bg-[#00B8A9] rounded-full" />
+              )}
+              <span className={`text-sm ${getSyncStatusColor()}`}>
+                {healthMetrics.syncStatus === 'syncing' && 'Syncing health data...'}
+                {healthMetrics.syncStatus === 'success' && `Synced ${formatLastSync()}`}
+                {healthMetrics.syncStatus === 'error' && 'Sync failed'}
+              </span>
+              {healthMetrics.platform !== 'none' && (
+                <span className="text-xs text-[#0A2342]/40">
+                  · {healthMetrics.platform === 'apple' ? 'Apple Health' : 'Google Fit'}
+                </span>
+              )}
+            </div>
+            {!isSyncing && (
+              <motion.button
+                onClick={handleManualSync}
+                className="text-[#00B8A9] text-sm hover:underline"
+                whileTap={{ scale: 0.95 }}
+              >
+                Refresh
+              </motion.button>
+            )}
+          </motion.div>
+        </div>
