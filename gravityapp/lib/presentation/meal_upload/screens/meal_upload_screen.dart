@@ -738,6 +738,7 @@ class MealUploadScreen extends GetView<MealUploadController> {
                     children: [
                       // Cached / Analyzed badge
                       Flexible(
+                        flex: 1,
                         child: Container(
                           padding: EdgeInsets.symmetric(
                             horizontal: 12.w,
@@ -765,6 +766,7 @@ class MealUploadScreen extends GetView<MealUploadController> {
                                     color: Colors.white,
                                   ),
                                   overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
                                 ),
                               ),
                             ],
@@ -776,6 +778,7 @@ class MealUploadScreen extends GetView<MealUploadController> {
 
                       // Confidence Indicator
                       Flexible(
+                        flex: 1,
                         child: Container(
                           padding: EdgeInsets.symmetric(
                             horizontal: 12.w,
@@ -791,6 +794,8 @@ class MealUploadScreen extends GetView<MealUploadController> {
                               color: const Color(0xFF0A2342),
                             ),
                             overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            textAlign: TextAlign.center,
                           ),
                         ),
                       ),
@@ -838,6 +843,9 @@ class MealUploadScreen extends GetView<MealUploadController> {
                         style: ResponsiveTextStyles.textSm.copyWith(
                           color: const Color(0xFF00B8A9),
                         ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                        softWrap: true,
                       ),
                     );
                   }).toList(),
@@ -851,10 +859,14 @@ class MealUploadScreen extends GetView<MealUploadController> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      "Health Score",
-                      style: ResponsiveTextStyles.textBase.copyWith(
-                        color: const Color(0xFF0A2342),
+                    Flexible(
+                      child: Text(
+                        "Health Score",
+                        style: ResponsiveTextStyles.textBase.copyWith(
+                          color: const Color(0xFF0A2342),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                     ),
                     Text(
@@ -863,6 +875,8 @@ class MealUploadScreen extends GetView<MealUploadController> {
                         fontWeight: FontWeight.w600,
                         color: const Color(0xFF0A2342),
                       ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ],
                 ),
@@ -912,45 +926,59 @@ class MealUploadScreen extends GetView<MealUploadController> {
                 SizedBox(height: 20.h),
 
                 /// Dynamic Grid
-                GridView(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 16.w,
-                    mainAxisSpacing: 16.h,
-                    childAspectRatio: 1.3,
-                  ),
-                  children: [
-                    _NutritionCard(
-                      icon: Icons.local_fire_department,
-                      label: "Calories",
-                      value: analysis.nutritionInfo.calories.toString(),
-                      unit: "kcal",
-                      colors: [Colors.orange.shade400, Colors.orange.shade600],
-                    ),
-                    _NutritionCard(
-                      icon: Icons.set_meal,
-                      label: "Protein",
-                      value: analysis.nutritionInfo.protein.toString(),
-                      unit: "g",
-                      colors: [Colors.red.shade400, Colors.red.shade600],
-                    ),
-                    _NutritionCard(
-                      icon: Icons.apple,
-                      label: "Carbs",
-                      value: analysis.nutritionInfo.carbs.toString(),
-                      unit: "g",
-                      colors: [Colors.green.shade400, Colors.green.shade600],
-                    ),
-                    _NutritionCard(
-                      icon: Icons.water_drop,
-                      label: "Fat",
-                      value: analysis.nutritionInfo.fat.toString(),
-                      unit: "g",
-                      colors: [Colors.yellow.shade400, Colors.yellow.shade600],
-                    ),
-                  ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return GridView(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 16.w,
+                        mainAxisSpacing: 16.h,
+                        childAspectRatio:
+                            1.1, // Reduced from 1.3 to give more height
+                      ),
+                      children: [
+                        _NutritionCard(
+                          icon: Icons.local_fire_department,
+                          label: "Calories",
+                          value: analysis.nutritionInfo.calories.toString(),
+                          unit: "kcal",
+                          colors: [
+                            Colors.orange.shade400,
+                            Colors.orange.shade600,
+                          ],
+                        ),
+                        _NutritionCard(
+                          icon: Icons.set_meal,
+                          label: "Protein",
+                          value: analysis.nutritionInfo.protein.toString(),
+                          unit: "g",
+                          colors: [Colors.red.shade400, Colors.red.shade600],
+                        ),
+                        _NutritionCard(
+                          icon: Icons.apple,
+                          label: "Carbs",
+                          value: analysis.nutritionInfo.carbs.toString(),
+                          unit: "g",
+                          colors: [
+                            Colors.green.shade400,
+                            Colors.green.shade600,
+                          ],
+                        ),
+                        _NutritionCard(
+                          icon: Icons.water_drop,
+                          label: "Fat",
+                          value: analysis.nutritionInfo.fat.toString(),
+                          unit: "g",
+                          colors: [
+                            Colors.yellow.shade400,
+                            Colors.yellow.shade600,
+                          ],
+                        ),
+                      ],
+                    );
+                  },
                 ),
 
                 SizedBox(height: 16.h),
@@ -975,6 +1003,8 @@ class MealUploadScreen extends GetView<MealUploadController> {
                               style: ResponsiveTextStyles.textXs.copyWith(
                                 color: const Color(0xFF0A2342).withOpacity(0.6),
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                             SizedBox(height: 4.h),
                             Text(
@@ -982,6 +1012,8 @@ class MealUploadScreen extends GetView<MealUploadController> {
                               style: ResponsiveTextStyles.textBase.copyWith(
                                 color: const Color(0xFF0A2342),
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ],
                         ),
@@ -1003,6 +1035,8 @@ class MealUploadScreen extends GetView<MealUploadController> {
                               style: ResponsiveTextStyles.textXs.copyWith(
                                 color: const Color(0xFF0A2342).withOpacity(0.6),
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                             SizedBox(height: 4.h),
                             Text(
@@ -1010,6 +1044,8 @@ class MealUploadScreen extends GetView<MealUploadController> {
                               style: ResponsiveTextStyles.textBase.copyWith(
                                 color: const Color(0xFF0A2342),
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ],
                         ),
@@ -1058,6 +1094,8 @@ class MealUploadScreen extends GetView<MealUploadController> {
                                   0xFF0A2342,
                                 ).withOpacity(0.80),
                               ),
+                              overflow: TextOverflow.visible,
+                              softWrap: true,
                             ),
                           ],
                         ),
@@ -1103,10 +1141,17 @@ class MealUploadScreen extends GetView<MealUploadController> {
 
                 Center(
                   child: Text(
-                    "Powered by ${analysis.aiProvider == 'gemini' ? 'Google Gemini' : 'OpenAI GPT-4'} Vision",
+                    "Powered by ${analysis.aiProvider == 'gemini'
+                        ? 'Google Gemini'
+                        : analysis.aiProvider == 'n8n'
+                        ? 'N8N'
+                        : 'OpenAI GPT-4'} Vision",
                     style: ResponsiveTextStyles.textXs.copyWith(
                       color: const Color(0xFF0A2342).withOpacity(0.40),
                     ),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
                   ),
                 ),
               ],
@@ -1438,7 +1483,7 @@ class _NutritionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      padding: EdgeInsets.all(16.w),
+      padding: EdgeInsets.all(12.w), // Reduced from 16.w
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFFF5F6FA), Colors.white],
@@ -1448,38 +1493,49 @@ class _NutritionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18.r),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min, // Added to prevent overflow
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 40.w,
-            height: 40.h,
+            width: 36.w, // Reduced from 40.w
+            height: 36.h, // Reduced from 40.h
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12.r),
               gradient: LinearGradient(colors: colors),
             ),
-            child: Icon(icon, size: 20.sp, color: Colors.white),
+            child: Icon(
+              icon,
+              size: 18.sp,
+              color: Colors.white,
+            ), // Reduced from 20.sp
           ),
-          SizedBox(height: 12.h),
+          SizedBox(height: 8.h), // Reduced from 12.h
 
           Text(
             label,
             style: ResponsiveTextStyles.textXs.copyWith(
               color: const Color(0xFF0A2342).withOpacity(0.60),
             ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
-          SizedBox(height: 4.h),
+          SizedBox(height: 2.h), // Reduced from 4.h
 
           RichText(
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
             text: TextSpan(
               text: value,
-              style: ResponsiveTextStyles.textBase.copyWith(
+              style: ResponsiveTextStyles.textSm.copyWith(
+                // Reduced from textBase
                 color: const Color(0xFF0A2342),
                 fontWeight: FontWeight.w600,
               ),
               children: [
                 TextSpan(
                   text: " $unit",
-                  style: ResponsiveTextStyles.textSm.copyWith(
+                  style: ResponsiveTextStyles.textXs.copyWith(
+                    // Reduced from textSm
                     color: const Color(0xFF0A2342).withOpacity(0.60),
                   ),
                 ),
