@@ -124,16 +124,27 @@ class CommunityController extends GetxController {
     ];
   }
 
+  // Match React: User can only have ONE reaction per post
+  // If clicking the same reaction, remove it (toggle off)
+  // If clicking a different reaction, remove previous and add new one
   void toggleReaction(int postId, String reaction) {
-    final postReactions = activeReactions[postId] ?? <String>{};
-    final isAdding = !postReactions.contains(reaction);
-
-    if (postReactions.contains(reaction)) {
-      postReactions.remove(reaction);
-    } else {
+    final postReactions = Set<String>.from(activeReactions[postId] ?? <String>{});
+    
+    // Check if user already has this exact reaction
+    final hasThisReaction = postReactions.contains(reaction);
+    
+    // Get the previous reaction if user had one (can only have one at a time)
+    final previousReaction = postReactions.isNotEmpty ? postReactions.first : null;
+    
+    // Clear all reactions for this post (since user can only have one)
+    postReactions.clear();
+    
+    // If clicking the same reaction, remove it (toggle off)
+    // If clicking a different reaction, add the new one
+    if (!hasThisReaction) {
       postReactions.add(reaction);
     }
-
+    
     activeReactions[postId] = postReactions;
     activeReactions.refresh();
 
@@ -141,15 +152,41 @@ class CommunityController extends GetxController {
     final postIndex = posts.indexWhere((p) => p.id == postId);
     if (postIndex != -1) {
       final post = posts[postIndex];
-      final updatedReactions = post.reactions.copyWith();
-
-      if (reaction == 'heart') {
-        updatedReactions.heart += isAdding ? 1 : -1;
-      } else if (reaction == 'thumbsUp') {
-        updatedReactions.thumbsUp += isAdding ? 1 : -1;
-      } else if (reaction == 'fire') {
-        updatedReactions.fire += isAdding ? 1 : -1;
+      final currentReactions = post.reactions;
+      
+      // Start with current reaction counts
+      int newHeart = currentReactions.heart;
+      int newThumbsUp = currentReactions.thumbsUp;
+      int newFire = currentReactions.fire;
+      
+      // Decrement previous reaction if user had one
+      if (previousReaction != null) {
+        if (previousReaction == 'heart') {
+          newHeart = (newHeart - 1).clamp(0, double.infinity).toInt();
+        } else if (previousReaction == 'thumbsUp') {
+          newThumbsUp = (newThumbsUp - 1).clamp(0, double.infinity).toInt();
+        } else if (previousReaction == 'fire') {
+          newFire = (newFire - 1).clamp(0, double.infinity).toInt();
+        }
       }
+      
+      // Increment new reaction if user is adding one (not removing)
+      if (!hasThisReaction) {
+        if (reaction == 'heart') {
+          newHeart = newHeart + 1;
+        } else if (reaction == 'thumbsUp') {
+          newThumbsUp = newThumbsUp + 1;
+        } else if (reaction == 'fire') {
+          newFire = newFire + 1;
+        }
+      }
+      
+      // Create updated reactions with new counts
+      final updatedReactions = currentReactions.copyWith(
+        heart: newHeart,
+        thumbsUp: newThumbsUp,
+        fire: newFire,
+      );
 
       posts[postIndex] = post.copyWith(reactions: updatedReactions);
       posts.refresh();

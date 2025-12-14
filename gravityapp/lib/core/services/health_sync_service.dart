@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:health/health.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -96,17 +97,22 @@ class HealthSyncService {
     if (_isInitialized) return true;
 
     // Only initialize on iOS or Android, not on web
+    if (kIsWeb) {
+      print('⚠️ Health services are only available on iOS and Android devices, not on web');
+      return false;
+    }
+
     if (!Platform.isIOS && !Platform.isAndroid) {
       print('⚠️ Health services are only available on iOS and Android devices');
       return false;
     }
 
     try {
-      final platformName = Platform.isIOS ? 'HealthKit' : 'Google Fit';
+      final platformName = kIsWeb ? 'Web' : (Platform.isIOS ? 'HealthKit' : 'Google Fit');
       print('🔵 Initializing $platformName...');
 
       // On Android, request runtime permissions first
-      if (Platform.isAndroid) {
+      if (!kIsWeb && Platform.isAndroid) {
         print('🔵 Requesting Android runtime permissions...');
         final activityRecognitionStatus = await Permission.activityRecognition
             .request();
@@ -123,7 +129,7 @@ class HealthSyncService {
       _health = Health();
 
       // Request permissions - use platform-specific data types
-      final types = Platform.isAndroid
+      final types = (!kIsWeb && Platform.isAndroid)
           ? [
               // Google Fit supported types
               HealthDataType.STEPS,
@@ -145,7 +151,7 @@ class HealthSyncService {
       bool granted = false;
 
       // On Android, check if we can actually request authorization
-      if (Platform.isAndroid) {
+      if (!kIsWeb && Platform.isAndroid) {
         try {
           print(
             '🔵 Attempting to request Health Connect/Google Fit authorization...',
@@ -217,9 +223,9 @@ class HealthSyncService {
       // If we get here, permissions were granted
       if (granted) {
         _isInitialized = true;
-        final platform = Platform.isIOS
-            ? HealthPlatform.apple
-            : HealthPlatform.google;
+        final platform = kIsWeb
+            ? HealthPlatform.none
+            : (Platform.isIOS ? HealthPlatform.apple : HealthPlatform.google);
         print('✅ $platformName initialized successfully');
 
         _updateMetrics(SyncStatus.success, platform: platform);
@@ -244,7 +250,7 @@ class HealthSyncService {
         return false;
       }
     } catch (e, stackTrace) {
-      final platformName = Platform.isIOS ? 'HealthKit' : 'Google Fit';
+      final platformName = kIsWeb ? 'Web' : (Platform.isIOS ? 'HealthKit' : 'Google Fit');
       print('❌ $platformName initialization error: $e');
       print('Stack trace: $stackTrace');
       _updateMetrics(SyncStatus.error, platform: HealthPlatform.none);
@@ -260,6 +266,11 @@ class HealthSyncService {
 
   /// Sync health data from HealthKit (iOS) or Google Fit (Android)
   Future<void> syncHealthData() async {
+    if (kIsWeb) {
+      print('⚠️ Health data syncing is not available on web');
+      return;
+    }
+
     if (!_isInitialized) {
       final platformName = Platform.isIOS ? 'HealthKit' : 'Google Fit';
       print('🔵 $platformName not initialized, initializing now...');
@@ -370,7 +381,7 @@ class HealthSyncService {
               .toDouble();
           print('📊 Most recent weight: $weight kg');
         } else {
-          final platformName = Platform.isIOS ? 'HealthKit' : 'Google Fit';
+          final platformName = kIsWeb ? 'Web' : (Platform.isIOS ? 'HealthKit' : 'Google Fit');
           print('⚠️ No weight data found in $platformName');
         }
       } catch (e) {
@@ -394,7 +405,7 @@ class HealthSyncService {
               .reduce((a, b) => a + b);
           print('📊 Today\'s water intake: $waterIntake L');
         } else {
-          final platformName = Platform.isIOS ? 'HealthKit' : 'Google Fit';
+          final platformName = kIsWeb ? 'Web' : (Platform.isIOS ? 'HealthKit' : 'Google Fit');
           print('⚠️ No water intake data found in $platformName for today');
         }
       } catch (e) {

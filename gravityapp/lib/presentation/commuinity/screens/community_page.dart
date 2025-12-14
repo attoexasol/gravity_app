@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
 import '../controllers/community_controller.dart';
@@ -18,12 +19,12 @@ class CommunityPage extends GetView<CommunityController> {
 
     return Stack(
       children: [
-        // Main feed - No padding at top (MainAppBar handles it)
+        // Main feed - Match React: px-6 py-6 space-y-4
         Obx(() => ListView.builder(
           padding: EdgeInsets.only(
-            left: 20.w,
-            right: 20.w,
-            top: 20.h,
+            left: 24.w,  // px-6 = 24px
+            right: 24.w, // px-6 = 24px
+            top: 24.h,   // py-6 = 24px
             bottom: 100.h, // Prevent overflow with bottom nav
           ),
           itemCount: controller.posts.length,
@@ -59,7 +60,7 @@ class CommunityPage extends GetView<CommunityController> {
 
   Widget _buildPostCard(Post post, int index) {
     return Container(
-      margin: EdgeInsets.only(bottom: 16.h),
+      margin: EdgeInsets.only(bottom: 16.h), // space-y-4 = 16px spacing between posts
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(28.r),
@@ -74,18 +75,18 @@ class CommunityPage extends GetView<CommunityController> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // User header
+          // User header - Match React: p-5 padding
           Padding(
-            padding: EdgeInsets.all(20.r),
+            padding: EdgeInsets.all(20.r), // p-5 = 20px
             child: Row(
               children: [
-                // Avatar
+                // Avatar - Match React: w-12 h-12 = 48px diameter, radius 24
                 CircleAvatar(
                   radius: 24.r,
                   backgroundImage: CachedNetworkImageProvider(post.user.avatar),
                   backgroundColor: AppColors.muted,
                 ),
-                SizedBox(width: 12.w),
+                SizedBox(width: 12.w), // gap-3 = 12px
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,32 +113,36 @@ class CommunityPage extends GetView<CommunityController> {
             ),
           ),
 
-          // Post image
+          // Post image - Match React: h-64 = 256px
           if (post.image.isNotEmpty)
-            CachedNetworkImage(
-              imageUrl: post.image,
-              height: 250.h,
+            Container(
+              height: 256.h, // h-64 = 256px (exact match)
               width: double.infinity,
-              fit: BoxFit.cover,
-              placeholder: (context, url) => Container(
-                height: 250.h,
-                color: AppColors.muted,
-                child: const Center(
-                  child: CircularProgressIndicator(
-                    color: Color(0xFF00B8A9),
+              color: AppColors.muted,
+              child: CachedNetworkImage(
+                imageUrl: post.image,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => Container(
+                  height: 256.h,
+                  color: AppColors.muted,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF00B8A9),
+                    ),
                   ),
                 ),
-              ),
-              errorWidget: (context, url, error) => Container(
-                height: 250.h,
-                color: AppColors.muted,
-                child: Icon(Icons.image_not_supported, size: 48.sp),
+                errorWidget: (context, url, error) => Container(
+                  height: 256.h,
+                  color: AppColors.muted,
+                  child: Icon(Icons.image_not_supported, size: 48.sp),
+                ),
               ),
             ),
 
-          // Post text
+          // Post text - Match React: p-5 padding, mb-4 margin-bottom
           Padding(
-            padding: EdgeInsets.all(20.r),
+            padding: EdgeInsets.all(20.r), // p-5 = 20px
             child: Text(
               post.text,
               style: ResponsiveTextStyles.textBase.copyWith(
@@ -146,23 +151,27 @@ class CommunityPage extends GetView<CommunityController> {
             ),
           ),
 
-          // Reactions bar
+          // Reactions bar - Match React: flex items-center justify-between pt-4 border-t border-[#0A2342]/10
           Padding(
-            padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 20.h),
+            padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 20.h), // p-5 = 20px horizontal/vertical
             child: Container(
-              padding: EdgeInsets.symmetric(vertical: 12.h),
+              padding: EdgeInsets.only(top: 16.h), // pt-4 = 16px top padding
               decoration: BoxDecoration(
                 border: Border(
                   top: BorderSide(
-                    color: const Color(0xFF0A2342).withOpacity(0.1),
+                    color: const Color(0xFF0A2342).withOpacity(0.1), // border-[#0A2342]/10
                     width: 1,
                   ),
                 ),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween, // justify-between
+                crossAxisAlignment: CrossAxisAlignment.center, // items-center
                 children: [
+                  // Left side: Reaction buttons - Match React: flex items-center gap-4
                   Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       _buildReactionButton(
                         post.id,
@@ -171,7 +180,7 @@ class CommunityPage extends GetView<CommunityController> {
                         post.reactions.heart,
                         Colors.red,
                       ),
-                      SizedBox(width: 16.w),
+                      SizedBox(width: 16.w), // gap-4 = 16px
                       _buildReactionButton(
                         post.id,
                         'thumbsUp',
@@ -179,7 +188,7 @@ class CommunityPage extends GetView<CommunityController> {
                         post.reactions.thumbsUp,
                         Colors.blue,
                       ),
-                      SizedBox(width: 16.w),
+                      SizedBox(width: 16.w), // gap-4 = 16px
                       _buildReactionButton(
                         post.id,
                         'fire',
@@ -189,36 +198,25 @@ class CommunityPage extends GetView<CommunityController> {
                       ),
                     ],
                   ),
-                  InkWell(
-                    onTap: () => controller.openComments(post.id),
-                    borderRadius: BorderRadius.circular(8.r),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.comment_outlined,
-                            size: 20.sp,
-                            color: const Color(0xFF0A2342).withOpacity(0.6),
-                          ),
-                          SizedBox(width: 6.w),
-                          Text(
-                            '${post.comments.length}',
-                            style: ResponsiveTextStyles.textSm.copyWith(
-                              color: const Color(0xFF0A2342).withOpacity(0.6),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  // Right side: Comment button - Match React: motion.button with whileTap={{ scale: 0.9 }}
+                  _buildCommentButton(post.id, post.comments.length),
                 ],
               ),
             ),
           ),
         ],
       ),
-    );
+    )
+        // Match React AnimatePresence animation: initial={{ opacity: 0, y: 20 }}, animate={{ opacity: 1, y: 0 }}, delay: index * 0.1
+        .animate()
+        .fadeIn(duration: 300.ms, delay: (index * 100).ms)
+        .moveY(
+          begin: 20.h, // y: 20 (20 pixels)
+          end: 0,
+          duration: 300.ms,
+          delay: (index * 100).ms,
+          curve: Curves.easeOut,
+        );
   }
 
   Widget _buildReactionButton(
@@ -232,36 +230,63 @@ class CommunityPage extends GetView<CommunityController> {
       final isActive =
           controller.activeReactions[postId]?.contains(reaction) ?? false;
 
-      return InkWell(
+      // Match React: motion.button with whileTap={{ scale: 0.9 }}
+      return _AnimatedTapWidget(
         onTap: () => controller.toggleReaction(postId, reaction),
-        borderRadius: BorderRadius.circular(8.r),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 20.sp,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 20.sp, // w-5 h-5 = 20px (match React)
+              color: isActive
+                  ? activeColor
+                  : const Color(0xFF0A2342).withOpacity(0.6), // text-[#0A2342]/60
+            ),
+            SizedBox(width: 8.w), // gap-2 = 8px (match React)
+            Text(
+              '$count',
+              style: ResponsiveTextStyles.textSm.copyWith(
                 color: isActive
                     ? activeColor
-                    : const Color(0xFF0A2342).withOpacity(0.6),
+                    : const Color(0xFF0A2342).withOpacity(0.6), // text-[#0A2342]/60
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
               ),
-              SizedBox(width: 6.w),
-              Text(
-                '$count',
-                style: ResponsiveTextStyles.textSm.copyWith(
-                  color: isActive
-                      ? activeColor
-                      : const Color(0xFF0A2342).withOpacity(0.6),
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     });
+  }
+
+  // Comment button - Match React: motion.button with MessageCircle icon
+  // className="flex items-center gap-2 text-[#0A2342]/60 hover:text-[#00B8A9] transition-colors"
+  // whileTap={{ scale: 0.9 }}
+  Widget _buildCommentButton(int postId, int commentCount) {
+    return _AnimatedTapWidget(
+      onTap: () => controller.openComments(postId), // Opens bottom sheet modal
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.mode_comment_outlined, // MessageCircle equivalent - matches React <MessageCircle className="w-5 h-5" />
+            size: 20.sp, // w-5 h-5 = 20px (match React)
+            color: const Color(0xFF0A2342).withOpacity(0.6), // text-[#0A2342]/60
+          ),
+          SizedBox(width: 8.w), // gap-2 = 8px (match React)
+          Text(
+            '$commentCount',
+            style: ResponsiveTextStyles.textSm.copyWith( // text-sm
+              color: const Color(0xFF0A2342).withOpacity(0.6), // text-[#0A2342]/60
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildCreatePostModal() {
@@ -538,32 +563,46 @@ class CommunityPage extends GetView<CommunityController> {
     final post = controller.selectedPost;
     if (post == null) return const SizedBox.shrink();
 
+    // Match React: AnimatePresence with spring animations
     return Material(
-      color: Colors.black.withOpacity(0.5),
+      color: Colors.transparent,
       child: SafeArea(
         child: Stack(
           children: [
-            // Backdrop
+            // Backdrop - Match React: initial={{ opacity: 0 }}, animate={{ opacity: 1 }}, bg-black/50
             GestureDetector(
               onTap: controller.closeComments,
-              child: Container(color: Colors.transparent),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5), // bg-black/50
+                ),
+              )
+                .animate()
+                .fadeIn(duration: 300.ms),
             ),
 
-            // Modal content
+            // Modal content - Match React: spring animation, slide up from bottom
             Align(
               alignment: Alignment.bottomCenter,
               child: Container(
-                constraints: BoxConstraints(maxHeight: 0.85.sh),
+                constraints: BoxConstraints(maxHeight: 0.85.sh), // max-h-[85vh]
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)), // rounded-t-[40px]
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 20.r,
+                      offset: Offset(0, -4.h),
+                    ),
+                  ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header with gradient
+                    // Header with gradient - Match React: bg-gradient-to-br from-[#0A2342] to-[#00B8A9]
                     Container(
-                      padding: EdgeInsets.all(20.r),
+                      padding: EdgeInsets.all(24.r), // p-6 = 24px
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           begin: Alignment.topLeft,
@@ -582,20 +621,20 @@ class CommunityPage extends GetView<CommunityController> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          IconButton(
-                            onPressed: controller.closeComments,
-                            icon: Container(
-                              padding: EdgeInsets.all(6.r),
+                          _AnimatedTapWidget(
+                            onTap: controller.closeComments,
+                            child: Container(
+                              width: 40.w, // w-10 = 40px
+                              height: 40.h, // h-10 = 40px
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withOpacity(0.2), // bg-white/20
                                 shape: BoxShape.circle,
                               ),
-                              child: Icon(Icons.close, color: Colors.white, size: 20.sp),
-                            ),
-                            padding: EdgeInsets.zero,
-                            constraints: BoxConstraints(
-                              minWidth: 40.w,
-                              minHeight: 40.h,
+                              child: Icon(
+                                Icons.close,
+                                color: Colors.white,
+                                size: 20.sp, // w-5 h-5 = 20px
+                              ),
                             ),
                           ),
                         ],
@@ -615,27 +654,28 @@ class CommunityPage extends GetView<CommunityController> {
                       ),
                     ),
 
-                    // Add comment input
+                    // Add comment input - Match React: p-6 border-t border-[#0A2342]/10 bg-white
                     Container(
-                      color: Colors.white,
-                      padding: EdgeInsets.all(20.r),
+                      padding: EdgeInsets.all(24.r), // p-6 = 24px
                       decoration: BoxDecoration(
+                        color: Colors.white,
                         border: Border(
                           top: BorderSide(
-                            color: const Color(0xFF0A2342).withOpacity(0.1),
+                            color: const Color(0xFF0A2342).withOpacity(0.1), // border-[#0A2342]/10
                           ),
                         ),
                       ),
                       child: Row(
                         children: [
+                          // Avatar - Match React: w-10 h-10 = 40px
                           CircleAvatar(
-                            radius: 20.r,
+                            radius: 20.r, // w-10 h-10 = 40px diameter
                             backgroundImage: const CachedNetworkImageProvider(
                               'https://i.pravatar.cc/150?img=1',
                             ),
                             backgroundColor: AppColors.muted,
                           ),
-                          SizedBox(width: 12.w),
+                          SizedBox(width: 12.w), // gap-3 = 12px
                           Expanded(
                             child: TextField(
                               onChanged: (value) => controller.newComment.value = value,
@@ -647,48 +687,58 @@ class CommunityPage extends GetView<CommunityController> {
                               decoration: InputDecoration(
                                 hintText: 'Add a comment...',
                                 hintStyle: ResponsiveTextStyles.textSm.copyWith(
-                                  color: const Color(0xFF0A2342).withOpacity(0.4),
+                                  color: const Color(0xFF0A2342).withOpacity(0.4), // placeholder-[#0A2342]/40
                                 ),
                                 filled: true,
-                                fillColor: AppColors.inputBackground,
+                                fillColor: AppColors.inputBackground, // bg-[#F5F6FA]
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(24.r),
+                                  borderRadius: BorderRadius.circular(24.r), // rounded-full
                                   borderSide: BorderSide.none,
                                 ),
                                 contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 16.w,
-                                  vertical: 12.h,
+                                  horizontal: 16.w, // px-4
+                                  vertical: 12.h, // py-3
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(24.r),
+                                  borderSide: BorderSide(
+                                    color: const Color(0xFF00B8A9).withOpacity(0.2), // focus:ring-2 focus:ring-[#00B8A9]/20
+                                    width: 2,
+                                  ),
                                 ),
                               ),
-                              style: ResponsiveTextStyles.textSm,
+                              style: ResponsiveTextStyles.textSm.copyWith(
+                                color: const Color(0xFF0A2342), // text-[#0A2342]
+                              ),
                             ),
                           ),
-                          SizedBox(width: 8.w),
+                          SizedBox(width: 12.w), // gap-3 = 12px
+                          // Send button - Match React: w-12 h-12 rounded-full, gradient when enabled
                           Obx(() {
                             final canSend = controller.newComment.value.trim().isNotEmpty;
-                            return IconButton(
-                              onPressed: canSend ? () => controller.addComment(post.id) : null,
-                              icon: Container(
-                                padding: EdgeInsets.all(8.r),
+                            return _AnimatedTapWidget(
+                              onTap: canSend ? () => controller.addComment(post.id) : () {},
+                              child: Container(
+                                width: 48.w, // w-12 = 48px
+                                height: 48.h, // h-12 = 48px
                                 decoration: BoxDecoration(
                                   gradient: canSend
                                       ? const LinearGradient(
-                                    colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                                  )
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+                                        )
                                       : null,
-                                  color: canSend ? null : Colors.grey.shade300,
+                                  color: canSend ? null : const Color(0xFF0A2342).withOpacity(0.1), // bg-[#0A2342]/10
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
                                   Icons.send,
-                                  color: Colors.white,
-                                  size: 20.sp,
+                                  color: canSend
+                                      ? Colors.white
+                                      : const Color(0xFF0A2342).withOpacity(0.4), // text-[#0A2342]/40
+                                  size: 20.sp, // w-5 h-5 = 20px
                                 ),
-                              ),
-                              padding: EdgeInsets.zero,
-                              constraints: BoxConstraints(
-                                minWidth: 40.w,
-                                minHeight: 40.h,
                               ),
                             );
                           }),
@@ -697,7 +747,18 @@ class CommunityPage extends GetView<CommunityController> {
                     ),
                   ],
                 ),
-              ),
+              )
+                // Match React: spring animation slide up from bottom
+                // initial={{ opacity: 0, y: '100%' }}, animate={{ opacity: 1, y: 0 }}
+                // transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                .animate()
+                .slideY(
+                  begin: 1.0, // Start from bottom (y: '100%')
+                  end: 0.0, // End at normal position (y: 0)
+                  duration: 400.ms,
+                  curve: Curves.easeOutCubic, // Spring-like: damping: 30, stiffness: 300
+                )
+                .fadeIn(duration: 300.ms),
             ),
           ],
         ),
@@ -713,9 +774,9 @@ class CommunityPage extends GetView<CommunityController> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.comment_outlined,
-              size: 64.sp,
-              color: const Color(0xFF0A2342).withOpacity(0.2),
+              Icons.mode_comment_outlined, // Match React: MessageCircle
+              size: 64.sp, // w-16 h-16 = 64px
+              color: const Color(0xFF0A2342).withOpacity(0.2), // text-[#0A2342]/20
             ),
             SizedBox(height: 16.h),
             Text(
@@ -1000,6 +1061,60 @@ class CommunityPage extends GetView<CommunityController> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// Helper widget to provide tap animation matching React's motion.button whileTap={{ scale: 0.9 }}
+class _AnimatedTapWidget extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+
+  const _AnimatedTapWidget({
+    required this.child,
+    required this.onTap,
+  });
+
+  @override
+  State<_AnimatedTapWidget> createState() => _AnimatedTapWidgetState();
+}
+
+class _AnimatedTapWidgetState extends State<_AnimatedTapWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 100),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.9).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: widget.child,
       ),
     );
   }
