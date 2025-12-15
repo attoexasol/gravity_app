@@ -131,7 +131,7 @@ class MealUploadScreen extends GetView<MealUploadController> {
                 borderRadius: BorderRadius.circular(20.r),
               ),
               child: Text(
-                "$remaining/5 left today",
+                "$remaining/5000 left today",
                 style: ResponsiveTextStyles.textSm.copyWith(
                   color: Colors.white,
                 ),
@@ -348,7 +348,7 @@ class MealUploadScreen extends GetView<MealUploadController> {
                       controller.statsTrigger.value;
                       final remaining = controller.remainingAnalyses;
                       return Text(
-                        "${5 - remaining}/5 used",
+                        "${5000 - remaining}/5000 used",
                         style: ResponsiveTextStyles.textSm.copyWith(
                           color: const Color(0xFF0A2342),
                         ),
@@ -363,7 +363,7 @@ class MealUploadScreen extends GetView<MealUploadController> {
                   // Access trigger to make this reactive
                   controller.statsTrigger.value;
                   final remaining = controller.remainingAnalyses;
-                  final percent = (5 - remaining) / 5;
+                  final percent = (5000 - remaining) / 5000;
 
                   return Container(
                     height: 8.h,
@@ -1227,7 +1227,7 @@ class MealUploadScreen extends GetView<MealUploadController> {
                         controller.statsTrigger.value;
                         final stats = controller.usageStats;
                         return Text(
-                          "You've used all 5 daily AI analyses. This helps us manage API costs (~\$0.002 per analysis).\nYour limit resets at ${DateFormat('h:mm a').format(stats.resetTime)}.",
+                          "You've used all 5000 daily AI analyses. This helps us manage API costs (~\$0.002 per analysis).\nYour limit resets at ${DateFormat('h:mm a').format(stats.resetTime)}.",
                           textAlign: TextAlign.center,
                           style: ResponsiveTextStyles.textSm.copyWith(
                             color: const Color(0xFF0A2342).withOpacity(0.70),

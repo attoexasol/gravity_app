@@ -24,7 +24,7 @@ class MealAnalysisService {
     if (DateTime.now().isAfter(_resetTime)) {
       _dailyAnalyses = 0;
     }
-    return 5 - _dailyAnalyses;
+    return 5000 - _dailyAnalyses;
   }
 
   /// Get usage statistics
