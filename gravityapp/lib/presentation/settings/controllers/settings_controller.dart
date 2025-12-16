@@ -158,10 +158,13 @@ class SettingsController extends GetxController {
     final userName = PreferencesService.getUserName() ?? 'User';
     final userEmail = PreferencesService.getUserEmail() ?? 'user@example.com';
     final userInitials = UserAccountInfo.generateInitials(userName);
-    
+
     // Prefer API URL over local path
-    final profileImageUrl = PreferencesService.getStorage().read('user_profile_image_url') as String?;
-    final profileImagePath = profileImageUrl ?? 
+    final profileImageUrl =
+        PreferencesService.getStorage().read('user_profile_image_url')
+            as String?;
+    final profileImagePath =
+        profileImageUrl ??
         (PreferencesService.getStorage().read('user_profile_image') as String?);
 
     user.value = UserAccountInfo(
@@ -203,7 +206,7 @@ class SettingsController extends GetxController {
       if (image != null) {
         debugPrint('✅ Image captured: ${image.path}');
         tempImagePath.value = image.path;
-        
+
         // Load bytes for web compatibility
         try {
           final bytes = await image.readAsBytes();
@@ -219,14 +222,15 @@ class SettingsController extends GetxController {
     } catch (e, stackTrace) {
       debugPrint('❌ Camera Error: $e');
       debugPrint('Stack trace: $stackTrace');
-      
+
       String errorMessage = 'Failed to capture image. Please try again.';
       if (e.toString().contains('permission')) {
-        errorMessage = 'Camera permission denied. Please grant camera access in settings.';
+        errorMessage =
+            'Camera permission denied. Please grant camera access in settings.';
       } else if (e.toString().contains('not available')) {
         errorMessage = 'Camera is not available on this device.';
       }
-      
+
       Get.snackbar(
         'Error',
         errorMessage,
@@ -252,7 +256,7 @@ class SettingsController extends GetxController {
       if (image != null) {
         debugPrint('✅ Image selected: ${image.path}');
         tempImagePath.value = image.path;
-        
+
         // Load bytes for web compatibility
         try {
           final bytes = await image.readAsBytes();
@@ -268,14 +272,15 @@ class SettingsController extends GetxController {
     } catch (e, stackTrace) {
       debugPrint('❌ Gallery Error: $e');
       debugPrint('Stack trace: $stackTrace');
-      
+
       String errorMessage = 'Failed to pick image. Please try again.';
       if (e.toString().contains('permission')) {
-        errorMessage = 'Gallery permission denied. Please grant gallery access in settings.';
+        errorMessage =
+            'Gallery permission denied. Please grant gallery access in settings.';
       } else if (e.toString().contains('not available')) {
         errorMessage = 'Gallery is not available on this device.';
       }
-      
+
       Get.snackbar(
         'Error',
         errorMessage,
@@ -302,22 +307,22 @@ class SettingsController extends GetxController {
 
     try {
       isProcessingImage.value = true;
-      
+
       String? sourcePath = tempImagePath.value;
       Uint8List? sourceBytes = tempImageBytes.value;
-      
+
       debugPrint('🔍 Starting crop process...');
       debugPrint('📁 Source path: $sourcePath');
       debugPrint('📊 Source bytes: ${sourceBytes?.length ?? 0} bytes');
       debugPrint('🌐 Is Web: $kIsWeb');
-      
+
       // For web, we need to handle bytes differently
       if (kIsWeb && sourceBytes != null && sourceBytes.isNotEmpty) {
         // On web, we'll process the image directly without native cropper
         // since image_cropper web support is limited
         debugPrint('🌐 Processing image on web platform...');
         await _resizeProfileImageBytes(sourceBytes, saveToFile: false);
-        
+
         // Get the resized bytes from tempImageBytes
         final resizedBytes = tempImageBytes.value;
         if (resizedBytes != null && resizedBytes.isNotEmpty) {
@@ -327,42 +332,46 @@ class SettingsController extends GetxController {
         }
         return;
       }
-      
+
       // For mobile platforms, use native cropper
       if (sourcePath == null) {
         throw Exception('Image path is null. Cannot proceed with cropping.');
       }
-      
+
       // Verify file exists
       final sourceFile = File(sourcePath);
       if (!sourceFile.existsSync()) {
         throw Exception('Image file does not exist at path: $sourcePath');
       }
-      
+
       // Check file size
       final fileSize = await sourceFile.length();
       if (fileSize == 0) {
         throw Exception('Image file is empty (0 bytes)');
       }
-      
+
       // Try to read a small portion to verify file is accessible
       try {
-        final testBytes = await sourceFile.openRead(0, fileSize > 100 ? 100 : fileSize).first;
+        final testBytes = await sourceFile
+            .openRead(0, fileSize > 100 ? 100 : fileSize)
+            .first;
         if (testBytes.isEmpty) {
           throw Exception('Cannot read image file. File may be corrupted.');
         }
         debugPrint('✅ File is readable');
       } catch (readError) {
         debugPrint('❌ Error reading file: $readError');
-        throw Exception('Cannot access image file. Please try selecting the image again.');
+        throw Exception(
+          'Cannot access image file. Please try selecting the image again.',
+        );
       }
-      
-      debugPrint('✅ File exists and has ${fileSize} bytes');
+
+      debugPrint('✅ File exists and has $fileSize bytes');
       debugPrint('📸 Opening ImageCropper...');
-      
+
       // Build platform-specific UI settings
       List<PlatformUiSettings> uiSettings = [];
-      
+
       if (kIsWeb) {
         // Web UI settings - use basic settings for web
         uiSettings.add(
@@ -380,9 +389,7 @@ class SettingsController extends GetxController {
             toolbarWidgetColor: Colors.white,
             initAspectRatio: CropAspectRatioPreset.square,
             lockAspectRatio: true,
-            aspectRatioPresets: [
-              CropAspectRatioPreset.square,
-            ],
+            aspectRatioPresets: [CropAspectRatioPreset.square],
             hideBottomControls: false,
             showCropGrid: true,
             cropFrameColor: const Color(0xFF00B8A9),
@@ -394,18 +401,16 @@ class SettingsController extends GetxController {
             title: 'Crop Profile Image',
             aspectRatioLockEnabled: true,
             resetAspectRatioEnabled: false,
-            aspectRatioPresets: [
-              CropAspectRatioPreset.square,
-            ],
+            aspectRatioPresets: [CropAspectRatioPreset.square],
             hidesNavigationBar: false,
             rotateButtonsHidden: false,
             rotateClockwiseButtonHidden: false,
           ),
         ]);
       }
-      
+
       debugPrint('🎨 UI Settings configured for ${kIsWeb ? "web" : "mobile"}');
-      
+
       // Verify context is available for web
       if (kIsWeb) {
         final context = Get.context;
@@ -414,7 +419,7 @@ class SettingsController extends GetxController {
         }
         debugPrint('✅ Context available for web cropper');
       }
-      
+
       // Call ImageCropper with better error handling
       CroppedFile? croppedFile;
       try {
@@ -424,7 +429,7 @@ class SettingsController extends GetxController {
         debugPrint('   - aspectRatio: 1:1');
         debugPrint('   - compressFormat: JPG');
         debugPrint('   - compressQuality: 90');
-        
+
         croppedFile = await ImageCropper().cropImage(
           sourcePath: sourcePath,
           aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
@@ -434,7 +439,7 @@ class SettingsController extends GetxController {
           maxWidth: 800,
           maxHeight: 800,
         );
-        
+
         if (croppedFile != null) {
           debugPrint('✅ ImageCropper returned file: ${croppedFile.path}');
         } else {
@@ -444,32 +449,38 @@ class SettingsController extends GetxController {
         debugPrint('❌ ImageCropper Exception: $cropperError');
         debugPrint('Exception type: ${cropperError.runtimeType}');
         debugPrint('Stack trace: $cropperStack');
-        
+
         // Re-throw with more context
         if (cropperError is PlatformException) {
-          throw Exception('Image cropper platform error: ${cropperError.message}');
+          throw Exception(
+            'Image cropper platform error: ${cropperError.message}',
+          );
         } else {
-          throw Exception('Failed to open image cropper: ${cropperError.toString()}');
+          throw Exception(
+            'Failed to open image cropper: ${cropperError.toString()}',
+          );
         }
       }
 
       if (croppedFile != null) {
         debugPrint('✅ Image cropped successfully');
         debugPrint('📁 Cropped path: ${croppedFile.path}');
-        
+
         // Verify cropped file exists
         final croppedFileCheck = File(croppedFile.path);
         if (!croppedFileCheck.existsSync()) {
-          throw Exception('Cropped file does not exist at: ${croppedFile.path}');
+          throw Exception(
+            'Cropped file does not exist at: ${croppedFile.path}',
+          );
         }
-        
+
         final croppedFileSize = await croppedFileCheck.length();
         if (croppedFileSize == 0) {
           throw Exception('Cropped file is empty (0 bytes)');
         }
-        
-        debugPrint('📊 Cropped file size: ${croppedFileSize} bytes');
-        
+
+        debugPrint('📊 Cropped file size: $croppedFileSize bytes');
+
         // Resize image to fixed size (400x400 pixels for profile picture)
         debugPrint('🔄 Resizing image to 400x400...');
         String? resizedImagePath;
@@ -479,57 +490,67 @@ class SettingsController extends GetxController {
           debugPrint('⚠️ Resize failed, will use cropped image: $resizeError');
           // Continue with cropped image if resize fails
         }
-        
+
         // Use resized image if available, otherwise use original cropped image
         final imagePathToUpload = resizedImagePath ?? croppedFile.path;
         debugPrint('📁 Using image path: $imagePathToUpload');
         final imageFile = File(imagePathToUpload);
-        
+
         // Verify file exists and has content
         if (!imageFile.existsSync()) {
-          throw Exception('Processed image file does not exist at: $imagePathToUpload');
+          throw Exception(
+            'Processed image file does not exist at: $imagePathToUpload',
+          );
         }
-        
+
         final fileSize = await imageFile.length();
         if (fileSize == 0) {
           throw Exception('Processed image file is empty (0 bytes)');
         }
-        
-        debugPrint('📊 Final image size: ${fileSize} bytes');
+
+        debugPrint('📊 Final image size: $fileSize bytes');
         debugPrint('📁 Final image path: $imagePathToUpload');
-        
+
         // Get authentication token
         final token = PreferencesService.getAuthToken();
         if (token == null || token.isEmpty) {
-          throw Exception('Authentication token not found. Please login again.');
+          throw Exception(
+            'Authentication token not found. Please login again.',
+          );
         }
-        
+
         // Upload profile image to API
         debugPrint('🔄 Uploading profile image to API...');
         final uploadResponse = await _authRepository.uploadProfileImage(
           token: token,
           imageFile: imageFile,
         );
-        
+
         if (uploadResponse.isSuccess && uploadResponse.data != null) {
           // Save the API returned profile image URL
           final profileImageUrl = uploadResponse.data!;
-          PreferencesService.getStorage().write('user_profile_image_url', profileImageUrl);
-          
+          PreferencesService.getStorage().write(
+            'user_profile_image_url',
+            profileImageUrl,
+          );
+
           // Also save local path for offline display
-          PreferencesService.getStorage().write('user_profile_image', imagePathToUpload);
-          
+          PreferencesService.getStorage().write(
+            'user_profile_image',
+            imagePathToUpload,
+          );
+
           // Update user info with the API URL
           user.value = user.value.copyWith(profileImagePath: profileImageUrl);
           debugPrint('✅ Profile image uploaded successfully: $profileImageUrl');
-          
+
           // Close modal
           closeProfileImageModal();
-          
+
           Get.snackbar(
             'Success',
-            uploadResponse.message.isNotEmpty 
-                ? uploadResponse.message 
+            uploadResponse.message.isNotEmpty
+                ? uploadResponse.message
                 : 'Profile image updated successfully',
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: const Color(0xFF00B8A9).withOpacity(0.8),
@@ -538,14 +559,17 @@ class SettingsController extends GetxController {
           );
         } else {
           // API upload failed, but save locally as fallback
-          PreferencesService.getStorage().write('user_profile_image', imagePathToUpload);
+          PreferencesService.getStorage().write(
+            'user_profile_image',
+            imagePathToUpload,
+          );
           user.value = user.value.copyWith(profileImagePath: imagePathToUpload);
           closeProfileImageModal();
-          
+
           Get.snackbar(
             'Warning',
-            uploadResponse.message.isNotEmpty 
-                ? uploadResponse.message 
+            uploadResponse.message.isNotEmpty
+                ? uploadResponse.message
                 : 'Profile image saved locally, but upload failed. Please check your connection.',
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: Colors.orange.withOpacity(0.8),
@@ -569,25 +593,37 @@ class SettingsController extends GetxController {
       debugPrint('❌ Error cropping profile image: $e');
       debugPrint('Error type: ${e.runtimeType}');
       debugPrint('Stack trace: $stackTrace');
-      
+
       // Provide more specific error messages
       String errorMessage = 'Failed to process image. Please try again.';
       final errorString = e.toString().toLowerCase();
-      
-      if (errorString.contains('permission') || errorString.contains('denied')) {
-        errorMessage = 'Permission denied. Please grant camera/gallery access in device settings.';
-      } else if (errorString.contains('token') || errorString.contains('auth')) {
+
+      if (errorString.contains('permission') ||
+          errorString.contains('denied')) {
+        errorMessage =
+            'Permission denied. Please grant camera/gallery access in device settings.';
+      } else if (errorString.contains('token') ||
+          errorString.contains('auth')) {
         errorMessage = 'Authentication error. Please login again.';
-      } else if (errorString.contains('does not exist') || errorString.contains('file')) {
-        errorMessage = 'Image file error. Please try selecting the image again.';
-      } else if (errorString.contains('empty') || errorString.contains('0 bytes')) {
+      } else if (errorString.contains('does not exist') ||
+          errorString.contains('file')) {
+        errorMessage =
+            'Image file error. Please try selecting the image again.';
+      } else if (errorString.contains('empty') ||
+          errorString.contains('0 bytes')) {
         errorMessage = 'Invalid image file. Please select a different image.';
-      } else if (errorString.contains('cropper') || errorString.contains('crop')) {
-        errorMessage = 'Failed to open image cropper. Please try again or restart the app.';
-      } else if (errorString.contains('missingplugin') || errorString.contains('gettemporarydirectory')) {
-        errorMessage = 'Plugin error: Please stop the app completely and rebuild it (not just hot reload). Go to: Run → Stop, then Run → Run again.';
-      } else if (errorString.contains('plugin') || errorString.contains('channel')) {
-        errorMessage = 'Plugin not initialized. Please stop and rebuild the app completely.';
+      } else if (errorString.contains('cropper') ||
+          errorString.contains('crop')) {
+        errorMessage =
+            'Failed to open image cropper. Please try again or restart the app.';
+      } else if (errorString.contains('missingplugin') ||
+          errorString.contains('gettemporarydirectory')) {
+        errorMessage =
+            'Plugin error: Please stop the app completely and rebuild it (not just hot reload). Go to: Run → Stop, then Run → Run again.';
+      } else if (errorString.contains('plugin') ||
+          errorString.contains('channel')) {
+        errorMessage =
+            'Plugin not initialized. Please stop and rebuild the app completely.';
       } else {
         // Show the actual error for debugging (first 100 chars)
         final detailedError = e.toString();
@@ -597,7 +633,7 @@ class SettingsController extends GetxController {
           errorMessage = 'Error: $detailedError';
         }
       }
-      
+
       Get.snackbar(
         'Error',
         errorMessage,
@@ -622,7 +658,11 @@ class SettingsController extends GetxController {
     try {
       // Read image file
       final imageBytes = await File(imagePath).readAsBytes();
-      return await _resizeProfileImageBytes(imageBytes, saveToFile: true, originalPath: imagePath);
+      return await _resizeProfileImageBytes(
+        imageBytes,
+        saveToFile: true,
+        originalPath: imagePath,
+      );
     } catch (e, stackTrace) {
       debugPrint('❌ Error resizing profile image: $e');
       debugPrint('Stack trace: $stackTrace');
@@ -640,22 +680,24 @@ class SettingsController extends GetxController {
     try {
       // Decode image
       final originalImage = img.decodeImage(imageBytes);
-      
+
       if (originalImage == null) {
         debugPrint('❌ Failed to decode image');
         return null;
       }
 
-      debugPrint('📐 Original image size: ${originalImage.width}x${originalImage.height}');
+      debugPrint(
+        '📐 Original image size: ${originalImage.width}x${originalImage.height}',
+      );
 
       // Fixed size for profile picture: 400x400 pixels
       const int targetSize = 400;
-      
+
       // Calculate if we need to crop first to maintain aspect ratio
       int cropSize;
       int offsetX = 0;
       int offsetY = 0;
-      
+
       if (originalImage.width > originalImage.height) {
         // Landscape: crop width
         cropSize = originalImage.height;
@@ -665,7 +707,7 @@ class SettingsController extends GetxController {
         cropSize = originalImage.width;
         offsetY = (originalImage.height - cropSize) ~/ 2;
       }
-      
+
       // Crop to square first if needed
       img.Image? processedImage;
       if (originalImage.width != originalImage.height) {
@@ -676,11 +718,11 @@ class SettingsController extends GetxController {
           width: cropSize,
           height: cropSize,
         );
-        debugPrint('✂️ Cropped to square: ${cropSize}x${cropSize}');
+        debugPrint('✂️ Cropped to square: ${cropSize}x$cropSize');
       } else {
         processedImage = originalImage;
       }
-      
+
       // Resize image to fixed square size
       final resizedImage = img.copyResize(
         processedImage,
@@ -689,7 +731,9 @@ class SettingsController extends GetxController {
         interpolation: img.Interpolation.cubic,
       );
 
-      debugPrint('📐 Resized image size: ${resizedImage.width}x${resizedImage.height}');
+      debugPrint(
+        '📐 Resized image size: ${resizedImage.width}x${resizedImage.height}',
+      );
 
       // Encode to JPEG with good quality
       final resizedBytes = img.encodeJpg(resizedImage, quality: 90);
@@ -716,7 +760,9 @@ class SettingsController extends GetxController {
               resizedPath = '${directory.path}/profile_image_$timestamp.jpg';
               final resizedFile = File(resizedPath);
               await resizedFile.writeAsBytes(resizedBytes);
-              debugPrint('✅ Image resized and saved to (fallback): $resizedPath');
+              debugPrint(
+                '✅ Image resized and saved to (fallback): $resizedPath',
+              );
             } catch (fallbackError) {
               debugPrint('❌ Fallback also failed: $fallbackError');
               // Last resort: return original path and let upload handle it
@@ -724,7 +770,9 @@ class SettingsController extends GetxController {
               return originalPath;
             }
           } else {
-            throw Exception('Cannot save resized image: temp directory unavailable and no original path');
+            throw Exception(
+              'Cannot save resized image: temp directory unavailable and no original path',
+            );
           }
         }
         return resizedPath;
@@ -748,7 +796,7 @@ class SettingsController extends GetxController {
       if (token == null || token.isEmpty) {
         throw Exception('Authentication token not found. Please login again.');
       }
-      
+
       // Save bytes to temporary file for upload with fallback
       File tempFile;
       try {
@@ -769,39 +817,48 @@ class SettingsController extends GetxController {
             final tempPath = '${appDir.path}/profile_upload_$timestamp.jpg';
             tempFile = File(tempPath);
             await tempFile.writeAsBytes(imageBytes);
-            debugPrint('✅ Saved temp file to app directory (fallback): $tempPath');
+            debugPrint(
+              '✅ Saved temp file to app directory (fallback): $tempPath',
+            );
           } else {
             // For web, we might need to use a different approach
-            throw Exception('Cannot create temp file on web. Please rebuild the app.');
+            throw Exception(
+              'Cannot create temp file on web. Please rebuild the app.',
+            );
           }
         } catch (fallbackError) {
           debugPrint('❌ All fallbacks failed: $fallbackError');
-          throw Exception('Cannot create temporary file. Please rebuild the app (stop and restart, not just hot reload).');
+          throw Exception(
+            'Cannot create temporary file. Please rebuild the app (stop and restart, not just hot reload).',
+          );
         }
       }
-      
+
       debugPrint('🔄 Uploading profile image to API (web)...');
       final uploadResponse = await _authRepository.uploadProfileImage(
         token: token,
         imageFile: tempFile,
       );
-      
+
       if (uploadResponse.isSuccess && uploadResponse.data != null) {
         // Save the API returned profile image URL
         final profileImageUrl = uploadResponse.data!;
-        PreferencesService.getStorage().write('user_profile_image_url', profileImageUrl);
-        
+        PreferencesService.getStorage().write(
+          'user_profile_image_url',
+          profileImageUrl,
+        );
+
         // Update user info with the API URL
         user.value = user.value.copyWith(profileImagePath: profileImageUrl);
         debugPrint('✅ Profile image uploaded successfully: $profileImageUrl');
-        
+
         // Close modal
         closeProfileImageModal();
-        
+
         Get.snackbar(
           'Success',
-          uploadResponse.message.isNotEmpty 
-              ? uploadResponse.message 
+          uploadResponse.message.isNotEmpty
+              ? uploadResponse.message
               : 'Profile image updated successfully',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: const Color(0xFF00B8A9).withOpacity(0.8),
@@ -809,9 +866,11 @@ class SettingsController extends GetxController {
           duration: const Duration(seconds: 2),
         );
       } else {
-        throw Exception(uploadResponse.message.isNotEmpty 
-            ? uploadResponse.message 
-            : 'Upload failed');
+        throw Exception(
+          uploadResponse.message.isNotEmpty
+              ? uploadResponse.message
+              : 'Upload failed',
+        );
       }
     } catch (e, stackTrace) {
       debugPrint('❌ Error uploading profile image bytes: $e');
@@ -1121,12 +1180,14 @@ class SettingsController extends GetxController {
       if (savedLogs != null) {
         final logsList = jsonDecode(savedLogs) as List<dynamic>;
         syncLogs.value = logsList
-            .map((log) => SyncLog(
-                  status: log['status'] as String,
-                  timestamp: DateTime.parse(log['timestamp'] as String),
-                  error: log['error'] as String?,
-                  metrics: log['metrics'] as Map<String, dynamic>?,
-                ))
+            .map(
+              (log) => SyncLog(
+                status: log['status'] as String,
+                timestamp: DateTime.parse(log['timestamp'] as String),
+                error: log['error'] as String?,
+                metrics: log['metrics'] as Map<String, dynamic>?,
+              ),
+            )
             .toList();
         // Sort by timestamp (newest first)
         syncLogs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -1140,12 +1201,14 @@ class SettingsController extends GetxController {
   void _saveSyncLogs() {
     try {
       final logsJson = syncLogs
-          .map((log) => {
-                'status': log.status,
-                'timestamp': log.timestamp.toIso8601String(),
-                'error': log.error,
-                'metrics': log.metrics,
-              })
+          .map(
+            (log) => {
+              'status': log.status,
+              'timestamp': log.timestamp.toIso8601String(),
+              'error': log.error,
+              'metrics': log.metrics,
+            },
+          )
           .toList();
       PreferencesService.getStorage().write('sync_logs', jsonEncode(logsJson));
     } catch (e) {
@@ -1187,6 +1250,14 @@ class SettingsController extends GetxController {
 
   /// Navigate back
   void navigateBack() {
+    try {
+      // Try to close any open snackbars first to avoid LateInitializationError
+      Get.closeCurrentSnackbar();
+    } catch (e) {
+      // If there's an error with snackbar, ignore it and continue
+      debugPrint('⚠️ Error closing snackbar: $e');
+    }
+    // Navigate back
     Get.back();
   }
 

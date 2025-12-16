@@ -1163,10 +1163,14 @@ class CommunityPage extends GetView<CommunityController> {
                   color: const Color(0xFF0A2342).withOpacity(0.5),
                 ),
                 SizedBox(width: 4.w),
-                Text(
-                  'Created: ${_formatDate(community['created_at'])}',
-                  style: ResponsiveTextStyles.textXs.copyWith(
-                    color: const Color(0xFF0A2342).withOpacity(0.5),
+                Flexible(
+                  child: Text(
+                    'Created: ${_formatDate(community['created_at'])}',
+                    style: ResponsiveTextStyles.textXs.copyWith(
+                      color: const Color(0xFF0A2342).withOpacity(0.5),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ),
                 SizedBox(width: 16.w),
@@ -1176,10 +1180,14 @@ class CommunityPage extends GetView<CommunityController> {
                   color: const Color(0xFF0A2342).withOpacity(0.5),
                 ),
                 SizedBox(width: 4.w),
-                Text(
-                  'Updated: ${_formatDate(community['updated_at'])}',
-                  style: ResponsiveTextStyles.textXs.copyWith(
-                    color: const Color(0xFF0A2342).withOpacity(0.5),
+                Flexible(
+                  child: Text(
+                    'Updated: ${_formatDate(community['updated_at'])}',
+                    style: ResponsiveTextStyles.textXs.copyWith(
+                      color: const Color(0xFF0A2342).withOpacity(0.5),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ),
               ],
