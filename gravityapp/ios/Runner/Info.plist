@@ -30,6 +30,10 @@
 	<string>We need access to your health data to track your steps, sleep, weight, and hydration for your wellness goals.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>We need permission to update your health data to help you track your wellness progress.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We need access to your photo library to select a profile image.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>We need access to your camera to take a profile photo.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

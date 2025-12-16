@@ -1,4 +1,8 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../../core/services/api_service.dart';
 import '../../core/services/preferences_service.dart';
 import '../model/api_response.dart';
@@ -217,6 +221,120 @@ class AuthRepository {
     } catch (e) {
       debugPrint('❌ Logout Unknown Error: $e');
       return ApiResponse<void>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Upload profile image
+  Future<ApiResponse<String>> uploadProfileImage({
+    required String token,
+    required File imageFile,
+  }) async {
+    try {
+      final url = Uri.parse('${ApiService.baseUrl}/user/profile_upload');
+      
+      debugPrint('🌐 Uploading profile image to: $url');
+      debugPrint('📁 Image path: ${imageFile.path}');
+      debugPrint('📁 Image size: ${await imageFile.length()} bytes');
+
+      // Create multipart request
+      final request = http.MultipartRequest('POST', url);
+      
+      // Read image bytes
+      final imageBytes = await imageFile.readAsBytes();
+      final fileName = imageFile.path.split('/').last;
+      
+      // Determine content type based on file extension
+      String contentType = 'image/jpeg'; // Default
+      if (fileName.toLowerCase().endsWith('.png')) {
+        contentType = 'image/png';
+      } else if (fileName.toLowerCase().endsWith('.jpg') || 
+                 fileName.toLowerCase().endsWith('.jpeg')) {
+        contentType = 'image/jpeg';
+      } else if (fileName.toLowerCase().endsWith('.webp')) {
+        contentType = 'image/webp';
+      }
+      
+      // Add token as field
+      request.fields['token'] = token;
+      
+      // Create multipart file
+      final multipartFile = http.MultipartFile(
+        'profile_image', // Field name as required by API
+        http.ByteStream.fromBytes(imageBytes),
+        imageBytes.length,
+        filename: fileName,
+        contentType: MediaType.parse(contentType),
+      );
+      
+      request.files.add(multipartFile);
+      
+      // Set headers
+      request.headers['Accept'] = 'application/json';
+      
+      debugPrint('📤 Sending request with token and profile_image file');
+      debugPrint('📤 File field name: profile_image');
+      debugPrint('📤 File name: $fileName');
+      debugPrint('📤 Content-Type: $contentType');
+      debugPrint('📤 File size: ${imageBytes.length} bytes');
+
+      // Send request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      debugPrint('📡 Response Status: ${response.statusCode}');
+      debugPrint('📄 Response Body: ${response.body}');
+
+      // Parse response
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        try {
+          final responseData = jsonDecode(response.body) as Map<String, dynamic>;
+          final profileImageUrl = responseData['profile_image'] as String?;
+          
+          return ApiResponse<String>(
+            status: responseData['status'] ?? true,
+            message: responseData['message'] ?? 'Profile image uploaded successfully',
+            data: profileImageUrl,
+          );
+        } catch (e) {
+          debugPrint('❌ JSON Decode Error: $e');
+          throw ApiException(
+            message: 'Invalid response format from server',
+            statusCode: response.statusCode,
+          );
+        }
+      } else {
+        // Handle error response
+        try {
+          final errorBody = jsonDecode(response.body) as Map<String, dynamic>;
+          throw ApiException(
+            message: errorBody['message'] ?? 'Failed to upload profile image',
+            statusCode: response.statusCode,
+            errors: errorBody['errors'],
+          );
+        } catch (e) {
+          if (e is ApiException) {
+            rethrow;
+          }
+          throw ApiException(
+            message: 'Failed to upload profile image',
+            statusCode: response.statusCode,
+          );
+        }
+      }
+    } on ApiException catch (e) {
+      debugPrint('❌ UploadProfileImage API Error: ${e.message}');
+      return ApiResponse<String>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ UploadProfileImage Unknown Error: $e');
+      return ApiResponse<String>(
         status: false,
         message: 'An unexpected error occurred. Please try again.',
         error: e.toString(),

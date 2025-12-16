@@ -35,11 +35,12 @@ class SettingsPage extends GetView<SettingsController> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Account Section
-                    AccountSection(
+                    Obx(() => AccountSection(
                       name: controller.user.value.name,
                       email: controller.user.value.email,
                       initials: controller.user.value.initials,
-                    ),
+                      profileImagePath: controller.user.value.profileImagePath,
+                    )),
                     SizedBox(height: 24.h),
 
                     // Wellness Goals Section

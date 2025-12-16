@@ -1,7 +1,16 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'dart:convert';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:image/image.dart' as img;
+import 'package:path_provider/path_provider.dart';
 import '../../../core/services/preferences_service.dart';
+import '../screens/sections/profile_image_picker_modal.dart';
 import '../../../core/services/health_sync_service.dart'
     show HealthSyncService, HealthPlatform, SyncActivity;
 import '../../../data/model/health_permissions.dart';
@@ -46,11 +55,13 @@ class UserAccountInfo {
   final String name;
   final String email;
   final String initials;
+  final String? profileImagePath;
 
   UserAccountInfo({
     required this.name,
     required this.email,
     required this.initials,
+    this.profileImagePath,
   });
 
   /// Generate initials from name
@@ -63,6 +74,20 @@ class UserAccountInfo {
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     }
   }
+
+  UserAccountInfo copyWith({
+    String? name,
+    String? email,
+    String? initials,
+    String? profileImagePath,
+  }) {
+    return UserAccountInfo(
+      name: name ?? this.name,
+      email: email ?? this.email,
+      initials: initials ?? this.initials,
+      profileImagePath: profileImagePath ?? this.profileImagePath,
+    );
+  }
 }
 
 class SettingsController extends GetxController {
@@ -70,6 +95,7 @@ class SettingsController extends GetxController {
   final HealthSyncService _healthService = HealthSyncService();
   final GoalsRepository _goalsRepository = GoalsRepository();
   final AuthRepository _authRepository = AuthRepository();
+  final ImagePicker _imagePicker = ImagePicker();
 
   // Notification preferences
   final Rx<NotificationPreferences> notificationPrefs =
@@ -107,7 +133,13 @@ class SettingsController extends GetxController {
     name: 'User',
     email: 'user@example.com',
     initials: 'U',
+    profileImagePath: null,
   ).obs;
+
+  // Profile image modal state
+  final Rx<String?> tempImagePath = Rx<String?>(null);
+  final Rx<Uint8List?> tempImageBytes = Rx<Uint8List?>(null);
+  final RxBool isProcessingImage = false.obs;
 
   @override
   void onInit() {
@@ -126,12 +158,666 @@ class SettingsController extends GetxController {
     final userName = PreferencesService.getUserName() ?? 'User';
     final userEmail = PreferencesService.getUserEmail() ?? 'user@example.com';
     final userInitials = UserAccountInfo.generateInitials(userName);
+    
+    // Prefer API URL over local path
+    final profileImageUrl = PreferencesService.getStorage().read('user_profile_image_url') as String?;
+    final profileImagePath = profileImageUrl ?? 
+        (PreferencesService.getStorage().read('user_profile_image') as String?);
 
     user.value = UserAccountInfo(
       name: userName,
       email: userEmail,
       initials: userInitials,
+      profileImagePath: profileImagePath,
     );
+  }
+
+  /// Show profile image modal
+  void showProfileImagePickerModal() {
+    tempImagePath.value = null;
+    tempImageBytes.value = null;
+    Get.dialog(
+      ProfileImagePickerModal(controller: this),
+      barrierDismissible: true,
+    );
+  }
+
+  /// Close profile image modal
+  void closeProfileImageModal() {
+    Get.back();
+    tempImagePath.value = null;
+    tempImageBytes.value = null;
+  }
+
+  /// Pick image from camera
+  Future<void> pickImageFromCamera() async {
+    try {
+      debugPrint('📸 Opening camera...');
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 90,
+        maxWidth: 2048,
+        maxHeight: 2048,
+      );
+
+      if (image != null) {
+        debugPrint('✅ Image captured: ${image.path}');
+        tempImagePath.value = image.path;
+        
+        // Load bytes for web compatibility
+        try {
+          final bytes = await image.readAsBytes();
+          tempImageBytes.value = bytes;
+          debugPrint('📊 Image size: ${bytes.length} bytes');
+        } catch (e) {
+          debugPrint('⚠️ Warning: Could not load image bytes: $e');
+          // Continue anyway, bytes are optional for mobile
+        }
+      } else {
+        debugPrint('⚠️ User cancelled camera');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Camera Error: $e');
+      debugPrint('Stack trace: $stackTrace');
+      
+      String errorMessage = 'Failed to capture image. Please try again.';
+      if (e.toString().contains('permission')) {
+        errorMessage = 'Camera permission denied. Please grant camera access in settings.';
+      } else if (e.toString().contains('not available')) {
+        errorMessage = 'Camera is not available on this device.';
+      }
+      
+      Get.snackbar(
+        'Error',
+        errorMessage,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.withOpacity(0.8),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+    }
+  }
+
+  /// Pick image from gallery
+  Future<void> pickImageFromGallery() async {
+    try {
+      debugPrint('🖼️ Opening gallery...');
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 90,
+        maxWidth: 2048,
+        maxHeight: 2048,
+      );
+
+      if (image != null) {
+        debugPrint('✅ Image selected: ${image.path}');
+        tempImagePath.value = image.path;
+        
+        // Load bytes for web compatibility
+        try {
+          final bytes = await image.readAsBytes();
+          tempImageBytes.value = bytes;
+          debugPrint('📊 Image size: ${bytes.length} bytes');
+        } catch (e) {
+          debugPrint('⚠️ Warning: Could not load image bytes: $e');
+          // Continue anyway, bytes are optional for mobile
+        }
+      } else {
+        debugPrint('⚠️ User cancelled gallery selection');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Gallery Error: $e');
+      debugPrint('Stack trace: $stackTrace');
+      
+      String errorMessage = 'Failed to pick image. Please try again.';
+      if (e.toString().contains('permission')) {
+        errorMessage = 'Gallery permission denied. Please grant gallery access in settings.';
+      } else if (e.toString().contains('not available')) {
+        errorMessage = 'Gallery is not available on this device.';
+      }
+      
+      Get.snackbar(
+        'Error',
+        errorMessage,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.withOpacity(0.8),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+    }
+  }
+
+  /// Crop and save profile image
+  Future<void> cropAndSaveProfileImage() async {
+    if (tempImagePath.value == null && tempImageBytes.value == null) {
+      Get.snackbar(
+        'Error',
+        'No image selected. Please select an image first.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.withOpacity(0.8),
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    try {
+      isProcessingImage.value = true;
+      
+      String? sourcePath = tempImagePath.value;
+      Uint8List? sourceBytes = tempImageBytes.value;
+      
+      debugPrint('🔍 Starting crop process...');
+      debugPrint('📁 Source path: $sourcePath');
+      debugPrint('📊 Source bytes: ${sourceBytes?.length ?? 0} bytes');
+      debugPrint('🌐 Is Web: $kIsWeb');
+      
+      // For web, we need to handle bytes differently
+      if (kIsWeb && sourceBytes != null && sourceBytes.isNotEmpty) {
+        // On web, we'll process the image directly without native cropper
+        // since image_cropper web support is limited
+        debugPrint('🌐 Processing image on web platform...');
+        await _resizeProfileImageBytes(sourceBytes, saveToFile: false);
+        
+        // Get the resized bytes from tempImageBytes
+        final resizedBytes = tempImageBytes.value;
+        if (resizedBytes != null && resizedBytes.isNotEmpty) {
+          await _uploadProfileImageBytes(resizedBytes);
+        } else {
+          throw Exception('Failed to process image: Resized bytes are empty');
+        }
+        return;
+      }
+      
+      // For mobile platforms, use native cropper
+      if (sourcePath == null) {
+        throw Exception('Image path is null. Cannot proceed with cropping.');
+      }
+      
+      // Verify file exists
+      final sourceFile = File(sourcePath);
+      if (!sourceFile.existsSync()) {
+        throw Exception('Image file does not exist at path: $sourcePath');
+      }
+      
+      // Check file size
+      final fileSize = await sourceFile.length();
+      if (fileSize == 0) {
+        throw Exception('Image file is empty (0 bytes)');
+      }
+      
+      // Try to read a small portion to verify file is accessible
+      try {
+        final testBytes = await sourceFile.openRead(0, fileSize > 100 ? 100 : fileSize).first;
+        if (testBytes.isEmpty) {
+          throw Exception('Cannot read image file. File may be corrupted.');
+        }
+        debugPrint('✅ File is readable');
+      } catch (readError) {
+        debugPrint('❌ Error reading file: $readError');
+        throw Exception('Cannot access image file. Please try selecting the image again.');
+      }
+      
+      debugPrint('✅ File exists and has ${fileSize} bytes');
+      debugPrint('📸 Opening ImageCropper...');
+      
+      // Build platform-specific UI settings
+      List<PlatformUiSettings> uiSettings = [];
+      
+      if (kIsWeb) {
+        // Web UI settings - use basic settings for web
+        uiSettings.add(
+          WebUiSettings(
+            context: Get.context!,
+            presentStyle: WebPresentStyle.dialog,
+          ),
+        );
+      } else {
+        // Mobile UI settings
+        uiSettings.addAll([
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Profile Image',
+            toolbarColor: const Color(0xFF0A2342),
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            aspectRatioPresets: [
+              CropAspectRatioPreset.square,
+            ],
+            hideBottomControls: false,
+            showCropGrid: true,
+            cropFrameColor: const Color(0xFF00B8A9),
+            cropGridColor: const Color(0xFF00B8A9).withOpacity(0.5),
+            cropGridStrokeWidth: 2,
+            backgroundColor: Colors.black,
+          ),
+          IOSUiSettings(
+            title: 'Crop Profile Image',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+            aspectRatioPresets: [
+              CropAspectRatioPreset.square,
+            ],
+            hidesNavigationBar: false,
+            rotateButtonsHidden: false,
+            rotateClockwiseButtonHidden: false,
+          ),
+        ]);
+      }
+      
+      debugPrint('🎨 UI Settings configured for ${kIsWeb ? "web" : "mobile"}');
+      
+      // Verify context is available for web
+      if (kIsWeb) {
+        final context = Get.context;
+        if (context == null) {
+          throw Exception('Context is null. Cannot open image cropper.');
+        }
+        debugPrint('✅ Context available for web cropper');
+      }
+      
+      // Call ImageCropper with better error handling
+      CroppedFile? croppedFile;
+      try {
+        debugPrint('🔄 Calling ImageCropper.cropImage()...');
+        debugPrint('📋 Parameters:');
+        debugPrint('   - sourcePath: $sourcePath');
+        debugPrint('   - aspectRatio: 1:1');
+        debugPrint('   - compressFormat: JPG');
+        debugPrint('   - compressQuality: 90');
+        
+        croppedFile = await ImageCropper().cropImage(
+          sourcePath: sourcePath,
+          aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+          uiSettings: uiSettings,
+          compressFormat: ImageCompressFormat.jpg,
+          compressQuality: 90,
+          maxWidth: 800,
+          maxHeight: 800,
+        );
+        
+        if (croppedFile != null) {
+          debugPrint('✅ ImageCropper returned file: ${croppedFile.path}');
+        } else {
+          debugPrint('⚠️ ImageCropper returned null (user may have cancelled)');
+        }
+      } catch (cropperError, cropperStack) {
+        debugPrint('❌ ImageCropper Exception: $cropperError');
+        debugPrint('Exception type: ${cropperError.runtimeType}');
+        debugPrint('Stack trace: $cropperStack');
+        
+        // Re-throw with more context
+        if (cropperError is PlatformException) {
+          throw Exception('Image cropper platform error: ${cropperError.message}');
+        } else {
+          throw Exception('Failed to open image cropper: ${cropperError.toString()}');
+        }
+      }
+
+      if (croppedFile != null) {
+        debugPrint('✅ Image cropped successfully');
+        debugPrint('📁 Cropped path: ${croppedFile.path}');
+        
+        // Verify cropped file exists
+        final croppedFileCheck = File(croppedFile.path);
+        if (!croppedFileCheck.existsSync()) {
+          throw Exception('Cropped file does not exist at: ${croppedFile.path}');
+        }
+        
+        final croppedFileSize = await croppedFileCheck.length();
+        if (croppedFileSize == 0) {
+          throw Exception('Cropped file is empty (0 bytes)');
+        }
+        
+        debugPrint('📊 Cropped file size: ${croppedFileSize} bytes');
+        
+        // Resize image to fixed size (400x400 pixels for profile picture)
+        debugPrint('🔄 Resizing image to 400x400...');
+        String? resizedImagePath;
+        try {
+          resizedImagePath = await _resizeProfileImage(croppedFile.path);
+        } catch (resizeError) {
+          debugPrint('⚠️ Resize failed, will use cropped image: $resizeError');
+          // Continue with cropped image if resize fails
+        }
+        
+        // Use resized image if available, otherwise use original cropped image
+        final imagePathToUpload = resizedImagePath ?? croppedFile.path;
+        debugPrint('📁 Using image path: $imagePathToUpload');
+        final imageFile = File(imagePathToUpload);
+        
+        // Verify file exists and has content
+        if (!imageFile.existsSync()) {
+          throw Exception('Processed image file does not exist at: $imagePathToUpload');
+        }
+        
+        final fileSize = await imageFile.length();
+        if (fileSize == 0) {
+          throw Exception('Processed image file is empty (0 bytes)');
+        }
+        
+        debugPrint('📊 Final image size: ${fileSize} bytes');
+        debugPrint('📁 Final image path: $imagePathToUpload');
+        
+        // Get authentication token
+        final token = PreferencesService.getAuthToken();
+        if (token == null || token.isEmpty) {
+          throw Exception('Authentication token not found. Please login again.');
+        }
+        
+        // Upload profile image to API
+        debugPrint('🔄 Uploading profile image to API...');
+        final uploadResponse = await _authRepository.uploadProfileImage(
+          token: token,
+          imageFile: imageFile,
+        );
+        
+        if (uploadResponse.isSuccess && uploadResponse.data != null) {
+          // Save the API returned profile image URL
+          final profileImageUrl = uploadResponse.data!;
+          PreferencesService.getStorage().write('user_profile_image_url', profileImageUrl);
+          
+          // Also save local path for offline display
+          PreferencesService.getStorage().write('user_profile_image', imagePathToUpload);
+          
+          // Update user info with the API URL
+          user.value = user.value.copyWith(profileImagePath: profileImageUrl);
+          debugPrint('✅ Profile image uploaded successfully: $profileImageUrl');
+          
+          // Close modal
+          closeProfileImageModal();
+          
+          Get.snackbar(
+            'Success',
+            uploadResponse.message.isNotEmpty 
+                ? uploadResponse.message 
+                : 'Profile image updated successfully',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: const Color(0xFF00B8A9).withOpacity(0.8),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2),
+          );
+        } else {
+          // API upload failed, but save locally as fallback
+          PreferencesService.getStorage().write('user_profile_image', imagePathToUpload);
+          user.value = user.value.copyWith(profileImagePath: imagePathToUpload);
+          closeProfileImageModal();
+          
+          Get.snackbar(
+            'Warning',
+            uploadResponse.message.isNotEmpty 
+                ? uploadResponse.message 
+                : 'Profile image saved locally, but upload failed. Please check your connection.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.orange.withOpacity(0.8),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+          );
+        }
+      } else {
+        // User cancelled cropping
+        debugPrint('⚠️ User cancelled image cropping');
+        Get.snackbar(
+          'Cancelled',
+          'Image cropping was cancelled',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.grey.withOpacity(0.8),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 1),
+        );
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error cropping profile image: $e');
+      debugPrint('Error type: ${e.runtimeType}');
+      debugPrint('Stack trace: $stackTrace');
+      
+      // Provide more specific error messages
+      String errorMessage = 'Failed to process image. Please try again.';
+      final errorString = e.toString().toLowerCase();
+      
+      if (errorString.contains('permission') || errorString.contains('denied')) {
+        errorMessage = 'Permission denied. Please grant camera/gallery access in device settings.';
+      } else if (errorString.contains('token') || errorString.contains('auth')) {
+        errorMessage = 'Authentication error. Please login again.';
+      } else if (errorString.contains('does not exist') || errorString.contains('file')) {
+        errorMessage = 'Image file error. Please try selecting the image again.';
+      } else if (errorString.contains('empty') || errorString.contains('0 bytes')) {
+        errorMessage = 'Invalid image file. Please select a different image.';
+      } else if (errorString.contains('cropper') || errorString.contains('crop')) {
+        errorMessage = 'Failed to open image cropper. Please try again or restart the app.';
+      } else if (errorString.contains('missingplugin') || errorString.contains('gettemporarydirectory')) {
+        errorMessage = 'Plugin error: Please stop the app completely and rebuild it (not just hot reload). Go to: Run → Stop, then Run → Run again.';
+      } else if (errorString.contains('plugin') || errorString.contains('channel')) {
+        errorMessage = 'Plugin not initialized. Please stop and rebuild the app completely.';
+      } else {
+        // Show the actual error for debugging (first 100 chars)
+        final detailedError = e.toString();
+        if (detailedError.length > 100) {
+          errorMessage = 'Error: ${detailedError.substring(0, 100)}...';
+        } else {
+          errorMessage = 'Error: $detailedError';
+        }
+      }
+      
+      Get.snackbar(
+        'Error',
+        errorMessage,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.withOpacity(0.8),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 4),
+        mainButton: TextButton(
+          onPressed: () {
+            Get.back(); // Close snackbar
+          },
+          child: const Text('OK', style: TextStyle(color: Colors.white)),
+        ),
+      );
+    } finally {
+      isProcessingImage.value = false;
+    }
+  }
+
+  /// Resize profile image to fixed size (400x400 pixels)
+  Future<String?> _resizeProfileImage(String imagePath) async {
+    try {
+      // Read image file
+      final imageBytes = await File(imagePath).readAsBytes();
+      return await _resizeProfileImageBytes(imageBytes, saveToFile: true, originalPath: imagePath);
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error resizing profile image: $e');
+      debugPrint('Stack trace: $stackTrace');
+      return null;
+    }
+  }
+
+  /// Resize profile image bytes to fixed size (400x400 pixels)
+  /// Returns file path if saveToFile is true, otherwise returns null
+  Future<String?> _resizeProfileImageBytes(
+    Uint8List imageBytes, {
+    bool saveToFile = false,
+    String? originalPath,
+  }) async {
+    try {
+      // Decode image
+      final originalImage = img.decodeImage(imageBytes);
+      
+      if (originalImage == null) {
+        debugPrint('❌ Failed to decode image');
+        return null;
+      }
+
+      debugPrint('📐 Original image size: ${originalImage.width}x${originalImage.height}');
+
+      // Fixed size for profile picture: 400x400 pixels
+      const int targetSize = 400;
+      
+      // Calculate if we need to crop first to maintain aspect ratio
+      int cropSize;
+      int offsetX = 0;
+      int offsetY = 0;
+      
+      if (originalImage.width > originalImage.height) {
+        // Landscape: crop width
+        cropSize = originalImage.height;
+        offsetX = (originalImage.width - cropSize) ~/ 2;
+      } else {
+        // Portrait or square: crop height
+        cropSize = originalImage.width;
+        offsetY = (originalImage.height - cropSize) ~/ 2;
+      }
+      
+      // Crop to square first if needed
+      img.Image? processedImage;
+      if (originalImage.width != originalImage.height) {
+        processedImage = img.copyCrop(
+          originalImage,
+          x: offsetX,
+          y: offsetY,
+          width: cropSize,
+          height: cropSize,
+        );
+        debugPrint('✂️ Cropped to square: ${cropSize}x${cropSize}');
+      } else {
+        processedImage = originalImage;
+      }
+      
+      // Resize image to fixed square size
+      final resizedImage = img.copyResize(
+        processedImage,
+        width: targetSize,
+        height: targetSize,
+        interpolation: img.Interpolation.cubic,
+      );
+
+      debugPrint('📐 Resized image size: ${resizedImage.width}x${resizedImage.height}');
+
+      // Encode to JPEG with good quality
+      final resizedBytes = img.encodeJpg(resizedImage, quality: 90);
+      debugPrint('📊 Resized image size: ${resizedBytes.length} bytes');
+
+      if (saveToFile) {
+        // Save to temporary directory with fallback
+        String? resizedPath;
+        try {
+          final directory = await getTemporaryDirectory();
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          resizedPath = '${directory.path}/profile_image_$timestamp.jpg';
+          final resizedFile = File(resizedPath);
+          await resizedFile.writeAsBytes(resizedBytes);
+          debugPrint('✅ Image resized and saved to: $resizedPath');
+        } catch (e) {
+          debugPrint('⚠️ Failed to get temp directory: $e');
+          // Fallback: save next to original file if path provided
+          if (originalPath != null) {
+            try {
+              final originalFile = File(originalPath);
+              final directory = originalFile.parent;
+              final timestamp = DateTime.now().millisecondsSinceEpoch;
+              resizedPath = '${directory.path}/profile_image_$timestamp.jpg';
+              final resizedFile = File(resizedPath);
+              await resizedFile.writeAsBytes(resizedBytes);
+              debugPrint('✅ Image resized and saved to (fallback): $resizedPath');
+            } catch (fallbackError) {
+              debugPrint('❌ Fallback also failed: $fallbackError');
+              // Last resort: return original path and let upload handle it
+              debugPrint('⚠️ Using original path as fallback');
+              return originalPath;
+            }
+          } else {
+            throw Exception('Cannot save resized image: temp directory unavailable and no original path');
+          }
+        }
+        return resizedPath;
+      } else {
+        // Store bytes for web upload
+        tempImageBytes.value = resizedBytes;
+        return null;
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error resizing profile image bytes: $e');
+      debugPrint('Stack trace: $stackTrace');
+      return null;
+    }
+  }
+
+  /// Upload profile image bytes (for web platform)
+  Future<void> _uploadProfileImageBytes(Uint8List imageBytes) async {
+    try {
+      // Get authentication token
+      final token = PreferencesService.getAuthToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('Authentication token not found. Please login again.');
+      }
+      
+      // Save bytes to temporary file for upload with fallback
+      File tempFile;
+      try {
+        final directory = await getTemporaryDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final tempPath = '${directory.path}/profile_upload_$timestamp.jpg';
+        tempFile = File(tempPath);
+        await tempFile.writeAsBytes(imageBytes);
+        debugPrint('✅ Saved temp file for upload: $tempPath');
+      } catch (e) {
+        debugPrint('⚠️ Failed to get temp directory for upload: $e');
+        // Fallback: try to use app documents directory or current directory
+        try {
+          if (!kIsWeb) {
+            // For mobile, try app documents directory
+            final appDir = await getApplicationDocumentsDirectory();
+            final timestamp = DateTime.now().millisecondsSinceEpoch;
+            final tempPath = '${appDir.path}/profile_upload_$timestamp.jpg';
+            tempFile = File(tempPath);
+            await tempFile.writeAsBytes(imageBytes);
+            debugPrint('✅ Saved temp file to app directory (fallback): $tempPath');
+          } else {
+            // For web, we might need to use a different approach
+            throw Exception('Cannot create temp file on web. Please rebuild the app.');
+          }
+        } catch (fallbackError) {
+          debugPrint('❌ All fallbacks failed: $fallbackError');
+          throw Exception('Cannot create temporary file. Please rebuild the app (stop and restart, not just hot reload).');
+        }
+      }
+      
+      debugPrint('🔄 Uploading profile image to API (web)...');
+      final uploadResponse = await _authRepository.uploadProfileImage(
+        token: token,
+        imageFile: tempFile,
+      );
+      
+      if (uploadResponse.isSuccess && uploadResponse.data != null) {
+        // Save the API returned profile image URL
+        final profileImageUrl = uploadResponse.data!;
+        PreferencesService.getStorage().write('user_profile_image_url', profileImageUrl);
+        
+        // Update user info with the API URL
+        user.value = user.value.copyWith(profileImagePath: profileImageUrl);
+        debugPrint('✅ Profile image uploaded successfully: $profileImageUrl');
+        
+        // Close modal
+        closeProfileImageModal();
+        
+        Get.snackbar(
+          'Success',
+          uploadResponse.message.isNotEmpty 
+              ? uploadResponse.message 
+              : 'Profile image updated successfully',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFF00B8A9).withOpacity(0.8),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+      } else {
+        throw Exception(uploadResponse.message.isNotEmpty 
+            ? uploadResponse.message 
+            : 'Upload failed');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error uploading profile image bytes: $e');
+      debugPrint('Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   /// Load settings from storage

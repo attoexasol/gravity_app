@@ -20,18 +20,36 @@ class CommunityPage extends GetView<CommunityController> {
     return Stack(
       children: [
         // Main feed - Match React: px-6 py-6 space-y-4
-        Obx(() => ListView.builder(
-          padding: EdgeInsets.only(
-            left: 24.w,  // px-6 = 24px
-            right: 24.w, // px-6 = 24px
-            top: 24.h,   // py-6 = 24px
-            bottom: 100.h, // Prevent overflow with bottom nav
-          ),
-          itemCount: controller.posts.length,
-          itemBuilder: (context, index) {
-            return _buildPostCard(controller.posts[index], index);
-          },
-        )),
+        Obx(() {
+          // Show communities if available, otherwise show posts
+          if (controller.communities.isNotEmpty) {
+            return ListView.builder(
+              padding: EdgeInsets.only(
+                left: 24.w,  // px-6 = 24px
+                right: 24.w, // px-6 = 24px
+                top: 24.h,   // py-6 = 24px
+                bottom: 100.h, // Prevent overflow with bottom nav
+              ),
+              itemCount: controller.communities.length,
+              itemBuilder: (context, index) {
+                return _buildCommunityCard(controller.communities[index], index);
+              },
+            );
+          } else {
+            return ListView.builder(
+              padding: EdgeInsets.only(
+                left: 24.w,  // px-6 = 24px
+                right: 24.w, // px-6 = 24px
+                top: 24.h,   // py-6 = 24px
+                bottom: 100.h, // Prevent overflow with bottom nav
+              ),
+              itemCount: controller.posts.length,
+              itemBuilder: (context, index) {
+                return _buildPostCard(controller.posts[index], index);
+              },
+            );
+          }
+        }),
 
         // Floating Action Button - Create Post
         Positioned(
@@ -1063,6 +1081,132 @@ class CommunityPage extends GetView<CommunityController> {
         ],
       ),
     );
+  }
+
+  Widget _buildCommunityCard(Map<String, dynamic> community, int index) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 16.h),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28.r),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20.r,
+            offset: Offset(0, 4.h),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(20.r),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Community header
+            Row(
+              children: [
+                // Community icon
+                Container(
+                  width: 48.w,
+                  height: 48.h,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00B8A9).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.people,
+                    color: const Color(0xFF00B8A9),
+                    size: 24.sp,
+                  ),
+                ),
+                SizedBox(width: 12.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        community['community_name'] ?? 'Unknown Community',
+                        style: ResponsiveTextStyles.textBase.copyWith(
+                          color: const Color(0xFF0A2342),
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 4.h),
+                      Text(
+                        'ID: ${community['id'] ?? 'N/A'}',
+                        style: ResponsiveTextStyles.textXs.copyWith(
+                          color: const Color(0xFF0A2342).withOpacity(0.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16.h),
+            // Community description
+            Text(
+              community['community_description'] ?? '',
+              style: ResponsiveTextStyles.textSm.copyWith(
+                color: const Color(0xFF0A2342).withOpacity(0.8),
+              ),
+            ),
+            SizedBox(height: 12.h),
+            // Timestamps
+            Row(
+              children: [
+                Icon(
+                  Icons.calendar_today,
+                  size: 14.sp,
+                  color: const Color(0xFF0A2342).withOpacity(0.5),
+                ),
+                SizedBox(width: 4.w),
+                Text(
+                  'Created: ${_formatDate(community['created_at'])}',
+                  style: ResponsiveTextStyles.textXs.copyWith(
+                    color: const Color(0xFF0A2342).withOpacity(0.5),
+                  ),
+                ),
+                SizedBox(width: 16.w),
+                Icon(
+                  Icons.update,
+                  size: 14.sp,
+                  color: const Color(0xFF0A2342).withOpacity(0.5),
+                ),
+                SizedBox(width: 4.w),
+                Text(
+                  'Updated: ${_formatDate(community['updated_at'])}',
+                  style: ResponsiveTextStyles.textXs.copyWith(
+                    color: const Color(0xFF0A2342).withOpacity(0.5),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    )
+        .animate()
+        .fadeIn(duration: 300.ms, delay: (index * 100).ms)
+        .moveY(
+          begin: 20.h,
+          end: 0,
+          duration: 300.ms,
+          delay: (index * 100).ms,
+          curve: Curves.easeOut,
+        );
+  }
+
+  String _formatDate(String? dateString) {
+    if (dateString == null || dateString.isEmpty) return 'N/A';
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (e) {
+      return dateString;
+    }
   }
 }
 
