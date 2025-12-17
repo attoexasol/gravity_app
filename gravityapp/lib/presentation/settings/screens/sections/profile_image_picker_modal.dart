@@ -10,7 +10,7 @@ import '../../controllers/settings_controller.dart';
 class ProfileImagePickerModal extends StatelessWidget {
   final SettingsController controller;
 
-  const ProfileImagePickerModal({required this.controller});
+  const ProfileImagePickerModal({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
