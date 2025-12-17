@@ -50,22 +50,10 @@ class MainAppBar extends StatelessWidget implements PreferredSizeWidget {
             mainAxisSize:
                 MainAxisSize.min, // Important: Use minimum space needed
             children: [
-              // Top row with menu and actions
+              // Top row with actions (menu icon removed)
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  // Menu button
-                  IconButton(
-                    icon: Icon(Icons.menu, color: Colors.white, size: 24.sp),
-                    onPressed: onMenuTap,
-                    tooltip: 'Menu',
-                    padding: EdgeInsets.zero,
-                    constraints: BoxConstraints(
-                      minWidth: 40.w,
-                      minHeight: 40.h,
-                    ),
-                  ),
-
                   // Actions
                   Row(
                     mainAxisSize: MainAxisSize.min,

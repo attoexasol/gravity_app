@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
@@ -25,21 +26,42 @@ class ApiService {
       String endpoint, {
         Map<String, dynamic>? body,
         Map<String, String>? headers,
+        Duration? timeout,
       }) async {
     try {
       final url = Uri.parse('$baseUrl$endpoint');
 
       debugPrint('🌐 POST Request: $url');
-      debugPrint('📦 Body: ${jsonEncode(body)}');
+      // Don't print full body if it contains large data (like base64 images)
+      if (body != null) {
+        final bodyKeys = body.keys.toList();
+        final hasLargeData = body.values.any((v) => v is String && v.length > 1000);
+        if (hasLargeData) {
+          debugPrint('📦 Body keys: $bodyKeys (contains large data, not printing full body)');
+        } else {
+          debugPrint('📦 Body: ${jsonEncode(body)}');
+        }
+      }
 
+      final jsonBody = jsonEncode(body);
+      debugPrint('📦 Body size: ${jsonBody.length} chars');
+
+      // Use longer timeout for requests with large data
+      final requestTimeout = timeout ?? const Duration(seconds: 60);
+      
       final response = await _client.post(
         url,
         headers: {..._defaultHeaders, ...?headers},
-        body: jsonEncode(body),
-      );
+        body: jsonBody,
+      ).timeout(requestTimeout);
 
       debugPrint('📡 Response Status: ${response.statusCode}');
-      debugPrint('📄 Response Body: ${response.body}');
+      // Don't print very long response bodies
+      if (response.body.length > 2000) {
+        debugPrint('📄 Response Body: ${response.body.substring(0, 500)}... (truncated)');
+      } else {
+        debugPrint('📄 Response Body: ${response.body}');
+      }
 
       return _handleResponse(response);
     } catch (e) {
