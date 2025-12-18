@@ -409,5 +409,229 @@ class CommunityRepository {
       );
     }
   }
+
+  /// Create a comment on a post
+  /// API: POST https://gravity.attoexasolutions.com/api/create_post_comment
+  /// 
+  /// Parameters:
+  /// - apiToken: User's authentication token
+  /// - postId: The ID of the post to comment on
+  /// - comments: The comment text
+  /// - commentId: Parent comment ID for replies (null or 0 for top-level comments)
+  Future<ApiResponse<Map<String, dynamic>>> createPostComment({
+    required String apiToken,
+    required int postId,
+    required String comments,
+    int? commentId,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'api_token': apiToken,
+        'post_id': postId,
+        'comments': comments,
+      };
+
+      // Add comment_id for replies (parent comment)
+      if (commentId != null && commentId > 0) {
+        body['comment_id'] = commentId;
+      }
+
+      debugPrint('🔄 Creating comment with body: ${body.keys}');
+      debugPrint('   - Post ID: $postId');
+      debugPrint('   - Comment text: $comments');
+      debugPrint('   - Parent Comment ID: $commentId');
+
+      final response = await _apiService.post(
+        '/create_post_comment',
+        body: body,
+      );
+
+      return ApiResponse<Map<String, dynamic>>(
+        status: response['status'] ?? true,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is Map<String, dynamic>
+            ? response['data'] as Map<String, dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ CreatePostComment API Error: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ CreatePostComment Unknown Error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Get all comments for a post
+  /// API: POST https://gravity.attoexasolutions.com/api/all_post_comments
+  Future<ApiResponse<List<dynamic>>> getAllPostComments({
+    required int postId,
+  }) async {
+    try {
+      debugPrint('🔄 Fetching all comments for post (ID: $postId)...');
+
+      final response = await _apiService.post(
+        '/all_post_comments',
+        body: {
+          'post_id': postId,
+        },
+      );
+
+      return ApiResponse<List<dynamic>>(
+        status: response['status'] ?? true,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is List
+            ? response['data'] as List<dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ GetAllPostComments API Error: ${e.message}');
+      return ApiResponse<List<dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ GetAllPostComments Unknown Error: $e');
+      return ApiResponse<List<dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Get single comment with replies
+  /// API: POST https://gravity.attoexasolutions.com/api/single_post_comment
+  Future<ApiResponse<Map<String, dynamic>>> getSinglePostComment({
+    required int commentId,
+  }) async {
+    try {
+      debugPrint('🔄 Fetching single comment (ID: $commentId)...');
+
+      final response = await _apiService.post(
+        '/single_post_comment',
+        body: {
+          'comment_id': commentId,
+        },
+      );
+
+      return ApiResponse<Map<String, dynamic>>(
+        status: response['status'] ?? true,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is Map<String, dynamic>
+            ? response['data'] as Map<String, dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ GetSinglePostComment API Error: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ GetSinglePostComment Unknown Error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Update a comment
+  /// API: POST https://gravity.attoexasolutions.com/api/update_post_comment
+  Future<ApiResponse<Map<String, dynamic>>> updatePostComment({
+    required String apiToken,
+    required int postId,
+    required int commentId,
+    required String comments,
+  }) async {
+    try {
+      debugPrint('🔄 Updating comment (ID: $commentId)...');
+
+      final response = await _apiService.post(
+        '/update_post_comment',
+        body: {
+          'api_token': apiToken,
+          'post_id': postId,
+          'comment_id': commentId,
+          'comments': comments,
+        },
+      );
+
+      return ApiResponse<Map<String, dynamic>>(
+        status: response['status'] ?? true,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is Map<String, dynamic>
+            ? response['data'] as Map<String, dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ UpdatePostComment API Error: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ UpdatePostComment Unknown Error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Delete a comment
+  /// API: POST https://gravity.attoexasolutions.com/api/delete_post_comment
+  Future<ApiResponse<Map<String, dynamic>>> deletePostComment({
+    required String apiToken,
+    required int commentId,
+  }) async {
+    try {
+      debugPrint('🔄 Deleting comment (ID: $commentId)...');
+
+      final response = await _apiService.post(
+        '/delete_post_comment',
+        body: {
+          'api_token': apiToken,
+          'comment_id': commentId,
+        },
+      );
+
+      return ApiResponse<Map<String, dynamic>>(
+        status: response['status'] ?? true,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is Map<String, dynamic>
+            ? response['data'] as Map<String, dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ DeletePostComment API Error: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ DeletePostComment Unknown Error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
 }
 

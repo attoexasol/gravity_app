@@ -22,34 +22,19 @@ class CommunityPage extends GetView<CommunityController> {
       children: [
         // Main feed - Match React: px-6 py-6 space-y-4
         Obx(() {
-          // Show communities if available, otherwise show posts
-          if (controller.communities.isNotEmpty) {
-            return ListView.builder(
-              padding: EdgeInsets.only(
-                left: 24.w,  // px-6 = 24px
-                right: 24.w, // px-6 = 24px
-                top: 24.h,   // py-6 = 24px
-                bottom: 100.h, // Prevent overflow with bottom nav
-              ),
-              itemCount: controller.communities.length,
-              itemBuilder: (context, index) {
-                return _buildCommunityCard(controller.communities[index], index);
-              },
-            );
-          } else {
-            return ListView.builder(
-              padding: EdgeInsets.only(
-                left: 24.w,  // px-6 = 24px
-                right: 24.w, // px-6 = 24px
-                top: 24.h,   // py-6 = 24px
-                bottom: 100.h, // Prevent overflow with bottom nav
-              ),
-              itemCount: controller.posts.length,
-              itemBuilder: (context, index) {
-                return _buildPostCard(controller.posts[index], index);
-              },
-            );
-          }
+          // Always show posts, never show community cards
+          return ListView.builder(
+            padding: EdgeInsets.only(
+              left: 24.w,  // px-6 = 24px
+              right: 24.w, // px-6 = 24px
+              top: 24.h,   // py-6 = 24px
+              bottom: 100.h, // Prevent overflow with bottom nav
+            ),
+            itemCount: controller.posts.length,
+            itemBuilder: (context, index) {
+              return _buildPostCard(controller.posts[index], index);
+            },
+          );
         }),
 
         // Floating Action Button - Create Post
@@ -81,129 +66,107 @@ class CommunityPage extends GetView<CommunityController> {
     return Container(
       margin: EdgeInsets.only(bottom: 16.h), // space-y-4 = 16px spacing between posts
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28.r),
+        color: Colors.white, // bg-white
+        borderRadius: BorderRadius.circular(28.r), // rounded-[28px]
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 20.r,
-            offset: Offset(0, 4.h),
+            color: Colors.black.withOpacity(0.1), // shadow-md
+            blurRadius: 10.r,
+            offset: Offset(0, 2.h),
           ),
         ],
       ),
+      clipBehavior: Clip.hardEdge, // overflow-hidden
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // User header - Match React: p-5 padding
+          // User Header - Match React: p-5 flex items-center gap-3
           Padding(
             padding: EdgeInsets.all(20.r), // p-5 = 20px
             child: Row(
               children: [
-                // Avatar - Match React: w-12 h-12 = 48px diameter, radius 24
-                CircleAvatar(
-                  radius: 24.r,
-                  backgroundImage: CachedNetworkImageProvider(post.user.avatar),
-                  backgroundColor: AppColors.muted,
+                // Avatar - Match React: w-12 h-12 rounded-full overflow-hidden bg-gray-200
+                ClipOval(
+                  child: Container(
+                    width: 48.w, // w-12 = 48px
+                    height: 48.h, // h-12 = 48px
+                    color: Colors.grey[200], // bg-gray-200
+                    child: post.user.avatar.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: post.user.avatar,
+                            width: 48.w,
+                            height: 48.h,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(
+                              width: 48.w,
+                              height: 48.h,
+                              color: Colors.grey[200],
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFF00B8A9),
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              width: 48.w,
+                              height: 48.h,
+                              color: Colors.grey[200],
+                              child: Icon(
+                                Icons.person,
+                                size: 24.sp,
+                                color: const Color(0xFF0A2342).withOpacity(0.5),
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            Icons.person,
+                            size: 24.sp,
+                            color: const Color(0xFF0A2342).withOpacity(0.5),
+                          ),
+                  ),
                 ),
                 SizedBox(width: 12.w), // gap-3 = 12px
+                // User Info - Match React: flex-1
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Name - Match React: text-[#0A2342]
                       Text(
                         post.user.name,
                         style: ResponsiveTextStyles.textBase.copyWith(
                           color: const Color(0xFF0A2342),
-                          fontWeight: FontWeight.w600,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
+                      // Timestamp - Match React: text-[#0A2342]/50 text-xs
                       Text(
                         post.timestamp,
                         style: ResponsiveTextStyles.textXs.copyWith(
-                          color: const Color(0xFF0A2342).withOpacity(0.5),
+                          color: const Color(0xFF0A2342).withOpacity(0.5), // text-[#0A2342]/50
                         ),
                       ),
                     ],
                   ),
                 ),
-                // More options button (Edit/Delete)
-                PopupMenuButton<String>(
-                  icon: Icon(
-                    Icons.more_vert,
-                    color: const Color(0xFF0A2342).withOpacity(0.5),
-                    size: 20.sp,
-                  ),
-                  padding: EdgeInsets.zero,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  onSelected: (value) {
-                    if (value == 'edit') {
-                      controller.openEditPost(post);
-                    } else if (value == 'delete') {
-                      controller.confirmDeletePost(post.id);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem<String>(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.edit_outlined,
-                            size: 18.sp,
-                            color: const Color(0xFF0A2342),
-                          ),
-                          SizedBox(width: 8.w),
-                          Text(
-                            'Edit Post',
-                            style: ResponsiveTextStyles.textSm.copyWith(
-                              color: const Color(0xFF0A2342),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.delete_outlined,
-                            size: 18.sp,
-                            color: const Color(0xFFE53935),
-                          ),
-                          SizedBox(width: 8.w),
-                          Text(
-                            'Delete Post',
-                            style: ResponsiveTextStyles.textSm.copyWith(
-                              color: const Color(0xFFE53935),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
 
-          // Post image - Match React: h-64 = 256px
+          // Post Image - Match React: relative h-64 bg-gray-100 (only if post.image exists)
           if (post.image.isNotEmpty)
             Container(
-              height: 256.h, // h-64 = 256px (exact match)
+              height: 256.h, // h-64 = 256px
               width: double.infinity,
-              color: AppColors.muted,
+              color: Colors.grey[100], // bg-gray-100
               child: CachedNetworkImage(
                 imageUrl: post.image,
                 width: double.infinity,
+                height: 256.h,
                 fit: BoxFit.cover,
                 placeholder: (context, url) => Container(
                   height: 256.h,
-                  color: AppColors.muted,
+                  color: Colors.grey[100],
                   child: const Center(
                     child: CircularProgressIndicator(
                       color: Color(0xFF00B8A9),
@@ -212,74 +175,80 @@ class CommunityPage extends GetView<CommunityController> {
                 ),
                 errorWidget: (context, url, error) => Container(
                   height: 256.h,
-                  color: AppColors.muted,
+                  color: Colors.grey[100],
                   child: Icon(Icons.image_not_supported, size: 48.sp),
                 ),
               ),
             ),
 
-          // Post text - Match React: p-5 padding, mb-4 margin-bottom
+          // Post Text + Reactions - Match React: p-5
           Padding(
             padding: EdgeInsets.all(20.r), // p-5 = 20px
-            child: Text(
-              post.text,
-              style: ResponsiveTextStyles.textBase.copyWith(
-                color: const Color(0xFF0A2342).withOpacity(0.8),
-              ),
-            ),
-          ),
-
-          // Reactions bar - Match React: flex items-center justify-between pt-4 border-t border-[#0A2342]/10
-          Padding(
-            padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 20.h), // p-5 = 20px horizontal/vertical
-            child: Container(
-              padding: EdgeInsets.only(top: 16.h), // pt-4 = 16px top padding
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: const Color(0xFF0A2342).withOpacity(0.1), // border-[#0A2342]/10
-                    width: 1,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Post Text - Match React: text-[#0A2342]/80 mb-4
+                Padding(
+                  padding: EdgeInsets.only(bottom: 16.h), // mb-4 = 16px
+                  child: Text(
+                    post.text,
+                    style: ResponsiveTextStyles.textBase.copyWith(
+                      color: const Color(0xFF0A2342).withOpacity(0.8), // text-[#0A2342]/80
+                    ),
                   ),
                 ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween, // justify-between
-                crossAxisAlignment: CrossAxisAlignment.center, // items-center
-                children: [
-                  // Left side: Reaction buttons - Match React: flex items-center gap-4
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
+
+                // Reactions Bar - Match React: flex items-center justify-between pt-4 border-t border-[#0A2342]/10
+                Container(
+                  padding: EdgeInsets.only(top: 16.h), // pt-4 = 16px
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(
+                        color: const Color(0xFF0A2342).withOpacity(0.1), // border-[#0A2342]/10
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween, // justify-between
+                    crossAxisAlignment: CrossAxisAlignment.center, // items-center
                     children: [
-                      _buildReactionButton(
-                        post.id,
-                        'heart',
-                        Icons.favorite,
-                        post.reactions.heart,
-                        Colors.red,
+                      // Left side: Reaction buttons - Match React: flex items-center gap-4
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          _buildReactionButton(
+                            post.id,
+                            'heart',
+                            Icons.favorite,
+                            post.reactions.heart,
+                            Colors.red,
+                          ),
+                          SizedBox(width: 16.w), // gap-4 = 16px
+                          _buildReactionButton(
+                            post.id,
+                            'thumbsUp',
+                            Icons.thumb_up,
+                            post.reactions.thumbsUp,
+                            Colors.blue,
+                          ),
+                          SizedBox(width: 16.w), // gap-4 = 16px
+                          _buildReactionButton(
+                            post.id,
+                            'fire',
+                            Icons.local_fire_department,
+                            post.reactions.fire,
+                            Colors.orange,
+                          ),
+                        ],
                       ),
-                      SizedBox(width: 16.w), // gap-4 = 16px
-                      _buildReactionButton(
-                        post.id,
-                        'thumbsUp',
-                        Icons.thumb_up,
-                        post.reactions.thumbsUp,
-                        Colors.blue,
-                      ),
-                      SizedBox(width: 16.w), // gap-4 = 16px
-                      _buildReactionButton(
-                        post.id,
-                        'fire',
-                        Icons.local_fire_department,
-                        post.reactions.fire,
-                        Colors.orange,
-                      ),
+                      // Right side: Comment button - Match React: flex items-center gap-2 text-[#0A2342]/60
+                      _buildCommentButton(post.id, post.comments.length),
                     ],
                   ),
-                  // Right side: Comment button - Match React: motion.button with whileTap={{ scale: 0.9 }}
-                  _buildCommentButton(post.id, post.comments.length),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
@@ -390,352 +359,348 @@ class CommunityPage extends GetView<CommunityController> {
               ),
             ).animate().fadeIn(duration: 200.ms),
 
-            // Modal - Match React: fixed bottom-0 left-0 right-0 rounded-t-[40px] z-[70] max-h-[90vh]
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
+            // Modal - Full screen bottom sheet
+            Positioned.fill(
               child: Container(
-                constraints: BoxConstraints(maxHeight: 0.9.sh),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)),
                 ),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Modal Header - Match React: p-6 border-b border-[#0A2342]/10
-                    Container(
-                      padding: EdgeInsets.all(24.r),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: const Color(0xFF0A2342).withOpacity(0.1),
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Create Post',
-                            style: ResponsiveTextStyles.textXl.copyWith(
-                              color: const Color(0xFF0A2342),
-                              fontWeight: FontWeight.bold,
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
+                      // Modal Header - Match React: p-6 border-b border-[#0A2342]/10
+                      Container(
+                        padding: EdgeInsets.all(24.r),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: const Color(0xFF0A2342).withOpacity(0.1),
                             ),
                           ),
-                          _AnimatedTapWidget(
-                            onTap: () {
-                              controller.newPostText.value = '';
-                              controller.clearSelectedImage();
-                              Get.back();
-                            },
-                            child: Container(
-                              width: 32.w,
-                              height: 32.h,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0A2342).withOpacity(0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.close,
-                                size: 20.sp,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Create Post',
+                              style: ResponsiveTextStyles.textXl.copyWith(
                                 color: const Color(0xFF0A2342),
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // User Info - Match React: p-6 border-b border-[#0A2342]/10
-                    Container(
-                      padding: EdgeInsets.all(24.r), // p-6 = 24px
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: const Color(0xFF0A2342).withOpacity(0.1),
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          // Avatar - Match React: w-12 h-12 rounded-full
-                          Container(
-                            width: 48.w, // w-12 = 48px
-                            height: 48.h, // h-12 = 48px
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.grey[200], // bg-gray-200
-                            ),
-                            child: ClipOval(
-                              child: Obx(() => _buildUserAvatar(
-                                imageUrl: controller.currentUserProfileImage,
-                                size: 48,
-                              )),
-                            ),
-                          ),
-                          SizedBox(width: 12.w), // gap-3 = 12px
-                          // User Info Text
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // User name - Match React: text-[#0A2342]
-                              Obx(() => Text(
-                                controller.currentUserName,
-                                style: ResponsiveTextStyles.textBase.copyWith(
+                            _AnimatedTapWidget(
+                              onTap: () {
+                                controller.newPostText.value = '';
+                                controller.clearSelectedImage();
+                                Get.back();
+                              },
+                              child: Container(
+                                width: 40.w,
+                                height: 40.h,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0A2342).withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.close,
+                                  size: 24.sp,
                                   color: const Color(0xFF0A2342),
                                 ),
-                              )),
-                              // "Sharing to Community" text - Match React: text-[#0A2342]/50 text-xs
-                              Text(
-                                'Sharing to Community',
-                                style: ResponsiveTextStyles.textXs.copyWith(
-                                  color: const Color(0xFF0A2342).withOpacity(0.5),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Post Content - Match React: flex-1 overflow-y-auto p-6 space-y-4
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: EdgeInsets.all(24.r),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Text Input
-                            TextField(
-                              onChanged: (value) => controller.newPostText.value = value,
-                              maxLines: 5,
-                              autofocus: true,
-                              decoration: InputDecoration(
-                                hintText: 'Share your wellness journey...',
-                                hintStyle: ResponsiveTextStyles.textBase.copyWith(
-                                  color: const Color(0xFF0A2342).withOpacity(0.4),
-                                ),
-                                border: InputBorder.none,
-                              ),
-                              style: ResponsiveTextStyles.textBase.copyWith(
-                                color: const Color(0xFF0A2342),
                               ),
                             ),
-
-                            // Selected Image Preview
-                            Obx(() => controller.selectedImage.value.isNotEmpty
-                                ? Container(
-                                    margin: EdgeInsets.only(top: 16.h),
-                                    child: Stack(
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(20.r),
-                                          child: controller.selectedImagePath.value.isNotEmpty
-                                              // Local file image
-                                              ? Image.file(
-                                                  File(controller.selectedImagePath.value),
-                                                  height: 256.h,
-                                                  width: double.infinity,
-                                                  fit: BoxFit.cover,
-                                                )
-                                              // Network image (sample images)
-                                              : CachedNetworkImage(
-                                                  imageUrl: controller.selectedImage.value,
-                                                  height: 256.h,
-                                                  width: double.infinity,
-                                                  fit: BoxFit.cover,
-                                                ),
-                                        ),
-                                        Positioned(
-                                          top: 12.h,
-                                          right: 12.w,
-                                          child: _AnimatedTapWidget(
-                                            onTap: () => controller.clearSelectedImage(),
-                                            child: Container(
-                                              width: 32.w,
-                                              height: 32.h,
-                                              decoration: BoxDecoration(
-                                                color: Colors.black.withOpacity(0.5),
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Icon(
-                                                Icons.close,
-                                                color: Colors.white,
-                                                size: 16.sp,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                    .animate()
-                                    .fadeIn(duration: 200.ms)
-                                    .scale(begin: const Offset(0.95, 0.95), end: const Offset(1, 1), duration: 200.ms)
-                                : const SizedBox.shrink()),
-
-                            // Image Gallery / Upload Section
-                            Obx(() => controller.selectedImage.value.isEmpty
-                                ? Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      SizedBox(height: 16.h),
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.image_outlined,
-                                            size: 20.sp,
-                                            color: const Color(0xFF00B8A9),
-                                          ),
-                                          SizedBox(width: 8.w),
-                                          Text(
-                                            'Add a photo to your post',
-                                            style: ResponsiveTextStyles.textSm.copyWith(
-                                              color: const Color(0xFF0A2342).withOpacity(0.6),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      SizedBox(height: 12.h),
-                                      
-                                      // Upload Image Button
-                                      Obx(() => _AnimatedTapWidget(
-                                        onTap: controller.isPickingImage.value 
-                                            ? () {} 
-                                            : () => controller.showImageSourcePicker(),
-                                        child: Container(
-                                          width: double.infinity,
-                                          padding: EdgeInsets.symmetric(vertical: 20.h),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF00B8A9).withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(16.r),
-                                            border: Border.all(
-                                              color: const Color(0xFF00B8A9).withOpacity(0.3),
-                                              width: 2,
-                                              style: BorderStyle.solid,
-                                            ),
-                                          ),
-                                          child: controller.isPickingImage.value
-                                              ? Center(
-                                                  child: SizedBox(
-                                                    width: 24.w,
-                                                    height: 24.h,
-                                                    child: const CircularProgressIndicator(
-                                                      color: Color(0xFF00B8A9),
-                                                      strokeWidth: 2,
-                                                    ),
-                                                  ),
-                                                )
-                                              : Column(
-                                                  children: [
-                                                    Icon(
-                                                      Icons.cloud_upload_outlined,
-                                                      size: 32.sp,
-                                                      color: const Color(0xFF00B8A9),
-                                                    ),
-                                                    SizedBox(height: 8.h),
-                                                    Text(
-                                                      'Upload from Device',
-                                                      style: ResponsiveTextStyles.textSm.copyWith(
-                                                        color: const Color(0xFF00B8A9),
-                                                        fontWeight: FontWeight.w600,
-                                                      ),
-                                                    ),
-                                                    SizedBox(height: 4.h),
-                                                    Text(
-                                                      'Tap to select from gallery or camera',
-                                                      style: ResponsiveTextStyles.textXs.copyWith(
-                                                        color: const Color(0xFF0A2342).withOpacity(0.5),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                        ),
-                                      )),
-                                      
-                                    ],
-                                  )
-                                : const SizedBox.shrink()),
                           ],
                         ),
                       ),
-                    ),
 
-                    // Post Button - Match React: p-6 border-t border-[#0A2342]/10 bg-white
-                    Container(
-                      padding: EdgeInsets.all(24.r),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border(
-                          top: BorderSide(
-                            color: const Color(0xFF0A2342).withOpacity(0.1),
+                      // User Info - Match React: p-6 border-b border-[#0A2342]/10
+                      Container(
+                        padding: EdgeInsets.all(24.r), // p-6 = 24px
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: const Color(0xFF0A2342).withOpacity(0.1),
+                            ),
                           ),
                         ),
-                      ),
-                      child: Obx(() {
-                        final canPost = controller.newPostText.value.trim().isNotEmpty;
-                        final isCreating = controller.isCreatingPost.value;
-                        
-                        return _AnimatedTapWidget(
-                          onTap: (canPost && !isCreating) ? () async {
-                            // Controller handles dialog closing and success message
-                            await controller.createPost();
-                          } : () {},
-                          child: Container(
-                            width: double.infinity,
-                            padding: EdgeInsets.symmetric(vertical: 16.h),
-                            decoration: BoxDecoration(
-                              gradient: (canPost && !isCreating)
-                                  ? const LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                                    )
-                                  : null,
-                              color: (canPost && !isCreating) ? null : const Color(0xFF0A2342).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(16.r),
+                        child: Row(
+                          children: [
+                            // Avatar - Match React: w-12 h-12 rounded-full
+                            Container(
+                              width: 48.w, // w-12 = 48px
+                              height: 48.h, // h-12 = 48px
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.grey[200], // bg-gray-200
+                              ),
+                              child: ClipOval(
+                                child: Obx(() => _buildUserAvatar(
+                                  imageUrl: controller.currentUserProfileImage,
+                                  size: 48,
+                                )),
+                              ),
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                            SizedBox(width: 12.w), // gap-3 = 12px
+                            // User Info Text
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (isCreating)
-                                  SizedBox(
-                                    width: 20.sp,
-                                    height: 20.sp,
-                                    child: const CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                else
-                                  Icon(
-                                    Icons.send,
-                                    size: 20.sp,
-                                    color: canPost
-                                        ? Colors.white
-                                        : const Color(0xFF0A2342).withOpacity(0.4),
-                                  ),
-                                SizedBox(width: 8.w),
-                                Text(
-                                  isCreating ? 'Creating...' : 'Share Post',
+                                // User name - Match React: text-[#0A2342]
+                                Obx(() => Text(
+                                  controller.currentUserName,
                                   style: ResponsiveTextStyles.textBase.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: (canPost || isCreating)
-                                        ? Colors.white
-                                        : const Color(0xFF0A2342).withOpacity(0.4),
+                                    color: const Color(0xFF0A2342),
+                                  ),
+                                )),
+                                // "Sharing to Community" text - Match React: text-[#0A2342]/50 text-xs
+                                Text(
+                                  'Sharing to Community',
+                                  style: ResponsiveTextStyles.textXs.copyWith(
+                                    color: const Color(0xFF0A2342).withOpacity(0.5),
                                   ),
                                 ),
                               ],
                             ),
+                          ],
+                        ),
+                      ),
+
+                      // Post Content - Match React: flex-1 overflow-y-auto p-6 space-y-4
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.all(24.r),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Text Input
+                              TextField(
+                                onChanged: (value) => controller.newPostText.value = value,
+                                maxLines: 5,
+                                autofocus: true,
+                                decoration: InputDecoration(
+                                  hintText: 'Share your wellness journey...',
+                                  hintStyle: ResponsiveTextStyles.textBase.copyWith(
+                                    color: const Color(0xFF0A2342).withOpacity(0.4),
+                                  ),
+                                  border: InputBorder.none,
+                                ),
+                                style: ResponsiveTextStyles.textBase.copyWith(
+                                  color: const Color(0xFF0A2342),
+                                ),
+                              ),
+
+                              // Selected Image Preview
+                              Obx(() => controller.selectedImage.value.isNotEmpty
+                                  ? Container(
+                                      margin: EdgeInsets.only(top: 16.h),
+                                      child: Stack(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(20.r),
+                                            child: controller.selectedImagePath.value.isNotEmpty
+                                                // Local file image
+                                                ? Image.file(
+                                                    File(controller.selectedImagePath.value),
+                                                    height: 256.h,
+                                                    width: double.infinity,
+                                                    fit: BoxFit.cover,
+                                                  )
+                                                // Network image (sample images)
+                                                : CachedNetworkImage(
+                                                    imageUrl: controller.selectedImage.value,
+                                                    height: 256.h,
+                                                    width: double.infinity,
+                                                    fit: BoxFit.cover,
+                                                  ),
+                                          ),
+                                          Positioned(
+                                            top: 12.h,
+                                            right: 12.w,
+                                            child: _AnimatedTapWidget(
+                                              onTap: () => controller.clearSelectedImage(),
+                                              child: Container(
+                                                width: 32.w,
+                                                height: 32.h,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withOpacity(0.5),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: Icon(
+                                                  Icons.close,
+                                                  color: Colors.white,
+                                                  size: 16.sp,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                      .animate()
+                                      .fadeIn(duration: 200.ms)
+                                      .scale(begin: const Offset(0.95, 0.95), end: const Offset(1, 1), duration: 200.ms)
+                                  : const SizedBox.shrink()),
+
+                              // Image Gallery / Upload Section
+                              Obx(() => controller.selectedImage.value.isEmpty
+                                  ? Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        SizedBox(height: 16.h),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.image_outlined,
+                                              size: 20.sp,
+                                              color: const Color(0xFF00B8A9),
+                                            ),
+                                            SizedBox(width: 8.w),
+                                            Text(
+                                              'Add a photo to your post',
+                                              style: ResponsiveTextStyles.textSm.copyWith(
+                                                color: const Color(0xFF0A2342).withOpacity(0.6),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        SizedBox(height: 12.h),
+                                        
+                                        // Upload Image Button
+                                        Obx(() => _AnimatedTapWidget(
+                                          onTap: controller.isPickingImage.value 
+                                              ? () {} 
+                                              : () => controller.showImageSourcePicker(),
+                                          child: Container(
+                                            width: double.infinity,
+                                            padding: EdgeInsets.symmetric(vertical: 20.h),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF00B8A9).withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(16.r),
+                                              border: Border.all(
+                                                color: const Color(0xFF00B8A9).withOpacity(0.3),
+                                                width: 2,
+                                                style: BorderStyle.solid,
+                                              ),
+                                            ),
+                                            child: controller.isPickingImage.value
+                                                ? Center(
+                                                    child: SizedBox(
+                                                      width: 24.w,
+                                                      height: 24.h,
+                                                      child: const CircularProgressIndicator(
+                                                        color: Color(0xFF00B8A9),
+                                                        strokeWidth: 2,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : Column(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.cloud_upload_outlined,
+                                                        size: 32.sp,
+                                                        color: const Color(0xFF00B8A9),
+                                                      ),
+                                                      SizedBox(height: 8.h),
+                                                      Text(
+                                                        'Upload from Device',
+                                                        style: ResponsiveTextStyles.textSm.copyWith(
+                                                          color: const Color(0xFF00B8A9),
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                      SizedBox(height: 4.h),
+                                                      Text(
+                                                        'Tap to select from gallery or camera',
+                                                        style: ResponsiveTextStyles.textXs.copyWith(
+                                                          color: const Color(0xFF0A2342).withOpacity(0.5),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                          ),
+                                        )),
+                                        
+                                      ],
+                                    )
+                                  : const SizedBox.shrink()),
+                            ],
                           ),
-                        );
-                      }),
-                    ),
-                  ],
-                ),
-              )
+                        ),
+                      ),
+
+                      // Post Button - Match React: p-6 border-t border-[#0A2342]/10 bg-white
+                      Container(
+                        padding: EdgeInsets.all(24.r),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border(
+                            top: BorderSide(
+                              color: const Color(0xFF0A2342).withOpacity(0.1),
+                            ),
+                          ),
+                        ),
+                        child: Obx(() {
+                          final canPost = controller.newPostText.value.trim().isNotEmpty;
+                          final isCreating = controller.isCreatingPost.value;
+                          
+                          return _AnimatedTapWidget(
+                            onTap: (canPost && !isCreating) ? () async {
+                              // Controller handles dialog closing and success message
+                              await controller.createPost();
+                            } : () {},
+                            child: Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.symmetric(vertical: 16.h),
+                              decoration: BoxDecoration(
+                                gradient: (canPost && !isCreating)
+                                    ? const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+                                      )
+                                    : null,
+                                color: (canPost && !isCreating) ? null : const Color(0xFF0A2342).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(16.r),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (isCreating)
+                                    SizedBox(
+                                      width: 20.sp,
+                                      height: 20.sp,
+                                      child: const CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  else
+                                    Icon(
+                                      Icons.send,
+                                      size: 20.sp,
+                                      color: canPost
+                                          ? Colors.white
+                                          : const Color(0xFF0A2342).withOpacity(0.4),
+                                    ),
+                                  SizedBox(width: 8.w),
+                                  Text(
+                                    isCreating ? 'Creating...' : 'Share Post',
+                                    style: ResponsiveTextStyles.textBase.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: (canPost || isCreating)
+                                          ? Colors.white
+                                          : const Color(0xFF0A2342).withOpacity(0.4),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                    ],
+                  ),
+                )
                   .animate()
                   .slideY(
                     begin: 1.0,
@@ -747,9 +712,9 @@ class CommunityPage extends GetView<CommunityController> {
           ],
         ),
       ),
-      barrierDismissible: false, // We handle dismissal ourselves
-      barrierColor: Colors.transparent, // We draw our own backdrop
-      useSafeArea: false, // Important: Don't use SafeArea to cover entire screen
+      barrierDismissible: false,
+      barrierColor: Colors.transparent,
+      useSafeArea: false,
     );
   }
 
@@ -1139,11 +1104,12 @@ class CommunityPage extends GetView<CommunityController> {
   Widget _buildCommentsModal() {
     // Match React: AnimatePresence with spring animations
     return Obx(() {
-      final post = controller.selectedPost;
-      final isLoading = controller.isLoadingSinglePost.value;
-      final error = controller.singlePostError.value;
+      final postId = controller.selectedPostId.value;
+      final comments = controller.postComments;
+      final isLoading = controller.isLoadingComments.value;
+      final error = controller.commentsError.value;
       
-      if (post == null && !isLoading) return const SizedBox.shrink();
+      if (postId == 0) return const SizedBox.shrink();
 
       return Material(
         color: Colors.transparent,
@@ -1195,7 +1161,7 @@ class CommunityPage extends GetView<CommunityController> {
                           Text(
                             isLoading 
                                 ? 'Loading...' 
-                                : 'Comments (${post?.comments.length ?? 0})',
+                                : 'Comments (${comments.length})',
                             style: ResponsiveTextStyles.textXl.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -1235,7 +1201,7 @@ class CommunityPage extends GetView<CommunityController> {
                                     ),
                                     SizedBox(height: 16.h),
                                     Text(
-                                      'Loading post...',
+                                      'Loading comments...',
                                       style: ResponsiveTextStyles.textSm.copyWith(
                                         color: const Color(0xFF0A2342).withOpacity(0.6),
                                       ),
@@ -1268,17 +1234,15 @@ class CommunityPage extends GetView<CommunityController> {
                                     ),
                                   ),
                                 )
-                              : post == null
+                              : comments.isEmpty
                                   ? _buildEmptyComments()
-                                  : post.comments.isEmpty
-                                      ? _buildEmptyComments()
-                                      : ListView.builder(
-                                          padding: EdgeInsets.all(20.r),
-                                          itemCount: post.comments.length,
-                                          itemBuilder: (context, index) {
-                                            return _buildCommentItem(post.id, post.comments[index]);
-                                          },
-                                        ),
+                                  : ListView.builder(
+                                      padding: EdgeInsets.all(20.r),
+                                      itemCount: comments.length,
+                                      itemBuilder: (context, index) {
+                                        return _buildCommentItem(postId, comments[index]);
+                                      },
+                                    ),
                     ),
 
                     // Add comment input - Match React: p-6 border-t border-[#0A2342]/10 bg-white
@@ -1305,12 +1269,16 @@ class CommunityPage extends GetView<CommunityController> {
                           SizedBox(width: 12.w), // gap-3 = 12px
                           Expanded(
                             child: TextField(
+                              controller: controller.commentTextController,
                               onChanged: (value) => controller.newComment.value = value,
-                              onSubmitted: (_) {
-                                if (controller.newComment.value.trim().isNotEmpty && post != null) {
-                                  controller.addComment(post.id);
+                              onSubmitted: (_) async {
+                                if (controller.newComment.value.trim().isNotEmpty && 
+                                    postId != 0 && 
+                                    !controller.isCreatingComment.value) {
+                                  await controller.addComment(postId);
                                 }
                               },
+                              enabled: !controller.isCreatingComment.value,
                               decoration: InputDecoration(
                                 hintText: 'Add a comment...',
                                 hintStyle: ResponsiveTextStyles.textSm.copyWith(
@@ -1342,30 +1310,40 @@ class CommunityPage extends GetView<CommunityController> {
                           SizedBox(width: 12.w), // gap-3 = 12px
                           // Send button - Match React: w-12 h-12 rounded-full, gradient when enabled
                           Obx(() {
-                            final canSend = controller.newComment.value.trim().isNotEmpty && post != null;
+                            final canSend = controller.newComment.value.trim().isNotEmpty && postId != 0;
+                            final isCreating = controller.isCreatingComment.value;
                             return _AnimatedTapWidget(
-                              onTap: canSend ? () => controller.addComment(post!.id) : () {},
+                              onTap: (canSend && !isCreating) ? () => controller.addComment(postId) : () {},
                               child: Container(
                                 width: 48.w, // w-12 = 48px
                                 height: 48.h, // h-12 = 48px
                                 decoration: BoxDecoration(
-                                  gradient: canSend
+                                  gradient: (canSend || isCreating)
                                       ? const LinearGradient(
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
                                           colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
                                         )
                                       : null,
-                                  color: canSend ? null : const Color(0xFF0A2342).withOpacity(0.1), // bg-[#0A2342]/10
+                                  color: (canSend || isCreating) ? null : const Color(0xFF0A2342).withOpacity(0.1), // bg-[#0A2342]/10
                                   shape: BoxShape.circle,
                                 ),
-                                child: Icon(
-                                  Icons.send,
-                                  color: canSend
-                                      ? Colors.white
-                                      : const Color(0xFF0A2342).withOpacity(0.4), // text-[#0A2342]/40
-                                  size: 20.sp, // w-5 h-5 = 20px
-                                ),
+                                child: isCreating
+                                    ? SizedBox(
+                                        width: 20.sp,
+                                        height: 20.sp,
+                                        child: const CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.send,
+                                        color: canSend
+                                            ? Colors.white
+                                            : const Color(0xFF0A2342).withOpacity(0.4), // text-[#0A2342]/40
+                                        size: 20.sp, // w-5 h-5 = 20px
+                                      ),
                               ),
                             );
                           }),
@@ -1396,23 +1374,23 @@ class CommunityPage extends GetView<CommunityController> {
   Widget _buildEmptyComments() {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(40.r),
+        padding: EdgeInsets.symmetric(horizontal: 40.w, vertical: 20.h), // Reduced vertical padding
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               Icons.mode_comment_outlined, // Match React: MessageCircle
-              size: 64.sp, // w-16 h-16 = 64px
+              size: 56.sp, // Slightly reduced from 64px
               color: const Color(0xFF0A2342).withOpacity(0.2), // text-[#0A2342]/20
             ),
-            SizedBox(height: 16.h),
+            SizedBox(height: 12.h), // Reduced from 16.h
             Text(
               'No comments yet',
               style: ResponsiveTextStyles.textBase.copyWith(
                 color: const Color(0xFF0A2342).withOpacity(0.4),
               ),
             ),
-            SizedBox(height: 8.h),
+            SizedBox(height: 6.h), // Reduced from 8.h
             Text(
               'Be the first to comment!',
               style: ResponsiveTextStyles.textSm.copyWith(
@@ -1431,57 +1409,174 @@ class CommunityPage extends GetView<CommunityController> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Comment
-          Container(
-            padding: EdgeInsets.all(16.r),
-            decoration: BoxDecoration(
-              color: AppColors.inputBackground,
-              borderRadius: BorderRadius.circular(20.r),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          // Comment - with long press for edit/delete
+          GestureDetector(
+            onLongPress: () {
+              // Only show actions if the comment belongs to the current user
+              if (controller.isCurrentUserComment(comment)) {
+                controller.showCommentActions(postId, comment);
+              }
+            },
+            child: Obx(() {
+              final isEditing = controller.editingCommentId.value == comment.id;
+              
+              return Container(
+                padding: EdgeInsets.all(16.r),
+                decoration: BoxDecoration(
+                  color: AppColors.inputBackground,
+                  borderRadius: BorderRadius.circular(20.r),
+                  border: isEditing
+                      ? Border.all(color: const Color(0xFF00B8A9), width: 2)
+                      : null,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      radius: 16.r,
-                      backgroundImage: CachedNetworkImageProvider(comment.user.avatar),
-                      backgroundColor: AppColors.muted,
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 16.r,
+                          backgroundImage: CachedNetworkImageProvider(comment.user.avatar),
+                          backgroundColor: AppColors.muted,
+                        ),
+                        SizedBox(width: 8.w),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                comment.user.name,
+                                style: ResponsiveTextStyles.textSm.copyWith(
+                                  color: const Color(0xFF0A2342),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                comment.timestamp,
+                                style: ResponsiveTextStyles.textXs.copyWith(
+                                  color: const Color(0xFF0A2342).withOpacity(0.5),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Show indicator if user owns the comment
+                        if (controller.isCurrentUserComment(comment))
+                          Icon(
+                            Icons.more_horiz,
+                            size: 16.sp,
+                            color: const Color(0xFF0A2342).withOpacity(0.4),
+                          ),
+                      ],
                     ),
-                    SizedBox(width: 8.w),
-                    Expanded(
-                      child: Column(
+                    SizedBox(height: 8.h),
+                    // Show TextField if editing, otherwise show text
+                    if (isEditing)
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            comment.user.name,
+                          TextField(
+                            controller: controller.editCommentTextController,
+                            onChanged: (value) => controller.editCommentText.value = value,
+                            maxLines: 3,
+                            autofocus: true,
+                            enabled: !controller.isUpdatingComment.value,
+                            decoration: InputDecoration(
+                              hintText: 'Edit your comment...',
+                              hintStyle: ResponsiveTextStyles.textSm.copyWith(
+                                color: const Color(0xFF0A2342).withOpacity(0.4),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12.r),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: EdgeInsets.all(12.r),
+                            ),
                             style: ResponsiveTextStyles.textSm.copyWith(
-                              color: const Color(0xFF0A2342),
-                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF0A2342).withOpacity(0.8),
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                          Text(
-                            comment.timestamp,
-                            style: ResponsiveTextStyles.textXs.copyWith(
-                              color: const Color(0xFF0A2342).withOpacity(0.5),
-                            ),
+                          SizedBox(height: 8.h),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: controller.isUpdatingComment.value
+                                    ? null
+                                    : () => controller.closeEditComment(),
+                                style: TextButton.styleFrom(
+                                  minimumSize: Size.zero,
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 12.w,
+                                    vertical: 8.h,
+                                  ),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  'Cancel',
+                                  style: ResponsiveTextStyles.textSm.copyWith(
+                                    color: const Color(0xFF0A2342).withOpacity(0.6),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 8.w),
+                              Obx(() {
+                                final isUpdating = controller.isUpdatingComment.value;
+                                final canSave = controller.editCommentText.value.trim().isNotEmpty;
+                                return ElevatedButton(
+                                  onPressed: (canSave && !isUpdating)
+                                      ? () => controller.updateComment()
+                                      : null,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF00B8A9),
+                                    disabledBackgroundColor: const Color(0xFF00B8A9).withOpacity(0.5),
+                                    minimumSize: Size.zero,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 16.w,
+                                      vertical: 8.h,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12.r),
+                                    ),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: isUpdating
+                                      ? SizedBox(
+                                          width: 16.sp,
+                                          height: 16.sp,
+                                          child: const CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : Text(
+                                          'Save',
+                                          style: ResponsiveTextStyles.textSm.copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                );
+                              }),
+                            ],
                           ),
                         ],
+                      )
+                    else
+                      Text(
+                        comment.text,
+                        style: ResponsiveTextStyles.textSm.copyWith(
+                          color: const Color(0xFF0A2342).withOpacity(0.8),
+                        ),
                       ),
-                    ),
                   ],
                 ),
-                SizedBox(height: 8.h),
-                Text(
-                  comment.text,
-                  style: ResponsiveTextStyles.textSm.copyWith(
-                    color: const Color(0xFF0A2342).withOpacity(0.8),
-                  ),
-                ),
-              ],
-            ),
+              );
+            }),
           ),
 
           // Reply button
@@ -1559,8 +1654,10 @@ class CommunityPage extends GetView<CommunityController> {
                     ),
                     SizedBox(height: 8.h),
                     TextField(
+                      controller: controller.replyTextController,
                       onChanged: (value) => controller.newReply.value = value,
                       maxLines: 3,
+                      enabled: !controller.isCreatingComment.value,
                       decoration: InputDecoration(
                         hintText: 'Write a reply...',
                         hintStyle: ResponsiveTextStyles.textSm.copyWith(
@@ -1598,32 +1695,44 @@ class CommunityPage extends GetView<CommunityController> {
                           ),
                         ),
                         SizedBox(width: 8.w),
-                        ElevatedButton(
-                          onPressed: () {
-                            if (controller.newReply.value.trim().isNotEmpty) {
-                              controller.addReply(postId, comment.id);
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00B8A9),
-                            minimumSize: Size.zero,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 16.w,
-                              vertical: 8.h,
+                        Obx(() {
+                          final isCreating = controller.isCreatingComment.value;
+                          final canSend = controller.newReply.value.trim().isNotEmpty;
+                          return ElevatedButton(
+                            onPressed: (canSend && !isCreating)
+                                ? () => controller.addReply(postId, comment.id)
+                                : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00B8A9),
+                              disabledBackgroundColor: const Color(0xFF00B8A9).withOpacity(0.5),
+                              minimumSize: Size.zero,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 16.w,
+                                vertical: 8.h,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12.r),
+                              ),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12.r),
-                            ),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: Text(
-                            'Send',
-                            style: ResponsiveTextStyles.textSm.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
+                            child: isCreating
+                                ? SizedBox(
+                                    width: 16.sp,
+                                    height: 16.sp,
+                                    child: const CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    'Send',
+                                    style: ResponsiveTextStyles.textSm.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                          );
+                        }),
                       ],
                     ),
                   ],

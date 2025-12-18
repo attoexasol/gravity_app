@@ -62,6 +62,30 @@ class CommunityController extends GetxController {
   final RxBool isDeletingPost = false.obs;
   final RxString deletePostError = ''.obs;
 
+  // Create comment state
+  final RxBool isCreatingComment = false.obs;
+  final RxString createCommentError = ''.obs;
+
+  // Comments list from API
+  final RxList<Comment> postComments = <Comment>[].obs;
+  final RxBool isLoadingComments = false.obs;
+  final RxString commentsError = ''.obs;
+
+  // Single comment state (for fetching replies)
+  final RxBool isLoadingSingleComment = false.obs;
+
+  // Update comment state
+  final RxBool isUpdatingComment = false.obs;
+  final RxString updateCommentError = ''.obs;
+  final RxInt editingCommentId = 0.obs;
+  final RxString editCommentText = ''.obs;
+  final RxInt editCommentPostId = 0.obs;
+  final TextEditingController editCommentTextController = TextEditingController();
+
+  // Delete comment state
+  final RxBool isDeletingComment = false.obs;
+  final RxString deleteCommentError = ''.obs;
+
   // UI state
   final RxInt selectedPostId = 0.obs;
   final RxString newComment = ''.obs;
@@ -76,6 +100,10 @@ class CommunityController extends GetxController {
 
   // Image picker instance
   final ImagePicker _imagePicker = ImagePicker();
+
+  // Text editing controllers for comments
+  final TextEditingController commentTextController = TextEditingController();
+  final TextEditingController replyTextController = TextEditingController();
 
   // Reactions tracking
   final RxMap<int, Set<String>> activeReactions = <int, Set<String>>{}.obs;
@@ -105,6 +133,124 @@ class CommunityController extends GetxController {
   
   /// Get current user name
   String get currentUserName => userName.value.isNotEmpty ? userName.value : 'You';
+
+  /// Get current user ID
+  int get currentUserId => PreferencesService.getUserId() ?? 0;
+
+  /// Check if the current user owns a comment
+  bool isCurrentUserComment(Comment comment) {
+    return currentUserId > 0 && comment.commentBy == currentUserId;
+  }
+
+  /// Show comment actions bottom sheet (Edit/Delete)
+  void showCommentActions(int postId, Comment comment) {
+    if (!isCurrentUserComment(comment)) return;
+
+    Get.bottomSheet(
+      Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A2342).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Comment Actions',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0A2342),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // Edit button
+                GestureDetector(
+                  onTap: () {
+                    Get.back();
+                    openEditComment(postId, comment);
+                  },
+                  child: Container(
+                    width: 100,
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00B8A9).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Column(
+                      children: [
+                        Icon(
+                          Icons.edit_outlined,
+                          size: 32,
+                          color: Color(0xFF00B8A9),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Edit',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF0A2342),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Delete button
+                GestureDetector(
+                  onTap: () {
+                    Get.back();
+                    confirmDeleteComment(postId, comment.id);
+                  },
+                  child: Container(
+                    width: 100,
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE53935).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Column(
+                      children: [
+                        Icon(
+                          Icons.delete_outlined,
+                          size: 32,
+                          color: Color(0xFFE53935),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Delete',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF0A2342),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
 
   /// Pick image from gallery
   Future<void> pickImageFromGallery() async {
@@ -301,9 +447,17 @@ class CommunityController extends GetxController {
   void onInit() {
     super.onInit();
     _loadUserProfile();
-    _loadInitialPosts();
+    // _loadInitialPosts();
     _fetchCommunities();
     _fetchAllPosts();
+  }
+
+  @override
+  void onClose() {
+    commentTextController.dispose();
+    replyTextController.dispose();
+    editCommentTextController.dispose();
+    super.onClose();
   }
 
   /// Fetch communities from API
@@ -735,96 +889,100 @@ class CommunityController extends GetxController {
     }
   }
 
-  void _loadInitialPosts() {
-    posts.value = [
-      Post(
-        id: 1,
-        user: User(
-          name: 'Sarah M.',
-          avatar: 'https://images.unsplash.com/photo-1749700332038-640b00de758c?w=400',
-        ),
-        image: 'https://images.unsplash.com/photo-1734989175071-fedc119fb52e?w=800',
-        text: 'Healthy lunch today! 🥗 Feeling energized and ready to crush my afternoon goals.',
-        timestamp: '2 hours ago',
-        reactions: Reactions(heart: 24, thumbsUp: 18, fire: 12),
-        comments: [
-          Comment(
-            id: 1,
-            user: User(name: 'Mike R.', avatar: 'https://i.pravatar.cc/150?img=12'),
-            text: 'Looks delicious! What\'s in it?',
-            timestamp: '1 hour ago',
-            replies: [
-              Reply(
-                id: 1,
-                user: User(name: 'Sarah M.', avatar: 'https://images.unsplash.com/photo-1749700332038-640b00de758c?w=400'),
-                text: 'Quinoa, grilled chicken, avocado, and lots of veggies! 🥑',
-                timestamp: '45 min ago',
-              ),
-            ],
-          ),
-          Comment(
-            id: 2,
-            user: User(name: 'Emma L.', avatar: 'https://i.pravatar.cc/150?img=5'),
-            text: 'This is inspiring! I need to meal prep better.',
-            timestamp: '30 min ago',
-            replies: [],
-          ),
-        ],
-      ),
-      Post(
-        id: 2,
-        user: User(
-          name: 'Mike R.',
-          avatar: 'https://i.pravatar.cc/150?img=12',
-        ),
-        image: 'https://images.unsplash.com/photo-1522845015757-50bce044e5da?w=800',
-        text: 'Morning workout done! ✅ 5k run + strength training. Who else got their steps in today?',
-        timestamp: '5 hours ago',
-        reactions: Reactions(heart: 42, thumbsUp: 31, fire: 28),
-        comments: [
-          Comment(
-            id: 1,
-            user: User(name: 'Alex K.', avatar: 'https://i.pravatar.cc/150?img=8'),
-            text: 'Beast mode! 💪 I did a 3k this morning.',
-            timestamp: '4 hours ago',
-            replies: [],
-          ),
-        ],
-      ),
-      Post(
-        id: 3,
-        user: User(
-          name: 'Emma L.',
-          avatar: 'https://i.pravatar.cc/150?img=5',
-        ),
-        image: '',
-        text: '8 hours of sleep for the first time this week! 😴 Small wins matter. Thank you Gravity for the reminder notifications!',
-        timestamp: '8 hours ago',
-        reactions: Reactions(heart: 35, thumbsUp: 22, fire: 15),
-        comments: [
-          Comment(
-            id: 1,
-            user: User(name: 'Sarah M.', avatar: 'https://images.unsplash.com/photo-1749700332038-640b00de758c?w=400'),
-            text: 'Sleep is so important! Great job! 🌙',
-            timestamp: '7 hours ago',
-            replies: [],
-          ),
-        ],
-      ),
-      Post(
-        id: 4,
-        user: User(
-          name: 'Alex K.',
-          avatar: 'https://i.pravatar.cc/150?img=8',
-        ),
-        image: 'https://images.unsplash.com/photo-1734989175071-fedc119fb52e?w=800',
-        text: 'Meal prep Sunday! 🍱 Planning my week ahead. Consistency is key!',
-        timestamp: '1 day ago',
-        reactions: Reactions(heart: 28, thumbsUp: 19, fire: 14),
-        comments: [],
-      ),
-    ];
-  }
+  // void _loadInitialPosts() {
+  //   posts.value = [
+  //     Post(
+  //       id: 1,
+  //       user: User(
+  //         name: 'Sarah M.',
+  //         avatar: 'https://images.unsplash.com/photo-1749700332038-640b00de758c?w=400',
+  //       ),
+  //       image: 'https://images.unsplash.com/photo-1734989175071-fedc119fb52e?w=800',
+  //       text: 'Healthy lunch today! 🥗 Feeling energized and ready to crush my afternoon goals.',
+  //       timestamp: '2 hours ago',
+  //       reactions: Reactions(heart: 24, thumbsUp: 18, fire: 12),
+  //       comments: [
+  //         Comment(
+  //           id: 1,
+  //           commentBy: 0,
+  //           user: User(name: 'Mike R.', avatar: 'https://i.pravatar.cc/150?img=12'),
+  //           text: 'Looks delicious! What\'s in it?',
+  //           timestamp: '1 hour ago',
+  //           replies: [
+  //             Reply(
+  //               id: 1,
+  //               user: User(name: 'Sarah M.', avatar: 'https://images.unsplash.com/photo-1749700332038-640b00de758c?w=400'),
+  //               text: 'Quinoa, grilled chicken, avocado, and lots of veggies! 🥑',
+  //               timestamp: '45 min ago',
+  //             ),
+  //           ],
+  //         ),
+  //         Comment(
+  //           id: 2,
+  //           commentBy: 0,
+  //           user: User(name: 'Emma L.', avatar: 'https://i.pravatar.cc/150?img=5'),
+  //           text: 'This is inspiring! I need to meal prep better.',
+  //           timestamp: '30 min ago',
+  //           replies: [],
+  //         ),
+  //       ],
+  //     ),
+  //     Post(
+  //       id: 2,
+  //       user: User(
+  //         name: 'Mike R.',
+  //         avatar: 'https://i.pravatar.cc/150?img=12',
+  //       ),
+  //       image: 'https://images.unsplash.com/photo-1522845015757-50bce044e5da?w=800',
+  //       text: 'Morning workout done! ✅ 5k run + strength training. Who else got their steps in today?',
+  //       timestamp: '5 hours ago',
+  //       reactions: Reactions(heart: 42, thumbsUp: 31, fire: 28),
+  //       comments: [
+  //         Comment(
+  //           id: 1,
+  //           commentBy: 0,
+  //           user: User(name: 'Alex K.', avatar: 'https://i.pravatar.cc/150?img=8'),
+  //           text: 'Beast mode! 💪 I did a 3k this morning.',
+  //           timestamp: '4 hours ago',
+  //           replies: [],
+  //         ),
+  //       ],
+  //     ),
+  //     Post(
+  //       id: 3,
+  //       user: User(
+  //         name: 'Emma L.',
+  //         avatar: 'https://i.pravatar.cc/150?img=5',
+  //       ),
+  //       image: '',
+  //       text: '8 hours of sleep for the first time this week! 😴 Small wins matter. Thank you Gravity for the reminder notifications!',
+  //       timestamp: '8 hours ago',
+  //       reactions: Reactions(heart: 35, thumbsUp: 22, fire: 15),
+  //       comments: [
+  //         Comment(
+  //           id: 1,
+  //           commentBy: 0,
+  //           user: User(name: 'Sarah M.', avatar: 'https://images.unsplash.com/photo-1749700332038-640b00de758c?w=400'),
+  //           text: 'Sleep is so important! Great job! 🌙',
+  //           timestamp: '7 hours ago',
+  //           replies: [],
+  //         ),
+  //       ],
+  //     ),
+  //     Post(
+  //       id: 4,
+  //       user: User(
+  //         name: 'Alex K.',
+  //         avatar: 'https://i.pravatar.cc/150?img=8',
+  //       ),
+  //       image: 'https://images.unsplash.com/photo-1734989175071-fedc119fb52e?w=800',
+  //       text: 'Meal prep Sunday! 🍱 Planning my week ahead. Consistency is key!',
+  //       timestamp: '1 day ago',
+  //       reactions: Reactions(heart: 28, thumbsUp: 19, fire: 14),
+  //       comments: [],
+  //     ),
+  //   ];
+  // }
 
   // Match React: User can only have ONE reaction per post
   // If clicking the same reaction, remove it (toggle off)
@@ -895,60 +1053,774 @@ class CommunityController extends GetxController {
     }
   }
 
-  void addComment(int postId) {
+  /// Add a new comment to a post using API
+  /// API: POST https://gravity.attoexasolutions.com/api/create_post_comment
+  Future<void> addComment(int postId) async {
     if (newComment.value.trim().isEmpty) return;
+    if (isCreatingComment.value) return; // Prevent duplicate calls
 
-    final postIndex = posts.indexWhere((p) => p.id == postId);
-    if (postIndex != -1) {
-      final newCommentObj = Comment(
-        id: posts[postIndex].comments.length + 1,
-        user: User(
-          name: 'You',
-          avatar: 'https://i.pravatar.cc/150?img=1',
-        ),
-        text: newComment.value,
-        timestamp: 'Just now',
-        replies: [],
+    isCreatingComment.value = true;
+    createCommentError.value = '';
+
+    try {
+      // Get auth token
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        createCommentError.value = 'Authentication required. Please login again.';
+        debugPrint('❌ AddComment Error: No auth token found');
+        isCreatingComment.value = false;
+        
+        Get.snackbar(
+          'Error',
+          createCommentError.value,
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFE53935),
+          colorText: const Color(0xFFFFFFFF),
+          duration: const Duration(seconds: 2),
+        );
+        return;
+      }
+
+      debugPrint('🔄 Creating comment via API...');
+      debugPrint('   - Post ID: $postId');
+      debugPrint('   - Comment: ${newComment.value}');
+
+      final response = await _communityRepository.createPostComment(
+        apiToken: apiToken,
+        postId: postId,
+        comments: newComment.value,
+        commentId: null, // Top-level comment, no parent
       );
 
-      final updatedComments = [...posts[postIndex].comments, newCommentObj];
-      posts[postIndex] = posts[postIndex].copyWith(comments: updatedComments);
-      posts.refresh();
-    }
+      if (response.isSuccess) {
+        debugPrint('✅ Comment created successfully: ${response.message}');
+        
+        // Get user info for the new comment
+        final commentUserName = currentUserName;
+        final commentUserAvatar = currentUserProfileImage.isNotEmpty 
+            ? currentUserProfileImage 
+            : 'https://i.pravatar.cc/150?img=1';
 
-    newComment.value = '';
+        // Get comment ID from response or generate a temporary one
+        int commentId = 0;
+        if (response.data != null && response.data!['id'] != null) {
+          commentId = response.data!['id'] is int 
+              ? response.data!['id'] 
+              : int.tryParse(response.data!['id'].toString()) ?? DateTime.now().millisecondsSinceEpoch;
+        } else {
+          commentId = DateTime.now().millisecondsSinceEpoch;
+        }
+
+        // Get comment_by from response or use current user ID
+        int commentByUserId = response.data?['comment_by'] is int 
+            ? response.data!['comment_by'] 
+            : (PreferencesService.getUserId() ?? 0);
+
+        // Create the new comment object
+        final newCommentObj = Comment(
+          id: commentId,
+          commentBy: commentByUserId,
+          user: User(
+            name: commentUserName,
+            avatar: commentUserAvatar,
+          ),
+          text: response.data?['comments']?.toString() ?? newComment.value,
+          timestamp: 'Just now',
+          replies: [],
+        );
+
+        // Update postComments list
+        postComments.add(newCommentObj);
+        postComments.refresh();
+
+        // Update local post with new comment
+        final postIndex = posts.indexWhere((p) => p.id == postId);
+        if (postIndex != -1) {
+          final updatedComments = [...posts[postIndex].comments, newCommentObj];
+          posts[postIndex] = posts[postIndex].copyWith(comments: updatedComments);
+          posts.refresh();
+        }
+
+        // Also update singlePost if it's the same post
+        if (singlePost.value != null && singlePost.value!.id == postId) {
+          final updatedComments = [...singlePost.value!.comments, newCommentObj];
+          singlePost.value = singlePost.value!.copyWith(comments: updatedComments);
+        }
+
+        // Clear input
+        newComment.value = '';
+        commentTextController.clear();
+
+        debugPrint('✅ Comment added to post $postId');
+      } else {
+        createCommentError.value = response.message.isNotEmpty 
+            ? response.message 
+            : 'Failed to create comment';
+        debugPrint('❌ Failed to create comment: ${response.message}');
+        
+        Get.snackbar(
+          'Error',
+          createCommentError.value,
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFE53935),
+          colorText: const Color(0xFFFFFFFF),
+          duration: const Duration(seconds: 2),
+        );
+      }
+    } catch (e) {
+      createCommentError.value = 'An error occurred while creating comment';
+      debugPrint('❌ Error creating comment: $e');
+      
+      Get.snackbar(
+        'Error',
+        createCommentError.value,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFE53935),
+        colorText: const Color(0xFFFFFFFF),
+        duration: const Duration(seconds: 2),
+      );
+    } finally {
+      isCreatingComment.value = false;
+    }
   }
 
-  void addReply(int postId, int commentId) {
+  /// Add a reply to a comment using API
+  /// API: POST https://gravity.attoexasolutions.com/api/create_post_comment
+  /// Uses comment_id parameter to specify the parent comment
+  Future<void> addReply(int postId, int commentId) async {
     if (newReply.value.trim().isEmpty) return;
+    if (isCreatingComment.value) return; // Prevent duplicate calls
 
-    final postIndex = posts.indexWhere((p) => p.id == postId);
-    if (postIndex != -1) {
-      final commentIndex = posts[postIndex].comments.indexWhere((c) => c.id == commentId);
-      if (commentIndex != -1) {
+    isCreatingComment.value = true;
+    createCommentError.value = '';
+
+    try {
+      // Get auth token
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        createCommentError.value = 'Authentication required. Please login again.';
+        debugPrint('❌ AddReply Error: No auth token found');
+        isCreatingComment.value = false;
+        
+        Get.snackbar(
+          'Error',
+          createCommentError.value,
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFE53935),
+          colorText: const Color(0xFFFFFFFF),
+          duration: const Duration(seconds: 2),
+        );
+        return;
+      }
+
+      debugPrint('🔄 Creating reply via API...');
+      debugPrint('   - Post ID: $postId');
+      debugPrint('   - Parent Comment ID: $commentId');
+      debugPrint('   - Reply: ${newReply.value}');
+
+      final response = await _communityRepository.createPostComment(
+        apiToken: apiToken,
+        postId: postId,
+        comments: newReply.value,
+        commentId: commentId, // Parent comment ID for the reply
+      );
+
+      if (response.isSuccess) {
+        debugPrint('✅ Reply created successfully: ${response.message}');
+        
+        // Get user info for the new reply
+        final replyUserName = currentUserName;
+        final replyUserAvatar = currentUserProfileImage.isNotEmpty 
+            ? currentUserProfileImage 
+            : 'https://i.pravatar.cc/150?img=1';
+
+        // Get reply ID from response or generate a temporary one
+        int replyId = 0;
+        if (response.data != null && response.data!['id'] != null) {
+          replyId = response.data!['id'] is int 
+              ? response.data!['id'] 
+              : int.tryParse(response.data!['id'].toString()) ?? DateTime.now().millisecondsSinceEpoch;
+        } else {
+          replyId = DateTime.now().millisecondsSinceEpoch;
+        }
+
+        // Create the new reply object
         final newReplyObj = Reply(
-          id: posts[postIndex].comments[commentIndex].replies.length + 1,
+          id: replyId,
           user: User(
-            name: 'You',
-            avatar: 'https://i.pravatar.cc/150?img=1',
+            name: replyUserName,
+            avatar: replyUserAvatar,
           ),
-          text: newReply.value,
+          text: response.data?['comments']?.toString() ?? newReply.value,
           timestamp: 'Just now',
         );
 
-        final updatedReplies = [...posts[postIndex].comments[commentIndex].replies, newReplyObj];
-        final updatedComment = posts[postIndex].comments[commentIndex].copyWith(replies: updatedReplies);
-        final updatedComments = [...posts[postIndex].comments];
-        updatedComments[commentIndex] = updatedComment;
+        // Update postComments list
+        final commentIndex = postComments.indexWhere((c) => c.id == commentId);
+        if (commentIndex != -1) {
+          final updatedReplies = [...postComments[commentIndex].replies, newReplyObj];
+          postComments[commentIndex] = postComments[commentIndex].copyWith(replies: updatedReplies);
+          postComments.refresh();
+        }
 
-        posts[postIndex] = posts[postIndex].copyWith(comments: updatedComments);
-        posts.refresh();
+        // Update local post with new reply
+        final postIndex = posts.indexWhere((p) => p.id == postId);
+        if (postIndex != -1) {
+          final postCommentIndex = posts[postIndex].comments.indexWhere((c) => c.id == commentId);
+          if (postCommentIndex != -1) {
+            final updatedReplies = [...posts[postIndex].comments[postCommentIndex].replies, newReplyObj];
+            final updatedComment = posts[postIndex].comments[postCommentIndex].copyWith(replies: updatedReplies);
+            final updatedComments = [...posts[postIndex].comments];
+            updatedComments[postCommentIndex] = updatedComment;
+
+            posts[postIndex] = posts[postIndex].copyWith(comments: updatedComments);
+            posts.refresh();
+          }
+        }
+
+        // Also update singlePost if it's the same post
+        if (singlePost.value != null && singlePost.value!.id == postId) {
+          final singlePostCommentIndex = singlePost.value!.comments.indexWhere((c) => c.id == commentId);
+          if (singlePostCommentIndex != -1) {
+            final updatedReplies = [...singlePost.value!.comments[singlePostCommentIndex].replies, newReplyObj];
+            final updatedComment = singlePost.value!.comments[singlePostCommentIndex].copyWith(replies: updatedReplies);
+            final updatedComments = [...singlePost.value!.comments];
+            updatedComments[singlePostCommentIndex] = updatedComment;
+
+            singlePost.value = singlePost.value!.copyWith(comments: updatedComments);
+          }
+        }
+
+        // Clear input and reset reply state
+        newReply.value = '';
+        replyTextController.clear();
+        replyingToPostId.value = 0;
+        replyingToCommentId.value = 0;
+
+        debugPrint('✅ Reply added to comment $commentId on post $postId');
+      } else {
+        createCommentError.value = response.message.isNotEmpty 
+            ? response.message 
+            : 'Failed to create reply';
+        debugPrint('❌ Failed to create reply: ${response.message}');
+        
+        Get.snackbar(
+          'Error',
+          createCommentError.value,
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFE53935),
+          colorText: const Color(0xFFFFFFFF),
+          duration: const Duration(seconds: 2),
+        );
       }
+    } catch (e) {
+      createCommentError.value = 'An error occurred while creating reply';
+      debugPrint('❌ Error creating reply: $e');
+      
+      Get.snackbar(
+        'Error',
+        createCommentError.value,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFE53935),
+        colorText: const Color(0xFFFFFFFF),
+        duration: const Duration(seconds: 2),
+      );
+    } finally {
+      isCreatingComment.value = false;
+    }
+  }
+
+  /// Fetch all comments for a post from API
+  /// API: POST https://gravity.attoexasolutions.com/api/all_post_comments
+  Future<void> fetchAllPostComments(int postId) async {
+    isLoadingComments.value = true;
+    commentsError.value = '';
+
+    try {
+      debugPrint('🔄 Fetching all comments for post (ID: $postId)...');
+      final response = await _communityRepository.getAllPostComments(
+        postId: postId,
+      );
+
+      if (response.isSuccess && response.data != null) {
+        final List<Comment> fetchedComments = _mapApiResponseToComments(response.data!);
+        postComments.value = fetchedComments;
+        
+        // Also update the post's comments in the posts list
+        final postIndex = posts.indexWhere((p) => p.id == postId);
+        if (postIndex != -1) {
+          posts[postIndex] = posts[postIndex].copyWith(comments: fetchedComments);
+          posts.refresh();
+        }
+        
+        // Update singlePost if it matches
+        if (singlePost.value != null && singlePost.value!.id == postId) {
+          singlePost.value = singlePost.value!.copyWith(comments: fetchedComments);
+        }
+        
+        debugPrint('✅ Successfully loaded ${fetchedComments.length} comments');
+      } else {
+        commentsError.value = response.message.isNotEmpty
+            ? response.message
+            : 'Failed to load comments';
+        debugPrint('❌ Failed to load comments: ${response.message}');
+      }
+    } catch (e) {
+      commentsError.value = 'An error occurred while loading comments';
+      debugPrint('❌ Error fetching comments: $e');
+    } finally {
+      isLoadingComments.value = false;
+    }
+  }
+
+  /// Map API response to Comment models
+  List<Comment> _mapApiResponseToComments(List<dynamic> data) {
+    try {
+      // Filter out replies (comments with non-null comment_id) from top level
+      final topLevelComments = data.where((item) {
+        final commentId = item['comment_id'];
+        return commentId == null || commentId == 0;
+      }).toList();
+
+      return topLevelComments.map((item) {
+        final Map<String, dynamic> commentData = item is Map<String, dynamic>
+            ? item
+            : {};
+
+        // Extract user information
+        final userData = commentData['user'] ?? {};
+        final userName = userData is Map
+            ? (userData['name']?.toString() ?? 'Unknown User')
+            : 'Unknown User';
+        final userProfileImage = userData is Map
+            ? (userData['profile_image']?.toString() ?? '')
+            : '';
+
+        // Construct user avatar URL
+        String userAvatarUrl = '';
+        if (userProfileImage.isNotEmpty) {
+          if (userProfileImage.startsWith('http')) {
+            userAvatarUrl = userProfileImage;
+          } else {
+            userAvatarUrl = 'https://gravity.attoexasolutions.com/storage/$userProfileImage';
+          }
+        } else {
+          final commentId = commentData['id'] is int ? commentData['id'] : 0;
+          userAvatarUrl = 'https://i.pravatar.cc/150?img=${commentId % 10}';
+        }
+
+        // Extract comment information
+        final commentId = commentData['id'] is int 
+            ? commentData['id'] 
+            : int.tryParse(commentData['id'].toString()) ?? 0;
+        final commentBy = commentData['comment_by'] is int 
+            ? commentData['comment_by'] 
+            : int.tryParse(commentData['comment_by'].toString()) ?? 0;
+        final commentText = commentData['comments']?.toString() ?? '';
+        
+        // Format timestamp
+        final createdAt = commentData['created_at']?.toString() ?? '';
+        final timestamp = _formatTimestamp(createdAt);
+
+        // Map replies
+        final repliesData = commentData['replies'] ?? [];
+        final List<Reply> replies = (repliesData is List)
+            ? repliesData.map((replyItem) => _mapApiResponseToReply(replyItem)).toList()
+            : [];
+
+        return Comment(
+          id: commentId,
+          commentBy: commentBy,
+          user: User(
+            name: userName,
+            avatar: userAvatarUrl,
+          ),
+          text: commentText,
+          timestamp: timestamp,
+          replies: replies,
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('❌ Error mapping API response to comments: $e');
+      return [];
+    }
+  }
+
+  /// Map API response to Reply model
+  Reply _mapApiResponseToReply(dynamic replyData) {
+    final Map<String, dynamic> data = replyData is Map<String, dynamic>
+        ? replyData
+        : {};
+
+    // Extract user information
+    final userData = data['user'] ?? {};
+    final userName = userData is Map
+        ? (userData['name']?.toString() ?? 'Unknown User')
+        : 'Unknown User';
+    final userProfileImage = userData is Map
+        ? (userData['profile_image']?.toString() ?? '')
+        : '';
+
+    // Construct user avatar URL
+    String userAvatarUrl = '';
+    if (userProfileImage.isNotEmpty) {
+      if (userProfileImage.startsWith('http')) {
+        userAvatarUrl = userProfileImage;
+      } else {
+        userAvatarUrl = 'https://gravity.attoexasolutions.com/storage/$userProfileImage';
+      }
+    } else {
+      final replyId = data['id'] is int ? data['id'] : 0;
+      userAvatarUrl = 'https://i.pravatar.cc/150?img=${replyId % 10}';
     }
 
-    newReply.value = '';
-    replyingToPostId.value = 0;
-    replyingToCommentId.value = 0;
+    final replyId = data['id'] is int 
+        ? data['id'] 
+        : int.tryParse(data['id'].toString()) ?? 0;
+    final replyText = data['comments']?.toString() ?? '';
+    final createdAt = data['created_at']?.toString() ?? '';
+    final timestamp = _formatTimestamp(createdAt);
+
+    return Reply(
+      id: replyId,
+      user: User(
+        name: userName,
+        avatar: userAvatarUrl,
+      ),
+      text: replyText,
+      timestamp: timestamp,
+    );
+  }
+
+  /// Fetch single comment with replies from API
+  /// API: POST https://gravity.attoexasolutions.com/api/single_post_comment
+  Future<void> fetchSingleComment(int postId, int commentId) async {
+    isLoadingSingleComment.value = true;
+
+    try {
+      debugPrint('🔄 Fetching single comment (ID: $commentId) with replies...');
+      final response = await _communityRepository.getSinglePostComment(
+        commentId: commentId,
+      );
+
+      if (response.isSuccess && response.data != null) {
+        final commentData = response.data!;
+        
+        // Map replies from the response
+        final repliesData = commentData['replies'] ?? [];
+        final List<Reply> replies = (repliesData is List)
+            ? repliesData.map((replyItem) => _mapApiResponseToReply(replyItem)).toList()
+            : [];
+
+        // Update the comment's replies in postComments
+        final commentIndex = postComments.indexWhere((c) => c.id == commentId);
+        if (commentIndex != -1) {
+          postComments[commentIndex] = postComments[commentIndex].copyWith(replies: replies);
+          postComments.refresh();
+        }
+
+        // Also update in posts list
+        final postIndex = posts.indexWhere((p) => p.id == postId);
+        if (postIndex != -1) {
+          final postCommentIndex = posts[postIndex].comments.indexWhere((c) => c.id == commentId);
+          if (postCommentIndex != -1) {
+            final updatedComments = [...posts[postIndex].comments];
+            updatedComments[postCommentIndex] = updatedComments[postCommentIndex].copyWith(replies: replies);
+            posts[postIndex] = posts[postIndex].copyWith(comments: updatedComments);
+            posts.refresh();
+          }
+        }
+
+        // Update singlePost if it matches
+        if (singlePost.value != null && singlePost.value!.id == postId) {
+          final postCommentIndex = singlePost.value!.comments.indexWhere((c) => c.id == commentId);
+          if (postCommentIndex != -1) {
+            final updatedComments = [...singlePost.value!.comments];
+            updatedComments[postCommentIndex] = updatedComments[postCommentIndex].copyWith(replies: replies);
+            singlePost.value = singlePost.value!.copyWith(comments: updatedComments);
+          }
+        }
+
+        debugPrint('✅ Successfully loaded comment with ${replies.length} replies');
+      } else {
+        debugPrint('❌ Failed to load single comment: ${response.message}');
+      }
+    } catch (e) {
+      debugPrint('❌ Error fetching single comment: $e');
+    } finally {
+      isLoadingSingleComment.value = false;
+    }
+  }
+
+  /// Update a comment using API
+  /// API: POST https://gravity.attoexasolutions.com/api/update_post_comment
+  Future<bool> updateComment() async {
+    if (editCommentText.value.trim().isEmpty) return false;
+    if (editingCommentId.value == 0) return false;
+
+    isUpdatingComment.value = true;
+    updateCommentError.value = '';
+
+    try {
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        updateCommentError.value = 'Authentication required. Please login again.';
+        debugPrint('❌ UpdateComment Error: No auth token found');
+        isUpdatingComment.value = false;
+        return false;
+      }
+
+      debugPrint('🔄 Updating comment via API...');
+      debugPrint('   - Comment ID: ${editingCommentId.value}');
+      debugPrint('   - Post ID: ${editCommentPostId.value}');
+      debugPrint('   - New text: ${editCommentText.value}');
+
+      final response = await _communityRepository.updatePostComment(
+        apiToken: apiToken,
+        postId: editCommentPostId.value,
+        commentId: editingCommentId.value,
+        comments: editCommentText.value,
+      );
+
+      if (response.isSuccess) {
+        debugPrint('✅ Comment updated successfully: ${response.message}');
+
+        // Update in postComments
+        final commentIndex = postComments.indexWhere((c) => c.id == editingCommentId.value);
+        if (commentIndex != -1) {
+          postComments[commentIndex] = postComments[commentIndex].copyWith(text: editCommentText.value);
+          postComments.refresh();
+        }
+
+        // Update in posts list
+        final postIndex = posts.indexWhere((p) => p.id == editCommentPostId.value);
+        if (postIndex != -1) {
+          final postCommentIndex = posts[postIndex].comments.indexWhere((c) => c.id == editingCommentId.value);
+          if (postCommentIndex != -1) {
+            final updatedComments = [...posts[postIndex].comments];
+            updatedComments[postCommentIndex] = updatedComments[postCommentIndex].copyWith(text: editCommentText.value);
+            posts[postIndex] = posts[postIndex].copyWith(comments: updatedComments);
+            posts.refresh();
+          }
+        }
+
+        // Update singlePost if it matches
+        if (singlePost.value != null && singlePost.value!.id == editCommentPostId.value) {
+          final postCommentIndex = singlePost.value!.comments.indexWhere((c) => c.id == editingCommentId.value);
+          if (postCommentIndex != -1) {
+            final updatedComments = [...singlePost.value!.comments];
+            updatedComments[postCommentIndex] = updatedComments[postCommentIndex].copyWith(text: editCommentText.value);
+            singlePost.value = singlePost.value!.copyWith(comments: updatedComments);
+          }
+        }
+
+        // Close edit mode
+        closeEditComment();
+
+        Get.snackbar(
+          'Success',
+          response.message.isNotEmpty ? response.message : 'Comment updated successfully',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFF00B8A9),
+          colorText: const Color(0xFFFFFFFF),
+          duration: const Duration(seconds: 2),
+        );
+
+        return true;
+      } else {
+        updateCommentError.value = response.message.isNotEmpty 
+            ? response.message 
+            : 'Failed to update comment';
+        debugPrint('❌ Failed to update comment: ${response.message}');
+        
+        Get.snackbar(
+          'Error',
+          updateCommentError.value,
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFE53935),
+          colorText: const Color(0xFFFFFFFF),
+          duration: const Duration(seconds: 2),
+        );
+        
+        return false;
+      }
+    } catch (e) {
+      updateCommentError.value = 'An error occurred while updating comment';
+      debugPrint('❌ Error updating comment: $e');
+      
+      Get.snackbar(
+        'Error',
+        updateCommentError.value,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFE53935),
+        colorText: const Color(0xFFFFFFFF),
+        duration: const Duration(seconds: 2),
+      );
+      
+      return false;
+    } finally {
+      isUpdatingComment.value = false;
+    }
+  }
+
+  /// Open edit comment mode
+  void openEditComment(int postId, Comment comment) {
+    editingCommentId.value = comment.id;
+    editCommentPostId.value = postId;
+    editCommentText.value = comment.text;
+    editCommentTextController.text = comment.text;
+  }
+
+  /// Close edit comment mode
+  void closeEditComment() {
+    editingCommentId.value = 0;
+    editCommentPostId.value = 0;
+    editCommentText.value = '';
+    editCommentTextController.clear();
+    updateCommentError.value = '';
+  }
+
+  /// Delete a comment using API
+  /// API: POST https://gravity.attoexasolutions.com/api/delete_post_comment
+  Future<bool> deleteComment(int postId, int commentId) async {
+    isDeletingComment.value = true;
+    deleteCommentError.value = '';
+
+    try {
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        deleteCommentError.value = 'Authentication required. Please login again.';
+        debugPrint('❌ DeleteComment Error: No auth token found');
+        isDeletingComment.value = false;
+        return false;
+      }
+
+      debugPrint('🔄 Deleting comment via API...');
+      debugPrint('   - Comment ID: $commentId');
+
+      final response = await _communityRepository.deletePostComment(
+        apiToken: apiToken,
+        commentId: commentId,
+      );
+
+      if (response.isSuccess) {
+        debugPrint('✅ Comment deleted successfully: ${response.message}');
+
+        // Remove from postComments
+        postComments.removeWhere((c) => c.id == commentId);
+        postComments.refresh();
+
+        // Remove from posts list
+        final postIndex = posts.indexWhere((p) => p.id == postId);
+        if (postIndex != -1) {
+          final updatedComments = posts[postIndex].comments.where((c) => c.id != commentId).toList();
+          posts[postIndex] = posts[postIndex].copyWith(comments: updatedComments);
+          posts.refresh();
+        }
+
+        // Update singlePost if it matches
+        if (singlePost.value != null && singlePost.value!.id == postId) {
+          final updatedComments = singlePost.value!.comments.where((c) => c.id != commentId).toList();
+          singlePost.value = singlePost.value!.copyWith(comments: updatedComments);
+        }
+
+        Get.snackbar(
+          'Success',
+          response.message.isNotEmpty ? response.message : 'Comment deleted successfully',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFF00B8A9),
+          colorText: const Color(0xFFFFFFFF),
+          duration: const Duration(seconds: 2),
+        );
+
+        return true;
+      } else {
+        deleteCommentError.value = response.message.isNotEmpty 
+            ? response.message 
+            : 'Failed to delete comment';
+        debugPrint('❌ Failed to delete comment: ${response.message}');
+        
+        Get.snackbar(
+          'Error',
+          deleteCommentError.value,
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFE53935),
+          colorText: const Color(0xFFFFFFFF),
+          duration: const Duration(seconds: 2),
+        );
+        
+        return false;
+      }
+    } catch (e) {
+      deleteCommentError.value = 'An error occurred while deleting comment';
+      debugPrint('❌ Error deleting comment: $e');
+      
+      Get.snackbar(
+        'Error',
+        deleteCommentError.value,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFE53935),
+        colorText: const Color(0xFFFFFFFF),
+        duration: const Duration(seconds: 2),
+      );
+      
+      return false;
+    } finally {
+      isDeletingComment.value = false;
+    }
+  }
+
+  /// Show delete comment confirmation dialog
+  void confirmDeleteComment(int postId, int commentId) {
+    Get.dialog(
+      AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text(
+          'Delete Comment',
+          style: TextStyle(
+            color: Color(0xFF0A2342),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: const Text(
+          'Are you sure you want to delete this comment? This action cannot be undone.',
+          style: TextStyle(
+            color: Color(0xFF0A2342),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: Color(0xFF0A2342),
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+             Get.back();
+              deleteComment(postId, commentId);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE53935),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Delete',
+              style: TextStyle(
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Create a new post using API
@@ -1568,8 +2440,8 @@ class CommunityController extends GetxController {
 
   void openComments(int postId) {
     selectedPostId.value = postId;
-    // Fetch the latest post data from API
-    fetchSinglePost(postId);
+    // Fetch comments from API
+    fetchAllPostComments(postId);
   }
 
   void closeComments() {
@@ -1577,21 +2449,31 @@ class CommunityController extends GetxController {
     // Clear single post data
     singlePost.value = null;
     singlePostError.value = '';
+    // Clear comments data
+    postComments.clear();
+    commentsError.value = '';
     newComment.value = '';
+    commentTextController.clear();
     replyingToPostId.value = 0;
     replyingToCommentId.value = 0;
     newReply.value = '';
+    replyTextController.clear();
+    // Clear edit comment state
+    closeEditComment();
   }
 
   void startReply(int postId, int commentId) {
     replyingToPostId.value = postId;
     replyingToCommentId.value = commentId;
+    // Fetch single comment with replies from API
+    fetchSingleComment(postId, commentId);
   }
 
   void cancelReply() {
     replyingToPostId.value = 0;
     replyingToCommentId.value = 0;
     newReply.value = '';
+    replyTextController.clear();
   }
 
   Post? get selectedPost {
@@ -1653,6 +2535,7 @@ class Reply {
 
 class Comment {
   final int id;
+  final int commentBy; // User ID who created the comment
   final User user;
   final String text;
   final String timestamp;
@@ -1660,6 +2543,7 @@ class Comment {
 
   Comment({
     required this.id,
+    required this.commentBy,
     required this.user,
     required this.text,
     required this.timestamp,
@@ -1668,6 +2552,7 @@ class Comment {
 
   Comment copyWith({
     int? id,
+    int? commentBy,
     User? user,
     String? text,
     String? timestamp,
@@ -1675,6 +2560,7 @@ class Comment {
   }) {
     return Comment(
       id: id ?? this.id,
+      commentBy: commentBy ?? this.commentBy,
       user: user ?? this.user,
       text: text ?? this.text,
       timestamp: timestamp ?? this.timestamp,

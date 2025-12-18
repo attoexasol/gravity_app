@@ -92,35 +92,18 @@ class ProfileImagePickerModal extends StatelessWidget {
                   Column(
                     children: [
                       // Instructions
-                      Container(
-                        padding: EdgeInsets.all(12.w),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF00B8A9).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12.r),
-                          border: Border.all(
-                            color: const Color(0xFF00B8A9).withOpacity(0.3),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              color: const Color(0xFF00B8A9),
-                              size: 20.sp,
-                            ),
-                            SizedBox(width: 8.w),
-                            Expanded(
-                              child: Text(
-                                'Tap "Crop & Save" to adjust your image. It will be resized to 400x400 pixels.',
-                                style: ResponsiveTextStyles.textSm.copyWith(
-                                  color: const Color(0xFF0A2342).withOpacity(0.8),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      // Container(
+                      //   padding: EdgeInsets.all(12.w),
+                      //   decoration: BoxDecoration(
+                      //     color: const Color(0xFF00B8A9).withOpacity(0.1),
+                      //     borderRadius: BorderRadius.circular(12.r),
+                      //     border: Border.all(
+                      //       color: const Color(0xFF00B8A9).withOpacity(0.3),
+                      //       width: 1,
+                      //     ),
+                      //   ),
+
+                      // ),
                       SizedBox(height: 16.h),
                       // Image Preview
                       Container(
@@ -141,9 +124,7 @@ class ProfileImagePickerModal extends StatelessWidget {
                             children: [
                               _buildImageWidget(tempImage, tempImageBytes),
                               // Overlay crop guide (square)
-                              CustomPaint(
-                                painter: CropGuidePainter(),
-                              ),
+                             
                             ],
                           ),
                         ),
@@ -184,7 +165,7 @@ class ProfileImagePickerModal extends StatelessWidget {
                             child: ElevatedButton(
                               onPressed: isProcessing
                                   ? null
-                                  : controller.cropAndSaveProfileImage,
+                                  : controller.saveProfileImage,
                               style: ElevatedButton.styleFrom(
                                 padding: EdgeInsets.symmetric(vertical: 16.h),
                                 backgroundColor: const Color(0xFF00B8A9),
@@ -207,14 +188,8 @@ class ProfileImagePickerModal extends StatelessWidget {
                                   : Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        Icon(
-                                          Icons.crop,
-                                          size: 18.sp,
-                                          color: Colors.white,
-                                        ),
-                                        SizedBox(width: 8.w),
                                         Text(
-                                          'Crop & Save',
+                                          'Save',
                                           style: ResponsiveTextStyles.textBase.copyWith(
                                             color: Colors.white,
                                             fontWeight: FontWeight.w600,
