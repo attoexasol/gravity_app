@@ -50,8 +50,10 @@ class CreatePostModal extends StatelessWidget {
   }
 
   void _closeModal() {
-    controller.newPostText.value = '';
-    controller.clearSelectedImage();
+    // Reset state and close dialog
+    // Note: resetCreatePostState() is called in closeCreatePostDialog(),
+    // but we also call it here for manual close (X button) to ensure clean state
+    controller.resetCreatePostState();
     controller.safeBack();
   }
 }
@@ -177,6 +179,7 @@ class _PostBody extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             TextField(
+              controller: controller.createPostTextController,
               onChanged: (v) => controller.newPostText.value = v,
               maxLines: 5,
               autofocus: true,

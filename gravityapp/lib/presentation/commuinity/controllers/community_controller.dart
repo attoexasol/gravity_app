@@ -101,6 +101,9 @@ class CommunityController extends GetxController {
   final RxString selectedImage = ''.obs;
   final RxString selectedImagePath = ''.obs; // Local file path for picked image
   final RxBool isPickingImage = false.obs;
+  
+  // TextEditingController for create post text field to ensure proper state sync
+  final TextEditingController createPostTextController = TextEditingController();
 
   // Image picker instance
   final ImagePicker _imagePicker = ImagePicker();
@@ -161,7 +164,24 @@ class CommunityController extends GetxController {
   }
 
   /// Close create post dialog reliably
+  /// Reset all create post state to ensure fresh state every time dialog opens
+  /// Root cause: State persistence was causing inconsistent behavior on subsequent post creations
+  void resetCreatePostState() {
+    newPostText.value = '';
+    selectedImage.value = '';
+    selectedImagePath.value = '';
+    isPickingImage.value = false;
+    createPostError.value = '';
+    isCreatingPost.value = false;
+    // Clear TextEditingController to ensure TextField is empty
+    createPostTextController.clear();
+    debugPrint('🔄 Create post state reset');
+  }
+
   void closeCreatePostDialog() {
+    // Reset state when closing dialog to ensure clean state for next open
+    resetCreatePostState();
+    
     // Set the flag first
     showCreatePost.value = false;
     
@@ -429,7 +449,11 @@ class CommunityController extends GetxController {
   }
 
   /// Show image source picker dialog
+  /// Root cause: Ensure isPickingImage is reset if bottom sheet is dismissed without selection
   void showImageSourcePicker() {
+    // Reset picking state before showing picker to ensure clean state
+    isPickingImage.value = false;
+    
     Get.bottomSheet(
       Container(
         padding: const EdgeInsets.all(24),
@@ -465,16 +489,24 @@ class CommunityController extends GetxController {
                   icon: Icons.photo_library_outlined,
                   label: 'Gallery',
                   onTap: () {
+                    // Close bottom sheet first, then pick image
                     Get.back();
-                    pickImageFromGallery();
+                    // Small delay to ensure bottom sheet is fully closed
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      pickImageFromGallery();
+                    });
                   },
                 ),
                 _buildImageSourceOption(
                   icon: Icons.camera_alt_outlined,
                   label: 'Camera',
                   onTap: () {
+                    // Close bottom sheet first, then pick image
                     Get.back();
-                    pickImageFromCamera();
+                    // Small delay to ensure bottom sheet is fully closed
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      pickImageFromCamera();
+                    });
                   },
                 ),
               ],
@@ -483,7 +515,15 @@ class CommunityController extends GetxController {
           ],
         ),
       ),
-    );
+      // Ensure bottom sheet can be dismissed and state is reset
+      isDismissible: true,
+      enableDrag: true,
+    ).then((_) {
+      // Reset picking state if bottom sheet is dismissed without selection
+      if (!isPickingImage.value) {
+        isPickingImage.value = false;
+      }
+    });
   }
 
   /// Build image source option widget
@@ -544,6 +584,7 @@ class CommunityController extends GetxController {
     commentTextController.dispose();
     replyTextController.dispose();
     editCommentTextController.dispose();
+    createPostTextController.dispose();
     super.onClose();
   }
 

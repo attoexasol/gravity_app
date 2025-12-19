@@ -336,7 +336,25 @@ class CommunityPage extends GetView<CommunityController> {
   }
 
   // Show Create Post Modal - Full screen mode
+  // Root cause: State must be reset BEFORE opening dialog to ensure fresh state every time
   void _showCreatePostModal(BuildContext context) {
+    // Ensure any previous dialog is closed first
+    if (Get.isDialogOpen == true) {
+      Get.back();
+      // Wait a frame to ensure dialog is fully closed
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _openCreatePostDialog();
+      });
+    } else {
+      _openCreatePostDialog();
+    }
+  }
+
+  // Open the create post dialog with fresh state
+  void _openCreatePostDialog() {
+    // Reset all state BEFORE opening dialog to ensure consistent behavior
+    controller.resetCreatePostState();
+    
     Get.dialog(
       CreatePostModal(
         controller: controller,
