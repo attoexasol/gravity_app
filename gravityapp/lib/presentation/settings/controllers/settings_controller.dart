@@ -311,9 +311,9 @@ class SettingsController extends GetxController {
         errorMessage = 'Camera is not available on this device.';
       }
 
-      Get.snackbar(
-        'Error',
-        errorMessage,
+      _safeSnackbar(
+        title: 'Error',
+        message: errorMessage,
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red.withOpacity(0.8),
         colorText: Colors.white,
@@ -361,9 +361,9 @@ class SettingsController extends GetxController {
         errorMessage = 'Gallery is not available on this device.';
       }
 
-      Get.snackbar(
-        'Error',
-        errorMessage,
+      _safeSnackbar(
+        title: 'Error',
+        message: errorMessage,
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red.withOpacity(0.8),
         colorText: Colors.white,
@@ -381,9 +381,9 @@ class SettingsController extends GetxController {
 /// Resize (if needed) and save profile image WITHOUT cropping
 Future<void> saveProfileImage() async {
   if (tempImagePath.value == null && tempImageBytes.value == null) {
-    Get.snackbar(
-      'Error',
-      'No image selected. Please select an image first.',
+    _safeSnackbar(
+      title: 'Error',
+      message: 'No image selected. Please select an image first.',
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: Colors.red.withOpacity(0.8),
       colorText: Colors.white,
@@ -419,9 +419,9 @@ Future<void> saveProfileImage() async {
       await _uploadProfileImageBytes(resizedBytes);
       closeProfileImageModal();
 
-      Get.snackbar(
-        'Success',
-        'Profile image updated successfully',
+      _safeSnackbar(
+        title: 'Success',
+        message: 'Profile image updated successfully',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFF00B8A9).withOpacity(0.8),
         colorText: Colors.white,
@@ -494,9 +494,9 @@ Future<void> saveProfileImage() async {
 
       closeProfileImageModal();
 
-      Get.snackbar(
-        'Success',
-        uploadResponse.message.isNotEmpty
+      _safeSnackbar(
+        title: 'Success',
+        message: uploadResponse.message.isNotEmpty
             ? uploadResponse.message
             : 'Profile image updated successfully',
         snackPosition: SnackPosition.BOTTOM,
@@ -516,9 +516,9 @@ Future<void> saveProfileImage() async {
 
       closeProfileImageModal();
 
-      Get.snackbar(
-        'Warning',
-        uploadResponse.message.isNotEmpty
+      _safeSnackbar(
+        title: 'Warning',
+        message: uploadResponse.message.isNotEmpty
             ? uploadResponse.message
             : 'Image saved locally but upload failed',
         snackPosition: SnackPosition.BOTTOM,
@@ -530,9 +530,9 @@ Future<void> saveProfileImage() async {
     debugPrint('❌ Profile image error: $e');
     debugPrint('$stackTrace');
 
-    Get.snackbar(
-      'Error',
-      'Failed to save profile image. Please try again.',
+    _safeSnackbar(
+      title: 'Error',
+      message: 'Failed to save profile image. Please try again.',
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: Colors.red.withOpacity(0.8),
       colorText: Colors.white,
@@ -1116,9 +1116,9 @@ Future<void> saveProfileImage() async {
         // Close modal
         closeProfileImageModal();
 
-        Get.snackbar(
-          'Success',
-          uploadResponse.message.isNotEmpty
+        _safeSnackbar(
+          title: 'Success',
+          message: uploadResponse.message.isNotEmpty
               ? uploadResponse.message
               : 'Profile image updated successfully',
           snackPosition: SnackPosition.BOTTOM,
@@ -1355,9 +1355,9 @@ Future<void> saveProfileImage() async {
       // Get token from storage
       final token = PreferencesService.getAuthToken();
       if (token == null || token.isEmpty) {
-        Get.snackbar(
-          'Error',
-          'Authentication token not found. Please login again.',
+        _safeSnackbar(
+          title: 'Error',
+          message: 'Authentication token not found. Please login again.',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Get.theme.colorScheme.error,
           colorText: Get.theme.colorScheme.onError,
@@ -1385,17 +1385,17 @@ Future<void> saveProfileImage() async {
 
       if (response.isSuccess) {
         showGoalsEditor.value = false;
-        Get.snackbar(
-          'Success',
-          'Goals saved successfully',
+        _safeSnackbar(
+          title: 'Success',
+          message: 'Goals saved successfully',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: const Color(0xFF00B8A9),
           colorText: Colors.white,
         );
       } else {
-        Get.snackbar(
-          'Warning',
-          'Goals saved locally but failed to sync with server',
+        _safeSnackbar(
+          title: 'Warning',
+          message: 'Goals saved locally but failed to sync with server',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.orange,
           colorText: Colors.white,
@@ -1403,9 +1403,9 @@ Future<void> saveProfileImage() async {
       }
     } catch (e) {
       debugPrint('❌ Error saving goals: $e');
-      Get.snackbar(
-        'Error',
-        'Failed to save goals. Please try again.',
+      _safeSnackbar(
+        title: 'Error',
+        message: 'Failed to save goals. Please try again.',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Get.theme.colorScheme.error,
         colorText: Get.theme.colorScheme.onError,
@@ -1509,6 +1509,42 @@ Future<void> saveProfileImage() async {
     return notificationLogs.toList();
   }
 
+  /// Safely show snackbar with overlay check
+  void _safeSnackbar({
+    required String title,
+    required String message,
+    SnackPosition snackPosition = SnackPosition.BOTTOM,
+    Color? backgroundColor,
+    Color? colorText,
+    Duration duration = const Duration(seconds: 3),
+  }) {
+    if (isClosed) return;
+    
+    try {
+      final context = Get.context;
+      if (context != null) {
+        // Check if overlay is available
+        try {
+          Overlay.of(context);
+          Get.snackbar(
+            title,
+            message,
+            snackPosition: snackPosition,
+            backgroundColor: backgroundColor ?? Get.theme.colorScheme.error,
+            colorText: colorText ?? Get.theme.colorScheme.onError,
+            duration: duration,
+          );
+        } catch (overlayError) {
+          debugPrint('⚠️ Overlay not available for snackbar: $overlayError');
+        }
+      } else {
+        debugPrint('⚠️ Cannot show snackbar - context unavailable');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error showing snackbar: $e');
+    }
+  }
+
   /// Navigate back
   /// Uses Navigator directly to avoid Get.back()'s internal snackbar closing logic
   void navigateBack() {
@@ -1571,9 +1607,9 @@ Future<void> saveProfileImage() async {
           Get.offAllNamed('/login');
         } catch (clearError) {
           debugPrint('❌ Error clearing storage: $clearError');
-          Get.snackbar(
-            'Error',
-            'Failed to logout. Please try again.',
+          _safeSnackbar(
+            title: 'Error',
+            message: 'Failed to logout. Please try again.',
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: Get.theme.colorScheme.error,
             colorText: Get.theme.colorScheme.onError,

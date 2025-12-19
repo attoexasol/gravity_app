@@ -4,6 +4,41 @@ import '../../../data/repositories/consent_repository.dart';
 import '../../../core/services/preferences_service.dart';
 
 class ConsentController extends GetxController {
+  /// Safely show snackbar with overlay check
+  void _safeSnackbar({
+    required String title,
+    required String message,
+    SnackPosition snackPosition = SnackPosition.BOTTOM,
+    Color? backgroundColor,
+    Color? colorText,
+    Duration duration = const Duration(seconds: 3),
+  }) {
+    if (isClosed) return;
+    
+    try {
+      final context = Get.context;
+      if (context != null) {
+        // Check if overlay is available
+        try {
+          Overlay.of(context);
+          Get.snackbar(
+            title,
+            message,
+            snackPosition: snackPosition,
+            backgroundColor: backgroundColor ?? Get.theme.colorScheme.error,
+            colorText: colorText ?? Get.theme.colorScheme.onError,
+            duration: duration,
+          );
+        } catch (overlayError) {
+          debugPrint('⚠️ Overlay not available for snackbar: $overlayError');
+        }
+      } else {
+        debugPrint('⚠️ Cannot show snackbar - context unavailable');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error showing snackbar: $e');
+    }
+  }
   // Repository
   final ConsentRepository _consentRepository = ConsentRepository();
 
@@ -42,9 +77,9 @@ class ConsentController extends GetxController {
     // TODO: Implement actual data deletion API call
     // Example: await DataService.deleteUserData();
 
-    Get.snackbar(
-      'Data Deletion Requested',
-      'You will receive a confirmation email within 24 hours.',
+    _safeSnackbar(
+      title: 'Data Deletion Requested',
+      message: 'You will receive a confirmation email within 24 hours.',
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: Get.theme.colorScheme.error,
       colorText: Get.theme.colorScheme.onError,
@@ -65,9 +100,9 @@ class ConsentController extends GetxController {
       // Get token from storage
       final token = PreferencesService.getAuthToken();
       if (token == null || token.isEmpty) {
-        Get.snackbar(
-          'Error',
-          'Authentication token not found. Please login again.',
+        _safeSnackbar(
+          title: 'Error',
+          message: 'Authentication token not found. Please login again.',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Get.theme.colorScheme.error,
           colorText: Get.theme.colorScheme.onError,
@@ -89,24 +124,15 @@ class ConsentController extends GetxController {
         // Save consent preferences locally
         saveConsents();
 
-        // Show success message
-        Get.snackbar(
-          'Success',
-          response.message,
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: const Color(0xFF00B8A9),
-          colorText: Colors.white,
-          duration: const Duration(seconds: 2),
-        );
-
-        // Navigate to goal settings screen
-        await Future.delayed(const Duration(milliseconds: 500));
+        // Navigate to goal settings screen (skip snackbar since we're navigating)
+        // The next screen will show success if needed
+        await Future.delayed(const Duration(milliseconds: 300));
         Get.offAllNamed('/goal-settings');
       } else {
-        // Show error message
-        Get.snackbar(
-          'Error',
-          response.message,
+        // Show error message (we're staying on this screen)
+        _safeSnackbar(
+          title: 'Error',
+          message: response.message,
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Get.theme.colorScheme.error,
           colorText: Get.theme.colorScheme.onError,
@@ -115,9 +141,9 @@ class ConsentController extends GetxController {
       }
     } catch (e) {
       debugPrint('❌ Continue to App Error: $e');
-      Get.snackbar(
-        'Error',
-        'An unexpected error occurred. Please try again.',
+      _safeSnackbar(
+        title: 'Error',
+        message: 'An unexpected error occurred. Please try again.',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Get.theme.colorScheme.error,
         colorText: Get.theme.colorScheme.onError,

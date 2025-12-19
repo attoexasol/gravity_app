@@ -50,6 +50,41 @@ class LoginController extends GetxController {
     super.onClose();
   }
 
+  /// Safely show snackbar with overlay check
+  void _safeSnackbar({
+    required String title,
+    required String message,
+    Color? backgroundColor,
+    Color? colorText,
+    Duration? duration,
+  }) {
+    if (isClosed) return;
+
+    try {
+      final context = Get.context;
+      if (context != null) {
+        // Check if overlay is available
+        try {
+          Overlay.of(context);
+          Get.snackbar(
+            title,
+            message,
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: backgroundColor ?? Get.theme.colorScheme.error,
+            colorText: colorText ?? Get.theme.colorScheme.onError,
+            duration: duration ?? const Duration(seconds: 3),
+          );
+        } catch (overlayError) {
+          debugPrint('⚠️ Overlay not available for snackbar: $overlayError');
+        }
+      } else {
+        debugPrint('⚠️ Cannot show snackbar - context unavailable');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error showing snackbar: $e');
+    }
+  }
+
   /// Toggle between customer and coach role
   void selectRole(UserType role) {
     selectedRole.value = role;
@@ -93,10 +128,9 @@ class LoginController extends GetxController {
     final password = passwordController.text;
 
     if (validateEmail(email) != null || validatePassword(password) != null) {
-      Get.snackbar(
-        'Validation Error',
-        'Please check your email and password',
-        snackPosition: SnackPosition.BOTTOM,
+      _safeSnackbar(
+        title: 'Validation Error',
+        message: 'Please check your email and password',
         backgroundColor: Get.theme.colorScheme.error,
         colorText: Get.theme.colorScheme.onError,
       );
@@ -190,10 +224,9 @@ class LoginController extends GetxController {
         }
 
         // Show success message
-        Get.snackbar(
-          'Success',
-          response.message,
-          snackPosition: SnackPosition.BOTTOM,
+        _safeSnackbar(
+          title: 'Success',
+          message: response.message,
           backgroundColor: const Color(0xFF00B8A9),
           colorText: Colors.white,
           duration: const Duration(seconds: 2),
@@ -203,23 +236,21 @@ class LoginController extends GetxController {
         await _checkUserDataAndNavigate(token);
       } else {
         // Show error message
-        Get.snackbar(
-          'Login Failed',
-          response.message,
-          snackPosition: SnackPosition.BOTTOM,
+        _safeSnackbar(
+          title: 'Login Failed',
+          message: response.message,
           backgroundColor: Get.theme.colorScheme.error,
           colorText: Get.theme.colorScheme.onError,
           duration: const Duration(seconds: 4),
         );
       }
     } catch (e) {
-      Get.snackbar(
-        'Login Failed',
-        'An unexpected error occurred. Please check your connection and try again.',
-        snackPosition: SnackPosition.BOTTOM,
+      _safeSnackbar(
+        title: 'Login Failed',
+        message:
+            'An unexpected error occurred. Please check your connection and try again.',
         backgroundColor: Get.theme.colorScheme.error,
         colorText: Get.theme.colorScheme.onError,
-        duration: const Duration(seconds: 4),
       );
       debugPrint('❌ Login Error: $e');
     } finally {
@@ -311,27 +342,14 @@ class LoginController extends GetxController {
     } catch (e) {
       debugPrint('❌ Google Login Error: $e');
       if (!isClosed) {
-        try {
-          // Safely show snackbar with error handling
-          final context = Get.context;
-          if (context != null) {
-            Get.snackbar(
-              'Google Login Failed',
-              e.toString().contains('Server error')
-                  ? 'Server error. Please try again later.'
-                  : 'Please try again',
-              snackPosition: SnackPosition.BOTTOM,
-              backgroundColor: Get.theme.colorScheme.error,
-              colorText: Get.theme.colorScheme.onError,
-            );
-          } else {
-            debugPrint('⚠️ Cannot show snackbar - context unavailable');
-          }
-        } catch (snackbarError) {
-          // If snackbar fails (e.g., no overlay), just log the error
-          debugPrint('⚠️ Error showing snackbar: $snackbarError');
-          debugPrint('   Original error: $e');
-        }
+        _safeSnackbar(
+          title: 'Google Login Failed',
+          message: e.toString().contains('Server error')
+              ? 'Server error. Please try again later.'
+              : 'Please try again',
+          backgroundColor: Get.theme.colorScheme.error,
+          colorText: Get.theme.colorScheme.onError,
+        );
       }
     } finally {
       if (!isClosed) isLoading.value = false;
@@ -340,6 +358,8 @@ class LoginController extends GetxController {
 
   /// Handle Apple login
   Future<void> handleAppleLogin() async {
+    if (isClosed) return;
+
     try {
       isLoading.value = true;
 
@@ -349,23 +369,26 @@ class LoginController extends GetxController {
 
       await Future.delayed(const Duration(seconds: 1));
 
-      Get.snackbar(
-        'Success',
-        'Logged in with Apple',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
+      if (!isClosed) {
+        _safeSnackbar(
+          title: 'Success',
+          message: 'Logged in with Apple',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      }
     } catch (e) {
-      Get.snackbar(
-        'Apple Login Failed',
-        e.toString(),
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-      );
+      debugPrint('❌ Apple Login Error: $e');
+      if (!isClosed) {
+        _safeSnackbar(
+          title: 'Apple Login Failed',
+          message: e.toString(),
+          backgroundColor: Get.theme.colorScheme.error,
+          colorText: Get.theme.colorScheme.onError,
+        );
+      }
     } finally {
-      isLoading.value = false;
+      if (!isClosed) isLoading.value = false;
     }
   }
 
