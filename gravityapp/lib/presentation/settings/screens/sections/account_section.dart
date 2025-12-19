@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../app/theme/app_text_styles.dart';
+import '../../../../core/services/preferences_service.dart';
 import '../../controllers/settings_controller.dart';
 
 class AccountSection extends StatelessWidget {
@@ -24,6 +25,15 @@ class AccountSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<SettingsController>();
+    
+    // Load profile image from preferences as fallback (for persistence)
+    // Prefer API URL over local path, matching Community page behavior
+    final profileImageUrl = PreferencesService.getStorage().read('user_profile_image_url') as String?;
+    final profileImagePathFromStorage = profileImageUrl ?? 
+        (PreferencesService.getStorage().read('user_profile_image') as String?);
+    
+    // Use controller value if available, otherwise fallback to storage
+    final effectiveProfileImagePath = profileImagePath ?? profileImagePathFromStorage;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -55,26 +65,26 @@ class AccountSection extends StatelessWidget {
                         width: 64.w,
                         height: 64.h,
                         decoration: BoxDecoration(
-                          gradient: profileImagePath == null
+                          gradient: effectiveProfileImagePath == null
                               ? const LinearGradient(
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                   colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
                                 )
                               : null,
-                          color: profileImagePath != null ? Colors.transparent : null,
+                          color: effectiveProfileImagePath != null ? Colors.transparent : null,
                           borderRadius: BorderRadius.circular(32.r),
-                          border: profileImagePath != null
+                          border: effectiveProfileImagePath != null
                               ? Border.all(
                                   color: const Color(0xFF00B8A9),
                                   width: 2,
                                 )
                               : null,
                         ),
-                        child: profileImagePath != null
+                        child: effectiveProfileImagePath != null
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(32.r),
-                                child: _buildProfileImageWidget(profileImagePath!, initials),
+                                child: _buildProfileImageWidget(effectiveProfileImagePath, initials),
                               )
                             : Center(
                                 child: Text(

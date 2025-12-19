@@ -3,8 +3,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../data/repositories/community_repository.dart';
 import '../../../core/services/preferences_service.dart';
+import '../../../app/theme/app_colors.dart';
+import '../../../app/theme/app_text_styles.dart';
 
 class CommunityController extends GetxController {
   // Repository for API calls
@@ -126,6 +130,82 @@ class CommunityController extends GetxController {
     debugPrint('👤 User profile loaded:');
     debugPrint('   - Name: ${userName.value}');
     debugPrint('   - Profile Image: ${userProfileImage.value}');
+  }
+
+  /// Safely navigate back, handling snackbar errors
+  /// Uses Navigator directly to avoid Get.back()'s internal snackbar closing logic
+  void safeBack() {
+    // Don't try to close snackbars - Get.back() internally calls closeCurrentSnackbar()
+    // which causes LateInitializationError. Use Navigator directly instead.
+    
+    try {
+      final context = Get.context;
+      if (context != null && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+        debugPrint('✅ Navigated back via Navigator.pop()');
+        return;
+      }
+    } catch (e) {
+      debugPrint('⚠️ Navigator.pop() failed: $e');
+    }
+    
+    // Fallback: try Get.back() if Navigator fails (but this may still cause errors)
+    try {
+      if (Get.isDialogOpen == true) {
+        Get.back();
+        debugPrint('✅ Navigated back via Get.back()');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Get.back() also failed: $e - Navigation may have already occurred');
+    }
+  }
+
+  /// Close create post dialog reliably
+  void closeCreatePostDialog() {
+    // Set the flag first
+    showCreatePost.value = false;
+    
+    // Don't try to close snackbars when closing dialogs - they're on different layers
+    // and trying to close snackbars can cause LateInitializationError if the controller
+    // isn't initialized. The dialog closing is the priority.
+    
+    // Try multiple methods to ensure dialog closes
+    bool dialogClosed = false;
+    
+    // Method 1: Try Get.back() if dialog is open
+    try {
+      if (Get.isDialogOpen == true) {
+        Get.back();
+        dialogClosed = true;
+        debugPrint('✅ Dialog closed via Get.back()');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Get.back() failed: $e');
+    }
+    
+    // Method 2: Try Navigator.pop() as fallback (always try, even if Get.isDialogOpen is false)
+    if (!dialogClosed) {
+      try {
+        final context = Get.context;
+        if (context != null && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+          dialogClosed = true;
+          debugPrint('✅ Dialog closed via Navigator.pop()');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Navigator.pop() failed: $e');
+      }
+    }
+    
+    // Method 3: Force close by trying Get.back() again without checking isDialogOpen
+    if (!dialogClosed) {
+      try {
+        Get.back();
+        debugPrint('✅ Dialog closed via Get.back() (force attempt)');
+      } catch (e) {
+        debugPrint('⚠️ Force Get.back() also failed: $e - Dialog may already be closed');
+      }
+    }
   }
 
   /// Get user profile image URL or empty string
@@ -453,6 +533,13 @@ class CommunityController extends GetxController {
   }
 
   @override
+  void onReady() {
+    super.onReady();
+    // Reload posts when page becomes visible to ensure reaction and comment counts are up-to-date
+    _fetchAllPosts();
+  }
+
+  @override
   void onClose() {
     commentTextController.dispose();
     replyTextController.dispose();
@@ -640,6 +727,8 @@ class CommunityController extends GetxController {
       if (response.isSuccess && response.data != null) {
         final List<Post> fetchedPosts = _mapApiResponseToPosts(response.data!);
         if (fetchedPosts.isNotEmpty) {
+          // Fetch comment counts for each post
+          await _fetchCommentCountsForPosts(fetchedPosts);
           posts.value = fetchedPosts;
           debugPrint('✅ Successfully loaded ${fetchedPosts.length} posts from API');
         } else {
@@ -657,6 +746,52 @@ class CommunityController extends GetxController {
     } finally {
       isLoadingPosts.value = false;
     }
+  }
+
+  /// Fetch comment counts for posts and update them
+  /// Fetches comments in parallel for better performance
+  Future<void> _fetchCommentCountsForPosts(List<Post> postsList) async {
+    if (postsList.isEmpty) return;
+    
+    debugPrint('🔄 Fetching comments for ${postsList.length} posts...');
+    
+    // Fetch comments for all posts in parallel
+    final futures = postsList.asMap().entries.map((entry) async {
+      final index = entry.key;
+      final post = entry.value;
+      
+      try {
+        final commentsResponse = await _communityRepository.getAllPostComments(
+          postId: post.id,
+        );
+        
+        if (commentsResponse.isSuccess && commentsResponse.data != null) {
+          final comments = _mapApiResponseToComments(commentsResponse.data!);
+          return MapEntry(index, comments);
+        }
+      } catch (e) {
+        debugPrint('⚠️ Could not fetch comments for post ${post.id}: $e');
+      }
+      
+      return MapEntry(index, <Comment>[]);
+    });
+    
+    // Wait for all comment fetches to complete
+    final results = await Future.wait(futures);
+    
+    // Update posts with their comments
+    for (final entry in results) {
+      final index = entry.key;
+      final comments = entry.value;
+      if (index < postsList.length) {
+        postsList[index] = postsList[index].copyWith(comments: comments);
+        if (comments.isNotEmpty) {
+          debugPrint('✅ Loaded ${comments.length} comments for post ${postsList[index].id}');
+        }
+      }
+    }
+    
+    debugPrint('✅ Finished loading comments for all posts');
   }
 
   /// Fetch single post by ID from API
@@ -987,7 +1122,7 @@ class CommunityController extends GetxController {
   // Match React: User can only have ONE reaction per post
   // If clicking the same reaction, remove it (toggle off)
   // If clicking a different reaction, remove previous and add new one
-  void toggleReaction(int postId, String reaction) {
+  Future<void> toggleReaction(int postId, String reaction) async {
     final postReactions = Set<String>.from(activeReactions[postId] ?? <String>{});
     
     // Check if user already has this exact reaction
@@ -1008,7 +1143,7 @@ class CommunityController extends GetxController {
     activeReactions[postId] = postReactions;
     activeReactions.refresh();
 
-    // Update post reactions count
+    // Update post reactions count locally first (optimistic update)
     final postIndex = posts.indexWhere((p) => p.id == postId);
     if (postIndex != -1) {
       final post = posts[postIndex];
@@ -1048,8 +1183,69 @@ class CommunityController extends GetxController {
         fire: newFire,
       );
 
+      // Update locally first
       posts[postIndex] = post.copyWith(reactions: updatedReactions);
       posts.refresh();
+
+      // Save to backend to persist the reaction
+      await _saveReactionToBackend(postId, newHeart, newThumbsUp, newFire);
+    }
+  }
+
+  /// Save reaction counts to backend by updating the post
+  Future<void> _saveReactionToBackend(int postId, int heartCount, int thumbsUpCount, int fireCount) async {
+    try {
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        debugPrint('⚠️ Cannot save reaction: No auth token');
+        return;
+      }
+
+      final postIndex = posts.indexWhere((p) => p.id == postId);
+      if (postIndex == -1) {
+        debugPrint('⚠️ Cannot save reaction: Post not found');
+        return;
+      }
+
+      final post = posts[postIndex];
+      
+      debugPrint('🔄 Saving reaction to backend for post $postId...');
+      debugPrint('   - Heart: $heartCount, ThumbsUp: $thumbsUpCount, Fire: $fireCount');
+
+      // Update post with new reaction counts
+      final response = await _communityRepository.updatePost(
+        apiToken: apiToken,
+        postId: postId,
+        communityId: selectedCommunityId.value,
+        postText: post.text,
+        postStatus: 'published',
+        likeCount: heartCount,
+        thumbsUpCount: thumbsUpCount,
+        otherCount: fireCount,
+        postImageBase64: null, // Don't update image
+      );
+
+      if (response.isSuccess) {
+        debugPrint('✅ Reaction saved to backend successfully');
+        // Update post with response data to ensure sync
+        if (response.data != null) {
+          final updatedPostData = response.data!;
+          final updatedReactions = Reactions(
+            heart: updatedPostData['like_count'] ?? heartCount,
+            thumbsUp: updatedPostData['thumsup_count'] ?? thumbsUpCount,
+            fire: updatedPostData['other_count'] ?? fireCount,
+          );
+          posts[postIndex] = post.copyWith(reactions: updatedReactions);
+          posts.refresh();
+        }
+      } else {
+        debugPrint('⚠️ Failed to save reaction to backend: ${response.message}');
+        // Revert to previous counts if save failed
+        // Note: We could revert here, but for better UX, we keep the optimistic update
+      }
+    } catch (e) {
+      debugPrint('❌ Error saving reaction to backend: $e');
+      // Keep optimistic update even if save fails
     }
   }
 
@@ -1932,23 +2128,24 @@ class CommunityController extends GetxController {
         newPostText.value = '';
         selectedImage.value = '';
         selectedImagePath.value = '';
-        showCreatePost.value = false;
 
-        // Close dialog first, then show success message
-        if (Get.isDialogOpen == true) {
-          Get.back();
-        }
+        // Close dialog reliably
+        closeCreatePostDialog();
         
         // Show success message with safe context
         Future.delayed(const Duration(milliseconds: 300), () {
-          Get.snackbar(
-            'Success',
-            response.message.isNotEmpty ? response.message : 'Post created successfully',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: const Color(0xFF00B8A9),
-            colorText: const Color(0xFFFFFFFF),
-            duration: const Duration(seconds: 2),
-          );
+          try {
+            Get.snackbar(
+              'Success',
+              response.message.isNotEmpty ? response.message : 'Post created successfully',
+              snackPosition: SnackPosition.BOTTOM,
+              backgroundColor: const Color(0xFF00B8A9),
+              colorText: const Color(0xFFFFFFFF),
+              duration: const Duration(seconds: 2),
+            );
+          } catch (e) {
+            debugPrint('⚠️ Error showing success snackbar: $e');
+          }
         });
 
         return true;

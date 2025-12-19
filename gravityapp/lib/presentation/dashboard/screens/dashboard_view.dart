@@ -227,6 +227,15 @@ class DashboardView extends GetView<DashboardController> {
                   onTap: () => _showHydrationModal(context),
                 ),
               ),
+              // Log Steps
+              Builder(
+                builder: (context) => _QuickActionCard(
+                  icon: Icons.directions_walk_outlined,
+                  title: 'Log Steps',
+                  gradient: const [Color(0xFF00B8A9), Color(0xFF00D4C3)],
+                  onTap: () => _showStepsModal(context),
+                ),
+              ),
             ],
           ),
         ],
@@ -288,6 +297,25 @@ class DashboardView extends GetView<DashboardController> {
       gradient: const [Color(0xFF00B8A9), Color(0xFF00E5D3)],
       description: 'Stay hydrated! Track your daily water consumption.',
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    );
+  }
+
+  /// Show Steps Entry Modal
+  void _showStepsModal(BuildContext context) {
+    ManualEntryModal.show(
+      context: context,
+      title: 'Log Steps',
+      icon: Icons.directions_walk_outlined,
+      iconColor: const Color(0xFF00B8A9),
+      value: controller.stepsInput.value,
+      onChanged: (value) => controller.stepsInput.value = value,
+      onSubmit: () => controller.handleStepsSubmit(),
+      onClose: () => controller.stepsInput.value = '',
+      placeholder: 'Enter steps count',
+      unit: 'steps',
+      gradient: const [Color(0xFF00B8A9), Color(0xFF00D4C3)],
+      description: 'Track your daily steps to stay active and healthy.',
+      keyboardType: TextInputType.number,
     );
   }
 

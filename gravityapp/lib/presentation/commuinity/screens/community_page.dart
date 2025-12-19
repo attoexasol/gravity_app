@@ -7,6 +7,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
 import '../controllers/community_controller.dart';
+import 'sections/create_post_modal.dart';
+
 
 class CommunityPage extends GetView<CommunityController> {
   const CommunityPage({super.key});
@@ -49,10 +51,7 @@ class CommunityPage extends GetView<CommunityController> {
           ),
         ),
 
-        // Comments Modal
-        Obx(() => controller.selectedPostId.value != 0
-            ? _buildCommentsModal()
-            : const SizedBox.shrink()),
+        // Comments Modal - Removed from Stack, now uses Get.bottomSheet via _showCommentsModal
 
         // Edit Post Modal
         Obx(() => controller.showEditPost.value
@@ -313,7 +312,7 @@ class CommunityPage extends GetView<CommunityController> {
   // whileTap={{ scale: 0.9 }}
   Widget _buildCommentButton(int postId, int commentCount) {
     return _AnimatedTapWidget(
-      onTap: () => controller.openComments(postId), // Opens bottom sheet modal
+      onTap: () => _showCommentsModal(postId), // Opens bottom sheet modal
       child: Row(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -336,386 +335,269 @@ class CommunityPage extends GetView<CommunityController> {
     );
   }
 
-  // Show Create Post Modal - Match React: fixed inset-0 z-[60] for backdrop, z-[70] for modal
-  // Uses Get.dialog() to appear ABOVE the app header
+  // Show Create Post Modal - Full screen mode
   void _showCreatePostModal(BuildContext context) {
     Get.dialog(
-      // Full screen dialog that covers everything including header
-      Material(
-        color: Colors.transparent,
-        child: Stack(
-          children: [
-            // Backdrop - Match React: fixed inset-0 bg-black/50 z-[60]
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () {
-                  controller.newPostText.value = '';
-                  controller.clearSelectedImage();
-                  Get.back();
-                },
-                child: Container(
-                  color: Colors.black.withOpacity(0.5),
-                ),
-              ),
-            ).animate().fadeIn(duration: 200.ms),
+      CreatePostModal(
+        controller: controller,
+        buildUserAvatar: _buildUserAvatar,
+      ),
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.3),
+      useSafeArea: true,
+    );
+  }
 
-            // Modal - Full screen bottom sheet
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)),
-                ),
-                child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    children: [
-                      // Modal Header - Match React: p-6 border-b border-[#0A2342]/10
-                      Container(
-                        padding: EdgeInsets.all(24.r),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: const Color(0xFF0A2342).withOpacity(0.1),
-                            ),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Create Post',
-                              style: ResponsiveTextStyles.textXl.copyWith(
-                                color: const Color(0xFF0A2342),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            _AnimatedTapWidget(
-                              onTap: () {
-                                controller.newPostText.value = '';
-                                controller.clearSelectedImage();
-                                Get.back();
-                              },
-                              child: Container(
-                                width: 40.w,
-                                height: 40.h,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF0A2342).withOpacity(0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.close,
-                                  size: 24.sp,
-                                  color: const Color(0xFF0A2342),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+  // Show Comments Modal - Bottom sheet mode
+  void _showCommentsModal(int postId) {
+    controller.openComments(postId);
+    Get.bottomSheet(
+      _buildCommentsBottomSheet(),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.5),
+      isDismissible: true,
+      enableDrag: true,
+    );
+  }
 
-                      // User Info - Match React: p-6 border-b border-[#0A2342]/10
-                      Container(
-                        padding: EdgeInsets.all(24.r), // p-6 = 24px
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: const Color(0xFF0A2342).withOpacity(0.1),
-                            ),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            // Avatar - Match React: w-12 h-12 rounded-full
-                            Container(
-                              width: 48.w, // w-12 = 48px
-                              height: 48.h, // h-12 = 48px
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.grey[200], // bg-gray-200
-                              ),
-                              child: ClipOval(
-                                child: Obx(() => _buildUserAvatar(
-                                  imageUrl: controller.currentUserProfileImage,
-                                  size: 48,
-                                )),
-                              ),
-                            ),
-                            SizedBox(width: 12.w), // gap-3 = 12px
-                            // User Info Text
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // User name - Match React: text-[#0A2342]
-                                Obx(() => Text(
-                                  controller.currentUserName,
-                                  style: ResponsiveTextStyles.textBase.copyWith(
-                                    color: const Color(0xFF0A2342),
-                                  ),
-                                )),
-                                // "Sharing to Community" text - Match React: text-[#0A2342]/50 text-xs
-                                Text(
-                                  'Sharing to Community',
-                                  style: ResponsiveTextStyles.textXs.copyWith(
-                                    color: const Color(0xFF0A2342).withOpacity(0.5),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+  // Build Comments Bottom Sheet
+  Widget _buildCommentsBottomSheet() {
+    return Obx(() {
+      final postId = controller.selectedPostId.value;
+      final comments = controller.postComments;
+      final isLoading = controller.isLoadingComments.value;
+      final error = controller.commentsError.value;
+      
+      if (postId == 0) return const SizedBox.shrink();
 
-                      // Post Content - Match React: flex-1 overflow-y-auto p-6 space-y-4
-                      Expanded(
-                        child: SingleChildScrollView(
-                          padding: EdgeInsets.all(24.r),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Text Input
-                              TextField(
-                                onChanged: (value) => controller.newPostText.value = value,
-                                maxLines: 5,
-                                autofocus: true,
-                                decoration: InputDecoration(
-                                  hintText: 'Share your wellness journey...',
-                                  hintStyle: ResponsiveTextStyles.textBase.copyWith(
-                                    color: const Color(0xFF0A2342).withOpacity(0.4),
-                                  ),
-                                  border: InputBorder.none,
-                                ),
-                                style: ResponsiveTextStyles.textBase.copyWith(
-                                  color: const Color(0xFF0A2342),
-                                ),
-                              ),
-
-                              // Selected Image Preview
-                              Obx(() => controller.selectedImage.value.isNotEmpty
-                                  ? Container(
-                                      margin: EdgeInsets.only(top: 16.h),
-                                      child: Stack(
-                                        children: [
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(20.r),
-                                            child: controller.selectedImagePath.value.isNotEmpty
-                                                // Local file image
-                                                ? Image.file(
-                                                    File(controller.selectedImagePath.value),
-                                                    height: 256.h,
-                                                    width: double.infinity,
-                                                    fit: BoxFit.cover,
-                                                  )
-                                                // Network image (sample images)
-                                                : CachedNetworkImage(
-                                                    imageUrl: controller.selectedImage.value,
-                                                    height: 256.h,
-                                                    width: double.infinity,
-                                                    fit: BoxFit.cover,
-                                                  ),
-                                          ),
-                                          Positioned(
-                                            top: 12.h,
-                                            right: 12.w,
-                                            child: _AnimatedTapWidget(
-                                              onTap: () => controller.clearSelectedImage(),
-                                              child: Container(
-                                                width: 32.w,
-                                                height: 32.h,
-                                                decoration: BoxDecoration(
-                                                  color: Colors.black.withOpacity(0.5),
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: Icon(
-                                                  Icons.close,
-                                                  color: Colors.white,
-                                                  size: 16.sp,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                      .animate()
-                                      .fadeIn(duration: 200.ms)
-                                      .scale(begin: const Offset(0.95, 0.95), end: const Offset(1, 1), duration: 200.ms)
-                                  : const SizedBox.shrink()),
-
-                              // Image Gallery / Upload Section
-                              Obx(() => controller.selectedImage.value.isEmpty
-                                  ? Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        SizedBox(height: 16.h),
-                                        Row(
-                                          children: [
-                                            Icon(
-                                              Icons.image_outlined,
-                                              size: 20.sp,
-                                              color: const Color(0xFF00B8A9),
-                                            ),
-                                            SizedBox(width: 8.w),
-                                            Text(
-                                              'Add a photo to your post',
-                                              style: ResponsiveTextStyles.textSm.copyWith(
-                                                color: const Color(0xFF0A2342).withOpacity(0.6),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        SizedBox(height: 12.h),
-                                        
-                                        // Upload Image Button
-                                        Obx(() => _AnimatedTapWidget(
-                                          onTap: controller.isPickingImage.value 
-                                              ? () {} 
-                                              : () => controller.showImageSourcePicker(),
-                                          child: Container(
-                                            width: double.infinity,
-                                            padding: EdgeInsets.symmetric(vertical: 20.h),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF00B8A9).withOpacity(0.1),
-                                              borderRadius: BorderRadius.circular(16.r),
-                                              border: Border.all(
-                                                color: const Color(0xFF00B8A9).withOpacity(0.3),
-                                                width: 2,
-                                                style: BorderStyle.solid,
-                                              ),
-                                            ),
-                                            child: controller.isPickingImage.value
-                                                ? Center(
-                                                    child: SizedBox(
-                                                      width: 24.w,
-                                                      height: 24.h,
-                                                      child: const CircularProgressIndicator(
-                                                        color: Color(0xFF00B8A9),
-                                                        strokeWidth: 2,
-                                                      ),
-                                                    ),
-                                                  )
-                                                : Column(
-                                                    children: [
-                                                      Icon(
-                                                        Icons.cloud_upload_outlined,
-                                                        size: 32.sp,
-                                                        color: const Color(0xFF00B8A9),
-                                                      ),
-                                                      SizedBox(height: 8.h),
-                                                      Text(
-                                                        'Upload from Device',
-                                                        style: ResponsiveTextStyles.textSm.copyWith(
-                                                          color: const Color(0xFF00B8A9),
-                                                          fontWeight: FontWeight.w600,
-                                                        ),
-                                                      ),
-                                                      SizedBox(height: 4.h),
-                                                      Text(
-                                                        'Tap to select from gallery or camera',
-                                                        style: ResponsiveTextStyles.textXs.copyWith(
-                                                          color: const Color(0xFF0A2342).withOpacity(0.5),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                          ),
-                                        )),
-                                        
-                                      ],
-                                    )
-                                  : const SizedBox.shrink()),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // Post Button - Match React: p-6 border-t border-[#0A2342]/10 bg-white
-                      Container(
-                        padding: EdgeInsets.all(24.r),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          border: Border(
-                            top: BorderSide(
-                              color: const Color(0xFF0A2342).withOpacity(0.1),
-                            ),
-                          ),
-                        ),
-                        child: Obx(() {
-                          final canPost = controller.newPostText.value.trim().isNotEmpty;
-                          final isCreating = controller.isCreatingPost.value;
-                          
-                          return _AnimatedTapWidget(
-                            onTap: (canPost && !isCreating) ? () async {
-                              // Controller handles dialog closing and success message
-                              await controller.createPost();
-                            } : () {},
-                            child: Container(
-                              width: double.infinity,
-                              padding: EdgeInsets.symmetric(vertical: 16.h),
-                              decoration: BoxDecoration(
-                                gradient: (canPost && !isCreating)
-                                    ? const LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                                      )
-                                    : null,
-                                color: (canPost && !isCreating) ? null : const Color(0xFF0A2342).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(16.r),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  if (isCreating)
-                                    SizedBox(
-                                      width: 20.sp,
-                                      height: 20.sp,
-                                      child: const CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  else
-                                    Icon(
-                                      Icons.send,
-                                      size: 20.sp,
-                                      color: canPost
-                                          ? Colors.white
-                                          : const Color(0xFF0A2342).withOpacity(0.4),
-                                    ),
-                                  SizedBox(width: 8.w),
-                                  Text(
-                                    isCreating ? 'Creating...' : 'Share Post',
-                                    style: ResponsiveTextStyles.textBase.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: (canPost || isCreating)
-                                          ? Colors.white
-                                          : const Color(0xFF0A2342).withOpacity(0.4),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
-                    ],
-                  ),
-                )
-                  .animate()
-                  .slideY(
-                    begin: 1.0,
-                    end: 0.0,
-                    duration: 400.ms,
-                    curve: Curves.easeOutCubic,
-                  ),
+      return Container(
+        constraints: BoxConstraints(maxHeight: 0.9.sh),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 20.r,
+              offset: Offset(0, -4.h),
             ),
           ],
         ),
-      ),
-      barrierDismissible: false,
-      barrierColor: Colors.transparent,
-      useSafeArea: false,
-    );
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header with gradient
+            Container(
+              padding: EdgeInsets.all(24.r),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF0A2342), Color(0xFF00B8A9)],
+                ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isLoading 
+                        ? 'Loading...' 
+                        : 'Comments (${comments.length})',
+                    style: ResponsiveTextStyles.textXl.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  _AnimatedTapWidget(
+                    onTap: () {
+                      controller.closeComments();
+                      Get.back();
+                    },
+                    child: Container(
+                      width: 40.w,
+                      height: 40.h,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 20.sp,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Comments list with loading state
+            Flexible(
+              child: isLoading
+                  ? Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(40.r),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(
+                              color: Color(0xFF00B8A9),
+                            ),
+                            SizedBox(height: 16.h),
+                            Text(
+                              'Loading comments...',
+                              style: ResponsiveTextStyles.textSm.copyWith(
+                                color: const Color(0xFF0A2342).withOpacity(0.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : error.isNotEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(40.r),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  size: 48.sp,
+                                  color: Colors.red.withOpacity(0.6),
+                                ),
+                                SizedBox(height: 16.h),
+                                Text(
+                                  error,
+                                  style: ResponsiveTextStyles.textSm.copyWith(
+                                    color: const Color(0xFF0A2342).withOpacity(0.6),
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : comments.isEmpty
+                          ? _buildEmptyComments()
+                          : ListView.builder(
+                              padding: EdgeInsets.all(20.r),
+                              itemCount: comments.length,
+                              itemBuilder: (context, index) {
+                                return _buildCommentItem(postId, comments[index]);
+                              },
+                            ),
+            ),
+
+            // Add comment input
+            Container(
+              padding: EdgeInsets.all(24.r),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  top: BorderSide(
+                    color: const Color(0xFF0A2342).withOpacity(0.1),
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20.r,
+                    backgroundImage: const CachedNetworkImageProvider(
+                      'https://i.pravatar.cc/150?img=1',
+                    ),
+                    backgroundColor: AppColors.muted,
+                  ),
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: TextField(
+                      controller: controller.commentTextController,
+                      onChanged: (value) => controller.newComment.value = value,
+                      onSubmitted: (_) async {
+                        if (controller.newComment.value.trim().isNotEmpty && 
+                            postId != 0 && 
+                            !controller.isCreatingComment.value) {
+                          await controller.addComment(postId);
+                        }
+                      },
+                      enabled: !controller.isCreatingComment.value,
+                      decoration: InputDecoration(
+                        hintText: 'Add a comment...',
+                        hintStyle: ResponsiveTextStyles.textSm.copyWith(
+                          color: const Color(0xFF0A2342).withOpacity(0.4),
+                        ),
+                        filled: true,
+                        fillColor: AppColors.inputBackground,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24.r),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16.w,
+                          vertical: 12.h,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24.r),
+                          borderSide: BorderSide(
+                            color: const Color(0xFF00B8A9).withOpacity(0.2),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      style: ResponsiveTextStyles.textSm.copyWith(
+                        color: const Color(0xFF0A2342),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 12.w),
+                  Obx(() {
+                    final canSend = controller.newComment.value.trim().isNotEmpty && postId != 0;
+                    final isCreating = controller.isCreatingComment.value;
+                    return _AnimatedTapWidget(
+                      onTap: (canSend && !isCreating) ? () => controller.addComment(postId) : () {},
+                      child: Container(
+                        width: 48.w,
+                        height: 48.h,
+                        decoration: BoxDecoration(
+                          gradient: (canSend || isCreating)
+                              ? const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+                                )
+                              : null,
+                          color: (canSend || isCreating) ? null : const Color(0xFF0A2342).withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: isCreating
+                            ? SizedBox(
+                                width: 20.sp,
+                                height: 20.sp,
+                                child: const CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                Icons.send,
+                                color: canSend
+                                    ? Colors.white
+                                    : const Color(0xFF0A2342).withOpacity(0.4),
+                                size: 20.sp,
+                              ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   // Edit Post Modal - Similar to Create Post Modal but for editing
@@ -1112,49 +994,20 @@ class CommunityPage extends GetView<CommunityController> {
       if (postId == 0) return const SizedBox.shrink();
 
       return Material(
-        color: Colors.transparent,
-        child: Stack(
-          children: [
-            // Backdrop - Match React: initial={{ opacity: 0 }}, animate={{ opacity: 1 }}, bg-black/50
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: controller.closeComments,
-                child: Container(
-                  color: Colors.black.withOpacity(0.5), // bg-black/50
+        color: Colors.white,
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Header with gradient - Match React: bg-gradient-to-br from-[#0A2342] to-[#00B8A9]
+              Container(
+                padding: EdgeInsets.all(24.r), // p-6 = 24px
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF0A2342), Color(0xFF00B8A9)],
+                  ),
                 ),
-              ),
-            ).animate().fadeIn(duration: 300.ms),
-
-            // Modal content - Match React: spring animation, slide up from bottom
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                constraints: BoxConstraints(maxHeight: 0.85.sh), // max-h-[85vh]
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)), // rounded-t-[40px]
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
-                      blurRadius: 20.r,
-                      offset: Offset(0, -4.h),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Header with gradient - Match React: bg-gradient-to-br from-[#0A2342] to-[#00B8A9]
-                    Container(
-                      padding: EdgeInsets.all(24.r), // p-6 = 24px
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF0A2342), Color(0xFF00B8A9)],
-                        ),
-                        borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)),
-                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -1187,9 +1040,9 @@ class CommunityPage extends GetView<CommunityController> {
                       ),
                     ),
 
-                    // Comments list with loading state
-                    Flexible(
-                      child: isLoading
+              // Comments list with loading state
+              Expanded(
+                child: isLoading
                           ? Center(
                               child: Padding(
                                 padding: EdgeInsets.all(40.r),
@@ -1243,10 +1096,10 @@ class CommunityPage extends GetView<CommunityController> {
                                         return _buildCommentItem(postId, comments[index]);
                                       },
                                     ),
-                    ),
+              ),
 
-                    // Add comment input - Match React: p-6 border-t border-[#0A2342]/10 bg-white
-                    Container(
+              // Add comment input - Match React: p-6 border-t border-[#0A2342]/10 bg-white
+              Container(
                       padding: EdgeInsets.all(24.r), // p-6 = 24px
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -1350,23 +1203,17 @@ class CommunityPage extends GetView<CommunityController> {
                         ],
                       ),
                     ),
-                  ],
-                ),
-              )
-                // Match React: spring animation slide up from bottom
-                // initial={{ opacity: 0, y: '100%' }}, animate={{ opacity: 1, y: 0 }}
-                // transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                .animate()
-                .slideY(
-                  begin: 1.0, // Start from bottom (y: '100%')
-                  end: 0.0, // End at normal position (y: 0)
-                  duration: 400.ms,
-                  curve: Curves.easeOutCubic, // Spring-like: damping: 30, stiffness: 300
-                )
-                .fadeIn(duration: 300.ms),
+            ],
+          ),
+        )
+            .animate()
+            .fadeIn(duration: 300.ms)
+            .slideY(
+              begin: 0.1,
+              end: 0,
+              duration: 400.ms,
+              curve: Curves.easeOutCubic,
             ),
-          ],
-        ),
       );
     });
   }

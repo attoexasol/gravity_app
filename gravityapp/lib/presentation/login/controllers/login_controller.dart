@@ -1,5 +1,7 @@
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../app/routes/app_routes.dart';
 import '../../../data/repositories/auth_repository.dart';
@@ -16,6 +18,11 @@ class LoginController extends GetxController {
   final AuthRepository _authRepository = AuthRepository();
   final ConsentRepository _consentRepository = ConsentRepository();
   final GoalsRepository _goalsRepository = GoalsRepository();
+
+  // Google Sign-In instance
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email', 'profile'],
+  );
 
   // Observable for selected user role
   final Rx<UserType> selectedRole = UserType.customer.obs;
@@ -150,6 +157,26 @@ class LoginController extends GetxController {
         await PreferencesService.saveUserType(userTypeString);
         debugPrint('✅ User type saved: $userTypeString');
 
+        // Save profile image from API response if available
+        if (response.data != null && response.data!.profileImage != null && response.data!.profileImage!.isNotEmpty) {
+          final profileImageUrl = response.data!.profileImage!;
+          PreferencesService.getStorage().write('user_profile_image_url', profileImageUrl);
+          debugPrint('✅ Profile image saved from login: $profileImageUrl');
+        } else {
+          // Try to fetch user profile to get the latest profile image
+          try {
+            final profileResponse = await _authRepository.getUserProfile();
+            if (profileResponse.isSuccess && profileResponse.data != null && profileResponse.data!.profileImage != null && profileResponse.data!.profileImage!.isNotEmpty) {
+              final profileImageUrl = profileResponse.data!.profileImage!;
+              PreferencesService.getStorage().write('user_profile_image_url', profileImageUrl);
+              debugPrint('✅ Profile image saved from profile API: $profileImageUrl');
+            }
+          } catch (e) {
+            debugPrint('⚠️ Could not fetch profile image: $e');
+            // Continue with login even if profile fetch fails
+          }
+        }
+
         // Show success message
         Get.snackbar(
           'Success',
@@ -190,32 +217,140 @@ class LoginController extends GetxController {
 
   /// Handle Google login
   Future<void> handleGoogleLogin() async {
+    if (isClosed) return;
+
     try {
       isLoading.value = true;
 
-      // TODO: Implement Google Sign-In
-      // Example:
-      // await AuthService.signInWithGoogle();
+      debugPrint('🔄 Starting Google Sign-In...');
 
-      await Future.delayed(const Duration(seconds: 1));
+      // Step 1: Sign in with Google
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      
+      if (googleUser == null) {
+        // User cancelled the sign-in
+        debugPrint('⚠️ Google Sign-In cancelled by user');
+        isLoading.value = false;
+        return;
+      }
 
-      Get.snackbar(
-        'Success',
-        'Logged in with Google',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
+      debugPrint('✅ Google Sign-In successful: ${googleUser.email}');
+
+      // Step 2: Get authentication details from Google
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      // Step 3: Create Firebase credential (optional, if using Firebase Auth)
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
       );
+
+      // Step 4: Sign in to Firebase (optional, if using Firebase Auth)
+      // Uncomment if you want to use Firebase Auth
+      // final UserCredential firebaseUser = await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // Step 5: Send Google credentials to your backend API
+      final result = await _authRepository.googleSignIn(
+        idToken: googleAuth.idToken ?? '',
+        accessToken: googleAuth.accessToken ?? '',
+        email: googleUser.email,
+        name: googleUser.displayName ?? '',
+        photoUrl: googleUser.photoUrl,
+      );
+
+      final response = result['response'] as ApiResponse<UserModel>;
+      final token = result['token'] as String?;
+      final userId = result['user_id'] as int?;
+      final userName = result['user_name'] as String?;
+      final userEmail = result['email'] as String?;
+
+      if (isClosed) return;
+
+      if (response.isSuccess && token != null) {
+        // Save token from root level
+        await PreferencesService.saveAuthToken(token);
+
+        // Save email from user object (or fallback to Google email)
+        if (userEmail != null && userEmail.isNotEmpty) {
+          await PreferencesService.saveUserEmail(userEmail);
+        } else {
+          await PreferencesService.saveUserEmail(googleUser.email);
+        }
+
+        // Save user name
+        if (userName != null && userName.isNotEmpty) {
+          await PreferencesService.saveUserName(userName);
+        } else if (googleUser.displayName != null && googleUser.displayName!.isNotEmpty) {
+          await PreferencesService.saveUserName(googleUser.displayName!);
+        }
+
+        // Save user ID
+        if (userId != null && userId > 0) {
+          await PreferencesService.saveUserId(userId);
+        }
+
+        // Save user type based on selected role
+        final userType = selectedRole.value == UserType.coach ? 'coach' : 'customer';
+        await PreferencesService.saveUserType(userType);
+
+        // Save profile image if available
+        if (googleUser.photoUrl != null && googleUser.photoUrl!.isNotEmpty) {
+          PreferencesService.getStorage().write('user_profile_image_url', googleUser.photoUrl);
+          debugPrint('✅ Profile image saved from Google: ${googleUser.photoUrl}');
+        }
+
+        // Save profile image from API response if available
+        if (response.data != null && response.data!.profileImage != null && response.data!.profileImage!.isNotEmpty) {
+          final profileImageUrl = response.data!.profileImage!;
+          PreferencesService.getStorage().write('user_profile_image_url', profileImageUrl);
+          debugPrint('✅ Profile image saved from API: $profileImageUrl');
+        }
+
+        debugPrint('✅ Google Sign-In completed successfully');
+        debugPrint('   - Token: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
+        debugPrint('   - User ID: $userId');
+        debugPrint('   - User Name: $userName');
+        debugPrint('   - Email: $userEmail');
+
+        // Navigate based on user data (same logic as regular login)
+        await _checkUserDataAndNavigate(token);
+      } else {
+        // Show error message
+        Get.snackbar(
+          'Google Login Failed',
+          response.message.isNotEmpty ? response.message : 'Failed to authenticate with Google',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Get.theme.colorScheme.error,
+          colorText: Get.theme.colorScheme.onError,
+          duration: const Duration(seconds: 4),
+        );
+      }
     } catch (e) {
-      Get.snackbar(
-        'Google Login Failed',
-        e.toString(),
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-      );
+      debugPrint('❌ Google Sign-In Error: $e');
+      
+      // Sign out from Google if there was an error
+      try {
+        await _googleSignIn.signOut();
+      } catch (signOutError) {
+        debugPrint('⚠️ Error signing out from Google: $signOutError');
+      }
+
+      if (!isClosed) {
+        Get.snackbar(
+          'Google Login Failed',
+          e.toString().contains('network')
+              ? 'Network error. Please check your connection and try again.'
+              : 'An unexpected error occurred. Please try again.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Get.theme.colorScheme.error,
+          colorText: Get.theme.colorScheme.onError,
+          duration: const Duration(seconds: 4),
+        );
+      }
     } finally {
-      isLoading.value = false;
+      if (!isClosed) {
+        isLoading.value = false;
+      }
     }
   }
 

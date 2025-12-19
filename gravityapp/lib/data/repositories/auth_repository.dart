@@ -190,6 +190,49 @@ class AuthRepository {
     }
   }
 
+  /// Get single user details
+  /// API: POST /single_user with token in body
+  Future<ApiResponse<UserModel>> getSingleUser() async {
+    try {
+      final token = PreferencesService.getAuthToken();
+      if (token == null || token.isEmpty) {
+        throw ApiException(
+          message: 'Authentication token not found',
+          statusCode: 401,
+        );
+      }
+
+      final response = await _apiService.post(
+        '/single_user',
+        body: {
+          'token': token,
+        },
+      );
+
+      return ApiResponse<UserModel>(
+        status: response['status'] ?? false,
+        message: response['message'] ?? '',
+        data: response['user'] != null && response['user'] is Map<String, dynamic>
+            ? UserModel.fromJson(response['user'] as Map<String, dynamic>)
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ GetSingleUser API Error: ${e.message}');
+      return ApiResponse<UserModel>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ GetSingleUser Unknown Error: $e');
+      return ApiResponse<UserModel>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
   /// Logout user
   /// Note: Using POST with body since GET requests don't support request bodies in standard HTTP
   /// If the API specifically requires GET, the token would need to be passed as a query parameter
@@ -225,6 +268,97 @@ class AuthRepository {
         message: 'An unexpected error occurred. Please try again.',
         error: e.toString(),
       );
+    }
+  }
+
+  /// Google Sign-In
+  /// Sends Google ID token to backend for authentication
+  Future<Map<String, dynamic>> googleSignIn({
+    required String idToken,
+    required String accessToken,
+    required String email,
+    required String name,
+    String? photoUrl,
+  }) async {
+    try {
+      final response = await _apiService.post(
+        '/user/google-login', // Adjust endpoint as per your API
+        body: {
+          'id_token': idToken,
+          'access_token': accessToken,
+          'email': email,
+          'name': name,
+          if (photoUrl != null) 'photo_url': photoUrl,
+        },
+      );
+
+      // Extract token from root level
+      final token = response['token'] as String?;
+      
+      // Extract user object from response
+      final userData = response['user'] as Map<String, dynamic>?;
+      
+      // Extract user_id, user_name, and email from user object
+      final userId = userData != null 
+          ? (userData['user_id'] as int? ?? userData['user_id'] as num?)?.toInt()
+          : null;
+      final userName = userData != null 
+          ? (userData['user_name'] as String? ?? userData['name'] as String?)
+          : name;
+      final userEmail = userData != null 
+          ? (userData['email'] as String?)
+          : email;
+      
+      debugPrint('🔍 Google Sign-In Response Debug:');
+      debugPrint('  - Token: ${token != null ? "Present" : "Missing"}');
+      debugPrint('  - User Data: ${userData != null ? "Present" : "Missing"}');
+      if (userData != null) {
+        debugPrint('  - User ID: $userId');
+        debugPrint('  - User Name: $userName');
+        debugPrint('  - User Email: $userEmail');
+      }
+
+      final apiResponse = ApiResponse<UserModel>(
+        status: response['status'] ?? false,
+        message: response['message'] ?? '',
+        data: userData != null
+            ? UserModel.fromJson(userData)
+            : null,
+      );
+
+      return {
+        'response': apiResponse,
+        'token': token,
+        'user_id': userId,
+        'user_name': userName,
+        'email': userEmail,
+      };
+    } on ApiException catch (e) {
+      debugPrint('❌ Google Sign-In API Error: ${e.message}');
+      return {
+        'response': ApiResponse<UserModel>(
+          status: false,
+          message: e.message,
+          error: e.errors,
+        ),
+        'token': null,
+        'user_id': null,
+        'user_name': null,
+        'email': null,
+      };
+    } catch (e) {
+      debugPrint('❌ Google Sign-In Unknown Error: $e');
+      return {
+        'response': ApiResponse<UserModel>(
+          status: false,
+          message: 'An unexpected error occurred. Please try again.',
+          error: e.toString(),
+        ),
+        'token': null,
+        'user_id': null,
+        'user_name': null,
+        'email': null,
+      };
     }
   }
 

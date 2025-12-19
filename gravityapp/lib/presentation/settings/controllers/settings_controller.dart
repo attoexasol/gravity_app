@@ -143,12 +143,81 @@ class SettingsController extends GetxController {
   void onInit() {
     super.onInit();
     _loadUserData();
+    _fetchUserDataFromAPI(); // Fetch latest user data from API
     _loadSettings();
     _loadGoals();
     _fetchGoalsFromAPI();
     _initializeHealthPermissions();
     _loadSyncLogs();
     _subscribeToSyncActivity();
+  }
+
+  @override
+  void onReady() {
+    super.onReady();
+    // Reload user data when page becomes visible to ensure profile image persists
+    _loadUserData();
+    _fetchUserDataFromAPI(); // Fetch latest user data from API
+  }
+
+  /// Fetch user data from API
+  Future<void> _fetchUserDataFromAPI() async {
+    try {
+      debugPrint('🔄 Fetching user data from API...');
+      final response = await _authRepository.getSingleUser();
+
+      if (response.isSuccess && response.data != null) {
+        final userData = response.data!;
+        
+        // Update preferences with latest data from API
+        if (userData.name.isNotEmpty) {
+          await PreferencesService.saveUserName(userData.name);
+        }
+        if (userData.email.isNotEmpty) {
+          await PreferencesService.saveUserEmail(userData.email);
+        }
+        if (userData.id > 0) {
+          await PreferencesService.saveUserId(userData.id);
+        }
+
+        // Save profile image if available
+        if (userData.profileImage != null && userData.profileImage!.isNotEmpty) {
+          final profileImageUrl = userData.profileImage!;
+          // Construct full URL if it's a relative path
+          final fullImageUrl = profileImageUrl.startsWith('http')
+              ? profileImageUrl
+              : 'https://gravity.attoexasolutions.com/storage/$profileImageUrl';
+          
+          PreferencesService.getStorage().write('user_profile_image_url', fullImageUrl);
+          debugPrint('✅ Profile image saved from API: $fullImageUrl');
+        }
+
+        // Update user reactive value
+        final userInitials = UserAccountInfo.generateInitials(userData.name);
+        final profileImageUrl = userData.profileImage != null && userData.profileImage!.isNotEmpty
+            ? (userData.profileImage!.startsWith('http')
+                ? userData.profileImage!
+                : 'https://gravity.attoexasolutions.com/storage/${userData.profileImage!}')
+            : PreferencesService.getStorage().read('user_profile_image_url') as String?;
+
+        user.value = UserAccountInfo(
+          name: userData.name,
+          email: userData.email,
+          initials: userInitials,
+          profileImagePath: profileImageUrl,
+        );
+
+        debugPrint('✅ User data loaded from API: ${userData.name} (${userData.email})');
+      } else {
+        debugPrint('⚠️ Failed to fetch user data from API: ${response.message}');
+        // Fallback to loading from storage
+        _loadUserData();
+      }
+    } catch (e) {
+      debugPrint('❌ Error fetching user data from API: $e');
+      // Fallback to loading from storage
+      _loadUserData();
+    }
   }
 
   /// Load user data from storage
@@ -185,7 +254,20 @@ class SettingsController extends GetxController {
 
   /// Close profile image modal
   void closeProfileImageModal() {
-    Get.back();
+    try {
+      Get.closeCurrentSnackbar();
+    } catch (e) {
+      debugPrint('⚠️ Error closing snackbar: $e');
+    }
+    try {
+      Get.back();
+    } catch (e) {
+      debugPrint('⚠️ Error navigating back: $e');
+      final context = Get.context;
+      if (context != null) {
+        Navigator.of(context).pop();
+      }
+    }
     tempImagePath.value = null;
     tempImageBytes.value = null;
   }
@@ -1428,16 +1510,29 @@ Future<void> saveProfileImage() async {
   }
 
   /// Navigate back
+  /// Uses Navigator directly to avoid Get.back()'s internal snackbar closing logic
   void navigateBack() {
+    // Don't try to close snackbars - Get.back() internally calls closeCurrentSnackbar()
+    // which causes LateInitializationError. Use Navigator directly instead.
+    
     try {
-      // Try to close any open snackbars first to avoid LateInitializationError
-      Get.closeCurrentSnackbar();
+      final context = Get.context;
+      if (context != null && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+        debugPrint('✅ Navigated back via Navigator.pop()');
+        return;
+      }
     } catch (e) {
-      // If there's an error with snackbar, ignore it and continue
-      debugPrint('⚠️ Error closing snackbar: $e');
+      debugPrint('⚠️ Navigator.pop() failed: $e');
     }
-    // Navigate back
-    Get.back();
+    
+    // Fallback: try Get.back() if Navigator fails (but this may still cause errors)
+    try {
+      Get.back();
+      debugPrint('✅ Navigated back via Get.back()');
+    } catch (e) {
+      debugPrint('⚠️ Get.back() also failed: $e - Navigation may have already occurred');
+    }
   }
 
   /// Handle logout - calls API, clears all storage data and navigates to login
@@ -1497,15 +1592,47 @@ Future<void> saveProfileImage() async {
       ),
       actions: [
         TextButton(
-          onPressed: () => Get.back(result: false),
+          onPressed: () {
+            _safeBack(result: false);
+          },
           child: const Text('Cancel'),
         ),
         TextButton(
-          onPressed: () => Get.back(result: true),
+          onPressed: () {
+            _safeBack(result: true);
+          },
           style: TextButton.styleFrom(foregroundColor: const Color(0xFF00B8A9)),
           child: const Text('Logout'),
         ),
       ],
     );
+  }
+
+  /// Safely navigate back, handling snackbar errors
+  /// Uses Navigator directly to avoid Get.back()'s internal snackbar closing logic
+  void _safeBack({dynamic result}) {
+    // Don't try to close snackbars - Get.back() internally calls closeCurrentSnackbar()
+    // which causes LateInitializationError. Use Navigator directly instead.
+    
+    try {
+      final context = Get.context;
+      if (context != null && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(result);
+        debugPrint('✅ Navigated back via Navigator.pop()');
+        return;
+      }
+    } catch (e) {
+      debugPrint('⚠️ Navigator.pop() failed: $e');
+    }
+    
+    // Fallback: try Get.back() if Navigator fails (but this may still cause errors)
+    try {
+      if (Get.isDialogOpen == true) {
+        Get.back(result: result);
+        debugPrint('✅ Navigated back via Get.back()');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Get.back() also failed: $e - Navigation may have already occurred');
+    }
   }
 }
