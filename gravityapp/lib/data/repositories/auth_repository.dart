@@ -8,8 +8,6 @@ import '../../core/services/preferences_service.dart';
 import '../model/api_response.dart';
 import '../model/user_model.dart';
 
-
-
 /// Auth Repository - Handles authentication API calls
 class AuthRepository {
   final ApiService _apiService = ApiService();
@@ -39,7 +37,8 @@ class AuthRepository {
       return ApiResponse<UserModel>(
         status: response['status'] ?? false,
         message: response['message'] ?? '',
-        data: response['user'] != null && response['user'] is Map<String, dynamic>
+        data:
+            response['user'] != null && response['user'] is Map<String, dynamic>
             ? UserModel.fromJson(response['user'] as Map<String, dynamic>)
             : null,
       );
@@ -69,29 +68,27 @@ class AuthRepository {
     try {
       final response = await _apiService.post(
         '/user/login',
-        body: {
-          'email': email,
-          'password': password,
-        },
+        body: {'email': email, 'password': password},
       );
 
       // Extract token from root level
       final token = response['token'] as String?;
-      
+
       // Extract user object from response
       final userData = response['user'] as Map<String, dynamic>?;
-      
+
       // Extract user_id, user_name, and email from user object
-      final userId = userData != null 
-          ? (userData['user_id'] as int? ?? userData['user_id'] as num?)?.toInt()
+      final userId = userData != null
+          ? (userData['user_id'] as int? ?? userData['user_id'] as num?)
+                ?.toInt()
           : null;
-      final userName = userData != null 
+      final userName = userData != null
           ? (userData['user_name'] as String?)
           : null;
-      final userEmail = userData != null 
+      final userEmail = userData != null
           ? (userData['email'] as String?)
           : null;
-      
+
       debugPrint('🔍 Login Response Debug:');
       debugPrint('  - Token: ${token != null ? "Present" : "Missing"}');
       debugPrint('  - User Data: ${userData != null ? "Present" : "Missing"}');
@@ -104,9 +101,7 @@ class AuthRepository {
       final apiResponse = ApiResponse<UserModel>(
         status: response['status'] ?? false,
         message: response['message'] ?? '',
-        data: userData != null
-            ? UserModel.fromJson(userData)
-            : null,
+        data: userData != null ? UserModel.fromJson(userData) : null,
       );
 
       return {
@@ -159,19 +154,19 @@ class AuthRepository {
 
       final response = await _apiService.get(
         '/user/profile',
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       return ApiResponse<UserModel>(
         status: response['status'] ?? false,
         message: response['message'] ?? '',
-        data: response['user'] != null && response['user'] is Map<String, dynamic>
+        data:
+            response['user'] != null && response['user'] is Map<String, dynamic>
             ? UserModel.fromJson(response['user'] as Map<String, dynamic>)
-            : response['data'] != null && response['data'] is Map<String, dynamic>
-                ? UserModel.fromJson(response['data'] as Map<String, dynamic>)
-                : null,
+            : response['data'] != null &&
+                  response['data'] is Map<String, dynamic>
+            ? UserModel.fromJson(response['data'] as Map<String, dynamic>)
+            : null,
       );
     } on ApiException catch (e) {
       debugPrint('❌ GetUserProfile API Error: ${e.message}');
@@ -204,15 +199,14 @@ class AuthRepository {
 
       final response = await _apiService.post(
         '/single_user',
-        body: {
-          'token': token,
-        },
+        body: {'token': token},
       );
 
       return ApiResponse<UserModel>(
         status: response['status'] ?? false,
         message: response['message'] ?? '',
-        data: response['user'] != null && response['user'] is Map<String, dynamic>
+        data:
+            response['user'] != null && response['user'] is Map<String, dynamic>
             ? UserModel.fromJson(response['user'] as Map<String, dynamic>)
             : null,
       );
@@ -236,17 +230,13 @@ class AuthRepository {
   /// Logout user
   /// Note: Using POST with body since GET requests don't support request bodies in standard HTTP
   /// If the API specifically requires GET, the token would need to be passed as a query parameter
-  Future<ApiResponse<void>> logout({
-    required String token,
-  }) async {
+  Future<ApiResponse<void>> logout({required String token}) async {
     try {
       // Using POST with token in body as specified in the request format
       // If API requires GET, we would use: '/user/logout?token=$token'
       final response = await _apiService.post(
         '/user/logout',
-        body: {
-          'token': token,
-        },
+        body: {'token': token},
       );
 
       return ApiResponse<void>(
@@ -273,57 +263,28 @@ class AuthRepository {
 
   /// Google Sign-In
   /// Sends Google ID token to backend for authentication
+  /// Google Sign-In via Firebase
+  /// Sends Firebase ID token to backend
   Future<Map<String, dynamic>> googleSignIn({
-    required String idToken,
-    required String accessToken,
-    required String email,
-    required String name,
-    String? photoUrl,
+    required String firebaseToken,
   }) async {
     try {
       final response = await _apiService.post(
-        '/user/google-login', // Adjust endpoint as per your API
-        body: {
-          'id_token': idToken,
-          'access_token': accessToken,
-          'email': email,
-          'name': name,
-          if (photoUrl != null) 'photo_url': photoUrl,
-        },
+        '/auth/google', // ✅ backend endpoint
+        body: {'firebase_token': firebaseToken},
       );
 
-      // Extract token from root level
       final token = response['token'] as String?;
-      
-      // Extract user object from response
       final userData = response['user'] as Map<String, dynamic>?;
-      
-      // Extract user_id, user_name, and email from user object
-      final userId = userData != null 
-          ? (userData['user_id'] as int? ?? userData['user_id'] as num?)?.toInt()
-          : null;
-      final userName = userData != null 
-          ? (userData['user_name'] as String? ?? userData['name'] as String?)
-          : name;
-      final userEmail = userData != null 
-          ? (userData['email'] as String?)
-          : email;
-      
-      debugPrint('🔍 Google Sign-In Response Debug:');
-      debugPrint('  - Token: ${token != null ? "Present" : "Missing"}');
-      debugPrint('  - User Data: ${userData != null ? "Present" : "Missing"}');
-      if (userData != null) {
-        debugPrint('  - User ID: $userId');
-        debugPrint('  - User Name: $userName');
-        debugPrint('  - User Email: $userEmail');
-      }
+
+      final userId = userData?['user_id'] as int?;
+      final userName = userData?['user_name'] as String?;
+      final userEmail = userData?['email'] as String?;
 
       final apiResponse = ApiResponse<UserModel>(
         status: response['status'] ?? false,
         message: response['message'] ?? '',
-        data: userData != null
-            ? UserModel.fromJson(userData)
-            : null,
+        data: userData != null ? UserModel.fromJson(userData) : null,
       );
 
       return {
@@ -334,25 +295,11 @@ class AuthRepository {
         'email': userEmail,
       };
     } on ApiException catch (e) {
-      debugPrint('❌ Google Sign-In API Error: ${e.message}');
       return {
         'response': ApiResponse<UserModel>(
           status: false,
           message: e.message,
           error: e.errors,
-        ),
-        'token': null,
-        'user_id': null,
-        'user_name': null,
-        'email': null,
-      };
-    } catch (e) {
-      debugPrint('❌ Google Sign-In Unknown Error: $e');
-      return {
-        'response': ApiResponse<UserModel>(
-          status: false,
-          message: 'An unexpected error occurred. Please try again.',
-          error: e.toString(),
         ),
         'token': null,
         'user_id': null,
@@ -369,32 +316,32 @@ class AuthRepository {
   }) async {
     try {
       final url = Uri.parse('${ApiService.baseUrl}/user/profile_upload');
-      
+
       debugPrint('🌐 Uploading profile image to: $url');
       debugPrint('📁 Image path: ${imageFile.path}');
       debugPrint('📁 Image size: ${await imageFile.length()} bytes');
 
       // Create multipart request
       final request = http.MultipartRequest('POST', url);
-      
+
       // Read image bytes
       final imageBytes = await imageFile.readAsBytes();
       final fileName = imageFile.path.split('/').last;
-      
+
       // Determine content type based on file extension
       String contentType = 'image/jpeg'; // Default
       if (fileName.toLowerCase().endsWith('.png')) {
         contentType = 'image/png';
-      } else if (fileName.toLowerCase().endsWith('.jpg') || 
-                 fileName.toLowerCase().endsWith('.jpeg')) {
+      } else if (fileName.toLowerCase().endsWith('.jpg') ||
+          fileName.toLowerCase().endsWith('.jpeg')) {
         contentType = 'image/jpeg';
       } else if (fileName.toLowerCase().endsWith('.webp')) {
         contentType = 'image/webp';
       }
-      
+
       // Add token as field
       request.fields['token'] = token;
-      
+
       // Create multipart file
       final multipartFile = http.MultipartFile(
         'profile_image', // Field name as required by API
@@ -403,12 +350,12 @@ class AuthRepository {
         filename: fileName,
         contentType: MediaType.parse(contentType),
       );
-      
+
       request.files.add(multipartFile);
-      
+
       // Set headers
       request.headers['Accept'] = 'application/json';
-      
+
       debugPrint('📤 Sending request with token and profile_image file');
       debugPrint('📤 File field name: profile_image');
       debugPrint('📤 File name: $fileName');
@@ -425,12 +372,15 @@ class AuthRepository {
       // Parse response
       if (response.statusCode >= 200 && response.statusCode < 300) {
         try {
-          final responseData = jsonDecode(response.body) as Map<String, dynamic>;
+          final responseData =
+              jsonDecode(response.body) as Map<String, dynamic>;
           final profileImageUrl = responseData['profile_image'] as String?;
-          
+
           return ApiResponse<String>(
             status: responseData['status'] ?? true,
-            message: responseData['message'] ?? 'Profile image uploaded successfully',
+            message:
+                responseData['message'] ??
+                'Profile image uploaded successfully',
             data: profileImageUrl,
           );
         } catch (e) {

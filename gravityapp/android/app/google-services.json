@@ -12,7 +12,20 @@
           "package_name": "com.attoexa.gravityapp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "463881413794-8b3pae680kb9haljj2vfsf3r80c14dld.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.attoexa.gravityapp",
+            "certificate_hash": "5dcadf87043a0a731fd89e2d4abafe3aabd917d6"
+          }
+        },
+        {
+          "client_id": "463881413794-nduoq1mdd5680upif7h149n0p66vt0iu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCGLLFDGJtJUhADpBPJle_EFr4sFcKmraQ"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "463881413794-lfrv9i8nb1r8ug9adq7kue5mlbarop8g.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

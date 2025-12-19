@@ -20,9 +20,6 @@ class LoginController extends GetxController {
   final GoalsRepository _goalsRepository = GoalsRepository();
 
   // Google Sign-In instance
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
-  );
 
   // Observable for selected user role
   final Rx<UserType> selectedRole = UserType.customer.obs;
@@ -153,23 +150,38 @@ class LoginController extends GetxController {
         }
 
         // Save user type based on selected role
-        final userTypeString = selectedRole.value == UserType.coach ? 'coach' : 'customer';
+        final userTypeString = selectedRole.value == UserType.coach
+            ? 'coach'
+            : 'customer';
         await PreferencesService.saveUserType(userTypeString);
         debugPrint('✅ User type saved: $userTypeString');
 
         // Save profile image from API response if available
-        if (response.data != null && response.data!.profileImage != null && response.data!.profileImage!.isNotEmpty) {
+        if (response.data != null &&
+            response.data!.profileImage != null &&
+            response.data!.profileImage!.isNotEmpty) {
           final profileImageUrl = response.data!.profileImage!;
-          PreferencesService.getStorage().write('user_profile_image_url', profileImageUrl);
+          PreferencesService.getStorage().write(
+            'user_profile_image_url',
+            profileImageUrl,
+          );
           debugPrint('✅ Profile image saved from login: $profileImageUrl');
         } else {
           // Try to fetch user profile to get the latest profile image
           try {
             final profileResponse = await _authRepository.getUserProfile();
-            if (profileResponse.isSuccess && profileResponse.data != null && profileResponse.data!.profileImage != null && profileResponse.data!.profileImage!.isNotEmpty) {
+            if (profileResponse.isSuccess &&
+                profileResponse.data != null &&
+                profileResponse.data!.profileImage != null &&
+                profileResponse.data!.profileImage!.isNotEmpty) {
               final profileImageUrl = profileResponse.data!.profileImage!;
-              PreferencesService.getStorage().write('user_profile_image_url', profileImageUrl);
-              debugPrint('✅ Profile image saved from profile API: $profileImageUrl');
+              PreferencesService.getStorage().write(
+                'user_profile_image_url',
+                profileImageUrl,
+              );
+              debugPrint(
+                '✅ Profile image saved from profile API: $profileImageUrl',
+              );
             }
           } catch (e) {
             debugPrint('⚠️ Could not fetch profile image: $e');
@@ -221,136 +233,108 @@ class LoginController extends GetxController {
 
     try {
       isLoading.value = true;
+      debugPrint('🔄 Starting Google Sign-In via Firebase...');
 
-      debugPrint('🔄 Starting Google Sign-In...');
+      // 0️⃣ Sign out from Google Sign-In first to force account selection
+      final googleSignIn = GoogleSignIn();
+      try {
+        await googleSignIn.signOut();
+        debugPrint('✅ Signed out from Google Sign-In to show account picker');
+      } catch (e) {
+        debugPrint(
+          '⚠️ Error signing out from Google Sign-In (may not be signed in): $e',
+        );
+        // Continue anyway - this is not critical
+      }
 
-      // Step 1: Sign in with Google
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      
+      // 1️⃣ Trigger Google Sign-In (will show account picker)
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+
       if (googleUser == null) {
-        // User cancelled the sign-in
-        debugPrint('⚠️ Google Sign-In cancelled by user');
-        isLoading.value = false;
+        debugPrint('⚠️ Google Sign-In cancelled');
         return;
       }
 
-      debugPrint('✅ Google Sign-In successful: ${googleUser.email}');
+      // 2️⃣ Get Google auth details
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
 
-      // Step 2: Get authentication details from Google
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-      // Step 3: Create Firebase credential (optional, if using Firebase Auth)
+      // 3️⃣ Create Firebase credential
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      // Step 4: Sign in to Firebase (optional, if using Firebase Auth)
-      // Uncomment if you want to use Firebase Auth
-      // final UserCredential firebaseUser = await FirebaseAuth.instance.signInWithCredential(credential);
+      // 4️⃣ SIGN IN TO FIREBASE (THIS WAS MISSING ❗)
+      final UserCredential firebaseUser = await FirebaseAuth.instance
+          .signInWithCredential(credential);
 
-      // Step 5: Send Google credentials to your backend API
+      final user = firebaseUser.user;
+      if (user == null) {
+        throw Exception('Firebase user is null');
+      }
+
+      // 5️⃣ Get Firebase ID Token
+      final firebaseIdToken = await user.getIdToken();
+
+      debugPrint('✅ Firebase sign-in successful');
+      debugPrint('   UID: ${user.uid}');
+      debugPrint('   Email: ${user.email}');
+
+      // 6️⃣ Send ONLY Firebase token to Laravel
       final result = await _authRepository.googleSignIn(
-        idToken: googleAuth.idToken ?? '',
-        accessToken: googleAuth.accessToken ?? '',
-        email: googleUser.email,
-        name: googleUser.displayName ?? '',
-        photoUrl: googleUser.photoUrl,
+        firebaseToken: firebaseIdToken ?? '',
       );
 
       final response = result['response'] as ApiResponse<UserModel>;
       final token = result['token'] as String?;
-      final userId = result['user_id'] as int?;
-      final userName = result['user_name'] as String?;
-      final userEmail = result['email'] as String?;
-
-      if (isClosed) return;
 
       if (response.isSuccess && token != null) {
-        // Save token from root level
         await PreferencesService.saveAuthToken(token);
+        await PreferencesService.saveUserEmail(user.email ?? '');
+        await PreferencesService.saveUserName(user.displayName ?? '');
+        await PreferencesService.saveUserType(
+          selectedRole.value == UserType.coach ? 'coach' : 'customer',
+        );
 
-        // Save email from user object (or fallback to Google email)
-        if (userEmail != null && userEmail.isNotEmpty) {
-          await PreferencesService.saveUserEmail(userEmail);
-        } else {
-          await PreferencesService.saveUserEmail(googleUser.email);
+        if (user.photoURL != null) {
+          PreferencesService.getStorage().write(
+            'user_profile_image_url',
+            user.photoURL,
+          );
         }
 
-        // Save user name
-        if (userName != null && userName.isNotEmpty) {
-          await PreferencesService.saveUserName(userName);
-        } else if (googleUser.displayName != null && googleUser.displayName!.isNotEmpty) {
-          await PreferencesService.saveUserName(googleUser.displayName!);
-        }
-
-        // Save user ID
-        if (userId != null && userId > 0) {
-          await PreferencesService.saveUserId(userId);
-        }
-
-        // Save user type based on selected role
-        final userType = selectedRole.value == UserType.coach ? 'coach' : 'customer';
-        await PreferencesService.saveUserType(userType);
-
-        // Save profile image if available
-        if (googleUser.photoUrl != null && googleUser.photoUrl!.isNotEmpty) {
-          PreferencesService.getStorage().write('user_profile_image_url', googleUser.photoUrl);
-          debugPrint('✅ Profile image saved from Google: ${googleUser.photoUrl}');
-        }
-
-        // Save profile image from API response if available
-        if (response.data != null && response.data!.profileImage != null && response.data!.profileImage!.isNotEmpty) {
-          final profileImageUrl = response.data!.profileImage!;
-          PreferencesService.getStorage().write('user_profile_image_url', profileImageUrl);
-          debugPrint('✅ Profile image saved from API: $profileImageUrl');
-        }
-
-        debugPrint('✅ Google Sign-In completed successfully');
-        debugPrint('   - Token: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
-        debugPrint('   - User ID: $userId');
-        debugPrint('   - User Name: $userName');
-        debugPrint('   - Email: $userEmail');
-
-        // Navigate based on user data (same logic as regular login)
         await _checkUserDataAndNavigate(token);
       } else {
-        // Show error message
-        Get.snackbar(
-          'Google Login Failed',
-          response.message.isNotEmpty ? response.message : 'Failed to authenticate with Google',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-          duration: const Duration(seconds: 4),
-        );
+        throw Exception(response.message);
       }
     } catch (e) {
-      debugPrint('❌ Google Sign-In Error: $e');
-      
-      // Sign out from Google if there was an error
-      try {
-        await _googleSignIn.signOut();
-      } catch (signOutError) {
-        debugPrint('⚠️ Error signing out from Google: $signOutError');
-      }
-
+      debugPrint('❌ Google Login Error: $e');
       if (!isClosed) {
-        Get.snackbar(
-          'Google Login Failed',
-          e.toString().contains('network')
-              ? 'Network error. Please check your connection and try again.'
-              : 'An unexpected error occurred. Please try again.',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-          duration: const Duration(seconds: 4),
-        );
+        try {
+          // Safely show snackbar with error handling
+          final context = Get.context;
+          if (context != null) {
+            Get.snackbar(
+              'Google Login Failed',
+              e.toString().contains('Server error')
+                  ? 'Server error. Please try again later.'
+                  : 'Please try again',
+              snackPosition: SnackPosition.BOTTOM,
+              backgroundColor: Get.theme.colorScheme.error,
+              colorText: Get.theme.colorScheme.onError,
+            );
+          } else {
+            debugPrint('⚠️ Cannot show snackbar - context unavailable');
+          }
+        } catch (snackbarError) {
+          // If snackbar fails (e.g., no overlay), just log the error
+          debugPrint('⚠️ Error showing snackbar: $snackbarError');
+          debugPrint('   Original error: $e');
+        }
       }
     } finally {
-      if (!isClosed) {
-        isLoading.value = false;
-      }
+      if (!isClosed) isLoading.value = false;
     }
   }
 
