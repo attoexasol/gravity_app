@@ -633,7 +633,7 @@ class SettingsPage extends GetView<SettingsController> {
             title: 'Delete Account',
             subtitle: 'Permanently delete your data',
             iconColors: [Colors.red, Colors.red.shade700],
-            onTap: () {},
+            onTap: controller.handleDeleteAccount,
             danger: true,
           ),
         ),

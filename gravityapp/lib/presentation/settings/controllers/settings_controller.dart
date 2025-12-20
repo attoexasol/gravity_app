@@ -15,6 +15,7 @@ import '../../../data/model/health_permissions.dart';
 import '../../../data/model/notification_preferences.dart';
 import '../../../data/repositories/goals_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../core/services/api_service.dart';
 
 /// Sync Log Entry
 class SyncLog {
@@ -94,6 +95,7 @@ class SettingsController extends GetxController {
   final GoalsRepository _goalsRepository = GoalsRepository();
   final AuthRepository _authRepository = AuthRepository();
   final ImagePicker _imagePicker = ImagePicker();
+  final ApiService _apiService = ApiService();
 
   // Notification preferences
   final Rx<NotificationPreferences> notificationPrefs =
@@ -110,6 +112,8 @@ class SettingsController extends GetxController {
   final RxBool isCheckingPermissions = false.obs;
   final RxBool aiFeatures = true.obs;
   final RxBool isLoadingGoals = false.obs;
+  final RxBool isUpdatingNotifications = false.obs;
+  final RxBool isDeletingAccount = false.obs;
 
   // Goals
   final RxMap<String, String> goals = <String, String>{
@@ -1281,6 +1285,7 @@ Future<void> saveProfileImage() async {
   void toggleNotificationPreference(String key, bool value) {
     final current = notificationPrefs.value;
     NotificationPreferences updated;
+    final previousValue = _getPreviousValue(current, key);
 
     switch (key) {
       case 'enabled':
@@ -1306,6 +1311,199 @@ Future<void> saveProfileImage() async {
         break;
       case 'quietHoursEnabled':
         updated = current.copyWith(quietHoursEnabled: value);
+        break;
+      default:
+        updated = current;
+    }
+
+    notificationPrefs.value = updated;
+    _saveNotificationPreferences();
+    
+    // Sync with backend
+    updateNotificationSettings(
+      previousValue: previousValue,
+      revertedKey: key,
+    );
+  }
+
+  /// Get previous value for a notification preference key
+  bool _getPreviousValue(NotificationPreferences prefs, String key) {
+    switch (key) {
+      case 'enabled':
+        return prefs.enabled;
+      case 'hydration':
+        return prefs.hydration;
+      case 'meals':
+        return prefs.meals;
+      case 'sleep':
+        return prefs.sleep;
+      case 'exercise':
+        return prefs.exercise;
+      case 'dailySummary':
+        return prefs.dailySummary;
+      case 'weeklySummary':
+        return prefs.weeklySummary;
+      case 'quietHoursEnabled':
+        return prefs.quietHoursEnabled;
+      default:
+        return false;
+    }
+  }
+
+  /// Update notification settings on backend
+  Future<void> updateNotificationSettings({
+    bool? previousValue,
+    String? revertedKey,
+  }) async {
+    if (isUpdatingNotifications.value) {
+      // Prevent concurrent updates
+      return;
+    }
+
+    try {
+      isUpdatingNotifications.value = true;
+
+      // Get token from storage
+      final token = PreferencesService.getAuthToken();
+      if (token == null || token.isEmpty) {
+        _safeSnackbar(
+          title: 'Error',
+          message: 'Authentication token not found. Please login again.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Get.theme.colorScheme.error,
+          colorText: Get.theme.colorScheme.onError,
+          duration: const Duration(seconds: 4),
+        );
+        
+        // Revert the toggle if we have previous value
+        if (previousValue != null && revertedKey != null) {
+          _revertNotificationPreference(revertedKey, previousValue);
+        }
+        return;
+      }
+
+      // Get current notification preferences
+      final prefs = notificationPrefs.value;
+
+      // Map notification preferences to API format
+      final requestBody = {
+        'token': token,
+        'is_notification_allowed': prefs.enabled ? 1 : 0,
+        'is_hydration_notify': prefs.hydration ? 1 : 0,
+        'is_meal_notify': prefs.meals ? 1 : 0,
+        'is_sleep_notify': prefs.sleep ? 1 : 0,
+        'is_excercise_notify': prefs.exercise ? 1 : 0,
+        'is_ai_daily_sumery_notify': prefs.dailySummary ? 1 : 0,
+        'is_ai_weekly_sumery_notify': prefs.weeklySummary ? 1 : 0,
+      };
+
+      debugPrint('🔄 Updating notification settings...');
+      debugPrint('📦 Request body: ${jsonEncode(requestBody)}');
+
+      // Make POST request to API
+      final response = await _apiService.post(
+        '/update_notification',
+        body: requestBody,
+      );
+
+      // Check response
+      final status = response['status'] as bool? ?? false;
+      final message = response['message'] as String? ?? '';
+
+      if (status) {
+        // Success - update notification preferences with response data if available
+        final data = response['data'] as Map<String, dynamic>?;
+        if (data != null) {
+          notificationPrefs.value = NotificationPreferences(
+            enabled: (data['is_notification_allowed'] as int? ?? 0) == 1,
+            hydration: (data['is_hydration_notify'] as int? ?? 0) == 1,
+            meals: (data['is_meal_notify'] as int? ?? 0) == 1,
+            sleep: (data['is_sleep_notify'] as int? ?? 0) == 1,
+            exercise: (data['is_excercise_notify'] as int? ?? 0) == 1,
+            dailySummary: (data['is_ai_daily_sumery_notify'] as int? ?? 0) == 1,
+            weeklySummary: (data['is_ai_weekly_sumery_notify'] as int? ?? 0) == 1,
+            quietHoursEnabled: notificationPrefs.value.quietHoursEnabled,
+            quietHoursStart: notificationPrefs.value.quietHoursStart,
+            quietHoursEnd: notificationPrefs.value.quietHoursEnd,
+          );
+          _saveNotificationPreferences();
+        }
+
+        // Show success snackbar
+        _safeSnackbar(
+          title: 'Success',
+          message: message.isNotEmpty
+              ? message
+              : 'Notification settings updated successfully.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFF00B8A9).withOpacity(0.8),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+
+        debugPrint('✅ Notification settings updated successfully');
+      } else {
+        // API returned error
+        throw Exception(message.isNotEmpty ? message : 'Failed to update notification settings');
+      }
+    } catch (e) {
+      debugPrint('❌ Error updating notification settings: $e');
+
+      // Revert the toggle state
+      if (previousValue != null && revertedKey != null) {
+        _revertNotificationPreference(revertedKey, previousValue);
+      }
+
+      // Show error snackbar
+      String errorMessage = 'Failed to update notification settings. Please try again.';
+      if (e.toString().contains('token') || e.toString().contains('auth')) {
+        errorMessage = 'Authentication error. Please login again.';
+      } else if (e.toString().contains('network') || e.toString().contains('connection')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      }
+
+      _safeSnackbar(
+        title: 'Error',
+        message: errorMessage,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Get.theme.colorScheme.error,
+        colorText: Get.theme.colorScheme.onError,
+        duration: const Duration(seconds: 4),
+      );
+    } finally {
+      isUpdatingNotifications.value = false;
+    }
+  }
+
+  /// Revert notification preference to previous value
+  void _revertNotificationPreference(String key, bool previousValue) {
+    final current = notificationPrefs.value;
+    NotificationPreferences updated;
+
+    switch (key) {
+      case 'enabled':
+        updated = current.copyWith(enabled: previousValue);
+        break;
+      case 'hydration':
+        updated = current.copyWith(hydration: previousValue);
+        break;
+      case 'meals':
+        updated = current.copyWith(meals: previousValue);
+        break;
+      case 'sleep':
+        updated = current.copyWith(sleep: previousValue);
+        break;
+      case 'exercise':
+        updated = current.copyWith(exercise: previousValue);
+        break;
+      case 'dailySummary':
+        updated = current.copyWith(dailySummary: previousValue);
+        break;
+      case 'weeklySummary':
+        updated = current.copyWith(weeklySummary: previousValue);
+        break;
+      case 'quietHoursEnabled':
+        updated = current.copyWith(quietHoursEnabled: previousValue);
         break;
       default:
         updated = current;
@@ -1670,5 +1868,131 @@ Future<void> saveProfileImage() async {
     } catch (e) {
       debugPrint('⚠️ Get.back() also failed: $e - Navigation may have already occurred');
     }
+  }
+
+  /// Handle delete account - calls API, clears all storage data and navigates to login
+  Future<void> handleDeleteAccount() async {
+    if (isDeletingAccount.value) {
+      return;
+    }
+
+    final confirmed = await Get.dialog<bool>(
+      _buildDeleteAccountDialog(),
+      barrierDismissible: true,
+    );
+
+    if (confirmed == true) {
+      try {
+        isDeletingAccount.value = true;
+
+        // Get token from storage
+        final token = PreferencesService.getAuthToken();
+        if (token == null || token.isEmpty) {
+          _safeSnackbar(
+            title: 'Error',
+            message: 'Authentication token not found. Please login again.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Get.theme.colorScheme.error,
+            colorText: Get.theme.colorScheme.onError,
+            duration: const Duration(seconds: 4),
+          );
+          return;
+        }
+
+        // Prepare request body
+        final requestBody = {
+          'token': token,
+        };
+
+        debugPrint('🔄 Deleting user account...');
+        debugPrint('📦 Request body: ${jsonEncode(requestBody)}');
+
+        // Make POST request to API
+        final response = await _apiService.post(
+          '/user/delete',
+          body: requestBody,
+        );
+
+        // Check response
+        final status = response['status'] as bool? ?? false;
+        final message = response['message'] as String? ?? '';
+
+        if (status) {
+          // Success - clear all local storage
+          await PreferencesService.clearAll();
+
+          // Show success snackbar
+          _safeSnackbar(
+            title: 'Success',
+            message: message.isNotEmpty
+                ? message
+                : 'User deleted successfully',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: const Color(0xFF00B8A9).withOpacity(0.8),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2),
+          );
+
+          debugPrint('✅ User account deleted successfully');
+
+          // Navigate to login screen and clear navigation stack
+          await Future.delayed(const Duration(milliseconds: 500));
+          Get.offAllNamed('/login');
+        } else {
+          // API returned error
+          throw Exception(
+            message.isNotEmpty ? message : 'Failed to delete account',
+          );
+        }
+      } catch (e) {
+        debugPrint('❌ Delete Account Error: $e');
+
+        // Show error snackbar
+        String errorMessage = 'Failed to delete account. Please try again.';
+        if (e.toString().contains('token') || e.toString().contains('auth')) {
+          errorMessage = 'Authentication error. Please login again.';
+        } else if (e.toString().contains('network') ||
+            e.toString().contains('connection')) {
+          errorMessage =
+              'Network error. Please check your connection and try again.';
+        }
+
+        _safeSnackbar(
+          title: 'Error',
+          message: errorMessage,
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Get.theme.colorScheme.error,
+          colorText: Get.theme.colorScheme.onError,
+          duration: const Duration(seconds: 4),
+        );
+      } finally {
+        isDeletingAccount.value = false;
+      }
+    }
+  }
+
+  /// Build delete account confirmation dialog
+  Widget _buildDeleteAccountDialog() {
+    return AlertDialog(
+      title: const Text('Delete Account'),
+      content: const Text(
+        'Are you sure you want to delete your account? This action is permanent and cannot be undone. All your data will be permanently deleted.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            _safeBack(result: false);
+          },
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            _safeBack(result: true);
+          },
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
+          child: const Text('Delete'),
+        ),
+      ],
+    );
   }
 }
