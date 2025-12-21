@@ -12,8 +12,10 @@ class DashboardView extends GetView<DashboardController> {
 
   @override
   Widget build(BuildContext context) {
-    // Instantiate the controller if it hasn't been already
-    Get.put(DashboardController());
+    // Instantiate the controller if it hasn't been already (avoid multiple instances)
+    if (!Get.isRegistered<DashboardController>()) {
+      Get.put(DashboardController(), permanent: true);
+    }
 
     return SingleChildScrollView(
       padding: EdgeInsets.only(

@@ -1,14 +1,17 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:get/get.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../../core/services/health_sync_service.dart';
 import '../../../core/services/preferences_service.dart';
-
-
-
+import '../../../data/repositories/user_gravity_repository.dart';
+import '../../../data/model/user_gravity_entry.dart';
+import '../../../data/model/api_response.dart';
 
 class DashboardController extends GetxController {
   final HealthSyncService _healthService = HealthSyncService();
+  final UserGravityRepository _gravityRepository = UserGravityRepository();
   
   // Expose healthService for sync_status_section
   HealthSyncService get healthService => _healthService;
@@ -19,6 +22,15 @@ class DashboardController extends GetxController {
   final waterIntake = 0.0.obs; // in Liters - will be updated from HealthKit
   final weight = 0.0.obs; // in kg - will be updated from HealthKit
   final previousWeight = 0.0.obs; // in kg
+
+  // Today's entry from DB
+  final todayEntry = Rx<UserGravityEntry?>(null);
+  final todayEntryId = Rx<int?>(null);
+  final isDbLoaded = false.obs; // Track if DB load was attempted
+
+  // Throttle for saving to prevent multiple rapid API calls
+  DateTime? _lastSaveTime;
+  bool _isSavingGravity = false;
   
   // Goals loaded from storage/API
   final weightGoal = 75.0.obs; // in kg
@@ -42,6 +54,9 @@ class DashboardController extends GetxController {
   void onInit() {
     super.onInit();
     _loadGoals(); // Load goals first to initialize weight
+    
+    // Load today's entry from DB
+    loadTodayFromDb();
     
     // Subscribe to health service updates BEFORE initializing
     _healthService.subscribe((metrics) {
@@ -81,6 +96,20 @@ class DashboardController extends GetxController {
       if (metrics.waterIntake != null) {
         waterIntake.value = metrics.waterIntake!;
       }
+
+      // When sync finishes successfully, save to DB
+      if (metrics.syncStatus == SyncStatus.success) {
+        // Determine data source based on platform
+        final dataSource = _getDataSourceFromPlatform(metrics.platform);
+        if (dataSource != null) {
+          // Debounce: only save if last save was more than 3 seconds ago
+          final now = DateTime.now();
+          if (_lastSaveTime == null || 
+              now.difference(_lastSaveTime!).inSeconds >= 3) {
+            upsertTodayGravity(dataSource: dataSource);
+          }
+        }
+      }
     });
     
     // Initialize HealthKit and subscribe to updates
@@ -89,6 +118,160 @@ class DashboardController extends GetxController {
         _healthService.syncHealthData();
       }
     });
+  }
+
+  /// Get today's date string in yyyy-MM-dd format
+  String get _todayString {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Get data source string from platform
+  String? _getDataSourceFromPlatform(HealthPlatform platform) {
+    if (kIsWeb) return null;
+    if (Platform.isIOS) return 'apple_health';
+    if (Platform.isAndroid) return 'google_fit';
+    return null;
+  }
+
+  /// Load today's entry from database
+  Future<void> loadTodayFromDb() async {
+    try {
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        Get.printError(info: 'API token not found, cannot load today\'s entry');
+        isDbLoaded.value = true; // Mark as attempted
+        return;
+      }
+
+      final response = await _gravityRepository.getAllUserGravity(apiToken: apiToken);
+      isDbLoaded.value = true;
+
+      if (response.isSuccess && response.data != null) {
+        final todayStr = _todayString;
+        final todayEntryFound = response.data!.firstWhere(
+          (entry) => entry.date == todayStr,
+          orElse: () => UserGravityEntry(date: ''),
+        );
+
+        if (todayEntryFound.date.isNotEmpty) {
+          todayEntry.value = todayEntryFound;
+          todayEntryId.value = todayEntryFound.id;
+
+          // Populate UI values from DB entry (DB is source of truth when available)
+          final oldMetrics = healthMetrics.value;
+          healthMetrics.value = HealthMetrics(
+            steps: todayEntryFound.steps ?? oldMetrics.steps,
+            sleepHours: todayEntryFound.sleepHours ?? oldMetrics.sleepHours,
+            syncStatus: oldMetrics.syncStatus, // Preserve sync status
+            lastSyncTime: oldMetrics.lastSyncTime, // Preserve last sync time
+            platform: oldMetrics.platform, // Preserve platform
+            weight: todayEntryFound.weight ?? oldMetrics.weight,
+            waterIntake: todayEntryFound.hydrationLiters ?? oldMetrics.waterIntake,
+          );
+          
+          // Update weight separately if available
+          if (todayEntryFound.weight != null && todayEntryFound.weight! > 0) {
+            weight.value = todayEntryFound.weight!;
+          }
+          
+          // Update water intake separately if available
+          if (todayEntryFound.hydrationLiters != null) {
+            waterIntake.value = todayEntryFound.hydrationLiters!;
+          }
+
+          Get.printInfo(info: '✅ Loaded today\'s entry from DB: ${todayEntryFound.id}');
+        } else {
+          Get.printInfo(info: 'ℹ️ No entry found for today in DB');
+        }
+      } else {
+        Get.printError(info: 'Failed to load entries: ${response.message}');
+      }
+    } catch (e) {
+      Get.printError(info: 'Error loading today\'s entry: $e');
+      isDbLoaded.value = true; // Mark as attempted even on error
+    }
+  }
+
+  /// Upsert (create or update) today's gravity entry
+  Future<void> upsertTodayGravity({required String dataSource}) async {
+    // Prevent multiple simultaneous saves
+    if (_isSavingGravity) {
+      Get.printInfo(info: '⏳ Save already in progress, skipping...');
+      return;
+    }
+
+    try {
+      _isSavingGravity = true;
+      _lastSaveTime = DateTime.now();
+
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        Get.snackbar(
+          'Session Expired',
+          'Please login again',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+
+      final todayStr = _todayString;
+      final currentWeight = weight.value > 0 ? weight.value : null;
+      final currentSteps = healthMetrics.value.steps;
+      final currentSleepHours = healthMetrics.value.sleepHours;
+      final currentHydration = waterIntake.value > 0 ? waterIntake.value : null;
+
+      ApiResponse<UserGravityEntry> response;
+
+      if (todayEntryId.value != null) {
+        // Update existing entry
+        response = await _gravityRepository.updateUserGravity(
+          id: todayEntryId.value!,
+          apiToken: apiToken,
+          weight: currentWeight,
+          steps: currentSteps > 0 ? currentSteps : null,
+          sleepHours: currentSleepHours > 0 ? currentSleepHours : null,
+          hydrationLiters: currentHydration,
+          nutration: 'good',
+          dataSource: dataSource,
+          date: todayStr,
+        );
+      } else {
+        // Create new entry
+        response = await _gravityRepository.createUserGravity(
+          apiToken: apiToken,
+          weight: currentWeight,
+          steps: currentSteps > 0 ? currentSteps : null,
+          sleepHours: currentSleepHours > 0 ? currentSleepHours : null,
+          hydrationLiters: currentHydration,
+          nutration: 'good',
+          dataSource: dataSource,
+          date: todayStr,
+        );
+      }
+
+      if (response.isSuccess && response.data != null) {
+        todayEntry.value = response.data;
+        todayEntryId.value = response.data!.id;
+        Get.printInfo(info: '✅ Saved today\'s gravity entry to DB');
+      } else {
+        Get.snackbar(
+          'Save Failed',
+          response.message,
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        Get.printError(info: 'Failed to save: ${response.message}');
+      }
+    } catch (e) {
+      Get.snackbar(
+        'Save Failed',
+        'An unexpected error occurred',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      Get.printError(info: 'Error saving gravity entry: $e');
+    } finally {
+      _isSavingGravity = false;
+    }
   }
   
   /// Load goals from storage
@@ -149,6 +332,8 @@ class DashboardController extends GetxController {
   Future<void> handleManualSync() async {
     isSyncing.value = true;
     await _healthService.syncHealthData();
+    // Note: upsertTodayGravity will be called automatically when syncStatus becomes success
+    // via the subscription in onInit
   }
 
   // --- Manual Entry Handlers (CORRECTED AGAIN) ---
@@ -156,16 +341,20 @@ class DashboardController extends GetxController {
   void handleWeightSubmit() {
     final value = double.tryParse(weightInput.value);
     if (value != null && value > 0 && value < 300) {
+      // Update local state immediately (optimistic update)
       weight.value = value;
       weightInput.value = '';
       showWeightModal.value = false;
+      
+      // Save to DB
+      upsertTodayGravity(dataSource: 'manual');
     }
   }
 
   void handleStepsSubmit() {
     final value = int.tryParse(stepsInput.value);
     if (value != null && value >= 0) {
-      // CORRECT: Assign a new HealthMetrics object directly to .value
+      // Update local state immediately (optimistic update)
       final oldMetrics = healthMetrics.value;
       healthMetrics.value = HealthMetrics(
         steps: value, // New value
@@ -178,13 +367,16 @@ class DashboardController extends GetxController {
       );
       stepsInput.value = '';
       showStepsModal.value = false;
+      
+      // Save to DB
+      upsertTodayGravity(dataSource: 'manual');
     }
   }
 
   void handleSleepSubmit() {
     final value = double.tryParse(sleepInput.value);
     if (value != null && value >= 0 && value <= 24) {
-      // CORRECT: Assign a new HealthMetrics object directly to .value
+      // Update local state immediately (optimistic update)
       final oldMetrics = healthMetrics.value;
       healthMetrics.value = HealthMetrics(
         steps: oldMetrics.steps, // Old value
@@ -197,15 +389,22 @@ class DashboardController extends GetxController {
       );
       sleepInput.value = '';
       showSleepModal.value = false;
+      
+      // Save to DB
+      upsertTodayGravity(dataSource: 'manual');
     }
   }
 
   void handleHydrationSubmit() {
     final value = double.tryParse(hydrationInput.value);
     if (value != null && value >= 0) {
+      // Update local state immediately (optimistic update)
       waterIntake.value = value;
       hydrationInput.value = '';
       showHydrationModal.value = false;
+      
+      // Save to DB
+      upsertTodayGravity(dataSource: 'manual');
     }
   }
 

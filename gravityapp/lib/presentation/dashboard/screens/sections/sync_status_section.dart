@@ -190,7 +190,12 @@ class SyncStatusSection extends StatelessWidget {
                                   // If never initialized, try to initialize
                                   if (healthMetrics.syncStatus ==
                                       SyncStatus.never) {
-                                    await controller.healthService.initialize();
+                                    final success = await controller.healthService.initialize();
+                                    if (success) {
+                                      // Initialize() may have already called syncHealthData(),
+                                      // but ensure it's called if not
+                                      await controller.healthService.syncHealthData();
+                                    }
                                   } else {
                                     controller.handleManualSync();
                                   }
