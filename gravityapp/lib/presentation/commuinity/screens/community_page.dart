@@ -645,13 +645,42 @@ class CommunityPage extends GetView<CommunityController> {
               ),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 20.r,
-                    backgroundImage: const CachedNetworkImageProvider(
-                      'https://i.pravatar.cc/150?img=1',
-                    ),
-                    backgroundColor: AppColors.muted,
-                  ),
+                  Obx(() {
+                    final profileImage = controller.currentUserProfileImage;
+                    ImageProvider? imageProvider;
+                    
+                    if (profileImage.isNotEmpty) {
+                      // Check if it's a local file path
+                      if (profileImage.startsWith('/') || 
+                          profileImage.contains('\\') ||
+                          profileImage.startsWith('file://')) {
+                        try {
+                          final file = File(profileImage.replaceFirst('file://', ''));
+                          if (file.existsSync()) {
+                            imageProvider = FileImage(file);
+                          }
+                        } catch (e) {
+                          // Ignore file errors, will show default icon
+                        }
+                      } else {
+                        // Network URL
+                        imageProvider = CachedNetworkImageProvider(profileImage);
+                      }
+                    }
+                    
+                    return CircleAvatar(
+                      radius: 20.r,
+                      backgroundImage: imageProvider,
+                      backgroundColor: AppColors.muted,
+                      child: imageProvider == null
+                          ? Icon(
+                              Icons.person,
+                              size: 20.sp,
+                              color: const Color(0xFF0A2342).withOpacity(0.5),
+                            )
+                          : null,
+                    );
+                  }),
                   SizedBox(width: 12.w),
                   Expanded(
                     child: TextField(
@@ -1253,13 +1282,42 @@ class CommunityPage extends GetView<CommunityController> {
                       child: Row(
                         children: [
                           // Avatar - Match React: w-10 h-10 = 40px
-                          CircleAvatar(
-                            radius: 20.r, // w-10 h-10 = 40px diameter
-                            backgroundImage: const CachedNetworkImageProvider(
-                              'https://i.pravatar.cc/150?img=1',
-                            ),
-                            backgroundColor: AppColors.muted,
-                          ),
+                          Obx(() {
+                            final profileImage = controller.currentUserProfileImage;
+                            ImageProvider? imageProvider;
+                            
+                            if (profileImage.isNotEmpty) {
+                              // Check if it's a local file path
+                              if (profileImage.startsWith('/') || 
+                                  profileImage.contains('\\') ||
+                                  profileImage.startsWith('file://')) {
+                                try {
+                                  final file = File(profileImage.replaceFirst('file://', ''));
+                                  if (file.existsSync()) {
+                                    imageProvider = FileImage(file);
+                                  }
+                                } catch (e) {
+                                  // Ignore file errors, will show default icon
+                                }
+                              } else {
+                                // Network URL
+                                imageProvider = CachedNetworkImageProvider(profileImage);
+                              }
+                            }
+                            
+                            return CircleAvatar(
+                              radius: 20.r, // w-10 h-10 = 40px diameter
+                              backgroundImage: imageProvider,
+                              backgroundColor: AppColors.muted,
+                              child: imageProvider == null
+                                  ? Icon(
+                                      Icons.person,
+                                      size: 20.sp,
+                                      color: const Color(0xFF0A2342).withOpacity(0.5),
+                                    )
+                                  : null,
+                            );
+                          }),
                           SizedBox(width: 12.w), // gap-3 = 12px
                           Expanded(
                             child: TextField(
@@ -1620,13 +1678,42 @@ class CommunityPage extends GetView<CommunityController> {
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          radius: 12.r,
-                          backgroundImage: const CachedNetworkImageProvider(
-                            'https://i.pravatar.cc/150?img=1',
-                          ),
-                          backgroundColor: AppColors.muted,
-                        ),
+                        Obx(() {
+                          final profileImage = controller.currentUserProfileImage;
+                          ImageProvider? imageProvider;
+                          
+                          if (profileImage.isNotEmpty) {
+                            // Check if it's a local file path
+                            if (profileImage.startsWith('/') || 
+                                profileImage.contains('\\') ||
+                                profileImage.startsWith('file://')) {
+                              try {
+                                final file = File(profileImage.replaceFirst('file://', ''));
+                                if (file.existsSync()) {
+                                  imageProvider = FileImage(file);
+                                }
+                              } catch (e) {
+                                // Ignore file errors, will show default icon
+                              }
+                            } else {
+                              // Network URL
+                              imageProvider = CachedNetworkImageProvider(profileImage);
+                            }
+                          }
+                          
+                          return CircleAvatar(
+                            radius: 12.r,
+                            backgroundImage: imageProvider,
+                            backgroundColor: AppColors.muted,
+                            child: imageProvider == null
+                                ? Icon(
+                                    Icons.person,
+                                    size: 12.sp,
+                                    color: const Color(0xFF0A2342).withOpacity(0.5),
+                                  )
+                                : null,
+                          );
+                        }),
                         SizedBox(width: 8.w),
                         Flexible(
                           child: Text(

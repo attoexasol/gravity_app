@@ -23,19 +23,32 @@ class CreatePostModal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      child: SafeArea(
-        child: Column(
-          children: [
-            _Header(onClose: _closeModal),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 20.r,
+            offset: Offset(0, -4.h),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: SafeArea(
+          child: Column(
+            children: [
+              _Header(onClose: _closeModal),
               _UserInfo(
                 controller: controller,
                 buildUserAvatar: buildUserAvatar,
               ),
               _PostBody(controller: controller),
               _PostButton(controller: controller),
-          ],
+            ],
+          ),
         ),
       )
           .animate()
@@ -68,6 +81,12 @@ class _Header extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(24.r),
       decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0A2342), Color(0xFF00B8A9)],
+        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)),
         border: Border(
           bottom: BorderSide(
             color: const Color(0xFF0A2342).withOpacity(0.1),
@@ -80,7 +99,7 @@ class _Header extends StatelessWidget {
           Text(
             'Create Post',
             style: ResponsiveTextStyles.textXl.copyWith(
-              color: const Color(0xFF0A2342),
+              color: Colors.white,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -90,13 +109,13 @@ class _Header extends StatelessWidget {
               width: 40.w,
               height: 40.h,
               decoration: BoxDecoration(
-                color: const Color(0xFF0A2342).withOpacity(0.1),
+                color: Colors.white.withOpacity(0.2),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.close,
                 size: 24.sp,
-                color: const Color(0xFF0A2342),
+                color: Colors.white,
               ),
             ),
           ),

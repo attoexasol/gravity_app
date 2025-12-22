@@ -185,45 +185,32 @@ class CommunityController extends GetxController {
     // Set the flag first
     showCreatePost.value = false;
     
-    // Don't try to close snackbars when closing dialogs - they're on different layers
-    // and trying to close snackbars can cause LateInitializationError if the controller
-    // isn't initialized. The dialog closing is the priority.
-    
-    // Try multiple methods to ensure dialog closes
+    // Use Navigator.pop() first to avoid Get.back()'s internal snackbar closing logic
+    // which can cause LateInitializationError on subsequent calls
     bool dialogClosed = false;
     
-    // Method 1: Try Get.back() if dialog is open
+    // Method 1: Try Navigator.pop() first (more reliable, doesn't interfere with snackbars)
     try {
-      if (Get.isDialogOpen == true) {
-        Get.back();
+      final context = Get.context;
+      if (context != null && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
         dialogClosed = true;
-        debugPrint('✅ Dialog closed via Get.back()');
+        debugPrint('✅ Dialog closed via Navigator.pop()');
       }
     } catch (e) {
-      debugPrint('⚠️ Get.back() failed: $e');
+      debugPrint('⚠️ Navigator.pop() failed: $e');
     }
     
-    // Method 2: Try Navigator.pop() as fallback (always try, even if Get.isDialogOpen is false)
+    // Method 2: Fallback to Get.back() only if Navigator.pop() didn't work
     if (!dialogClosed) {
       try {
-        final context = Get.context;
-        if (context != null && Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
+        if (Get.isDialogOpen == true) {
+          Get.back();
           dialogClosed = true;
-          debugPrint('✅ Dialog closed via Navigator.pop()');
+          debugPrint('✅ Dialog closed via Get.back()');
         }
       } catch (e) {
-        debugPrint('⚠️ Navigator.pop() failed: $e');
-      }
-    }
-    
-    // Method 3: Force close by trying Get.back() again without checking isDialogOpen
-    if (!dialogClosed) {
-      try {
-        Get.back();
-        debugPrint('✅ Dialog closed via Get.back() (force attempt)');
-      } catch (e) {
-        debugPrint('⚠️ Force Get.back() also failed: $e - Dialog may already be closed');
+        debugPrint('⚠️ Get.back() failed: $e');
       }
     }
   }
@@ -455,74 +442,76 @@ class CommunityController extends GetxController {
     isPickingImage.value = false;
     
     Get.bottomSheet(
-      Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFF0A2342).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(2),
-              ),
+      Builder(
+        builder: (BuildContext bottomSheetContext) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'Select Image Source',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0A2342),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                _buildImageSourceOption(
-                  icon: Icons.photo_library_outlined,
-                  label: 'Gallery',
-                  onTap: () {
-                    // Close bottom sheet first, then pick image
-                    Get.back();
-                    // Small delay to ensure bottom sheet is fully closed
-                    Future.delayed(const Duration(milliseconds: 100), () {
-                      pickImageFromGallery();
-                    });
-                  },
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A2342).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-                _buildImageSourceOption(
-                  icon: Icons.camera_alt_outlined,
-                  label: 'Camera',
-                  onTap: () {
-                    // Close bottom sheet first, then pick image
-                    Get.back();
-                    // Small delay to ensure bottom sheet is fully closed
-                    Future.delayed(const Duration(milliseconds: 100), () {
-                      pickImageFromCamera();
-                    });
-                  },
+                const SizedBox(height: 24),
+                const Text(
+                  'Select Image Source',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0A2342),
+                  ),
                 ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildImageSourceOption(
+                      icon: Icons.photo_library_outlined,
+                      label: 'Gallery',
+                      onTap: () {
+                        // Close bottom sheet using its own context
+                        Navigator.of(bottomSheetContext).pop();
+                        // Small delay to ensure bottom sheet is fully closed
+                        Future.delayed(const Duration(milliseconds: 200), () {
+                          pickImageFromGallery();
+                        });
+                      },
+                    ),
+                    _buildImageSourceOption(
+                      icon: Icons.camera_alt_outlined,
+                      label: 'Camera',
+                      onTap: () {
+                        // Close bottom sheet using its own context
+                        Navigator.of(bottomSheetContext).pop();
+                        // Small delay to ensure bottom sheet is fully closed
+                        Future.delayed(const Duration(milliseconds: 200), () {
+                          pickImageFromCamera();
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
               ],
             ),
-            const SizedBox(height: 24),
-          ],
-        ),
+          );
+        },
       ),
       // Ensure bottom sheet can be dismissed and state is reset
       isDismissible: true,
       enableDrag: true,
     ).then((_) {
       // Reset picking state if bottom sheet is dismissed without selection
-      if (!isPickingImage.value) {
-        isPickingImage.value = false;
-      }
+      isPickingImage.value = false;
     });
   }
 
@@ -2179,16 +2168,45 @@ class CommunityController extends GetxController {
         closeCreatePostDialog();
         
         // Show success message with safe context
-        Future.delayed(const Duration(milliseconds: 300), () {
+        // Use a longer delay to ensure dialog is fully closed and context is ready
+        Future.delayed(const Duration(milliseconds: 500), () {
           try {
-            Get.snackbar(
-              'Success',
-              response.message.isNotEmpty ? response.message : 'Post created successfully',
-              snackPosition: SnackPosition.BOTTOM,
-              backgroundColor: const Color(0xFF00B8A9),
-              colorText: const Color(0xFFFFFFFF),
-              duration: const Duration(seconds: 2),
-            );
+            final context = Get.context;
+            if (context != null) {
+              // Check if overlay is available before showing snackbar
+              try {
+                Overlay.of(context);
+                Get.snackbar(
+                  'Success',
+                  response.message.isNotEmpty ? response.message : 'Post created successfully',
+                  snackPosition: SnackPosition.BOTTOM,
+                  backgroundColor: const Color(0xFF00B8A9),
+                  colorText: const Color(0xFFFFFFFF),
+                  duration: const Duration(seconds: 2),
+                );
+                debugPrint('✅ Success snackbar shown');
+              } catch (overlayError) {
+                debugPrint('⚠️ Overlay not available for snackbar: $overlayError');
+                // Retry after a bit more delay
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  try {
+                    Get.snackbar(
+                      'Success',
+                      response.message.isNotEmpty ? response.message : 'Post created successfully',
+                      snackPosition: SnackPosition.BOTTOM,
+                      backgroundColor: const Color(0xFF00B8A9),
+                      colorText: const Color(0xFFFFFFFF),
+                      duration: const Duration(seconds: 2),
+                    );
+                    debugPrint('✅ Success snackbar shown (retry)');
+                  } catch (e) {
+                    debugPrint('⚠️ Error showing success snackbar (retry): $e');
+                  }
+                });
+              }
+            } else {
+              debugPrint('⚠️ Cannot show snackbar - context unavailable');
+            }
           } catch (e) {
             debugPrint('⚠️ Error showing success snackbar: $e');
           }
@@ -2357,57 +2375,69 @@ class CommunityController extends GetxController {
   /// Show image source picker dialog for Edit Post
   void showImageSourcePickerForEdit() {
     Get.bottomSheet(
-      Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFF0A2342).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(2),
-              ),
+      Builder(
+        builder: (BuildContext bottomSheetContext) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'Select Image Source',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0A2342),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                _buildImageSourceOption(
-                  icon: Icons.photo_library_outlined,
-                  label: 'Gallery',
-                  onTap: () {
-                    Get.back();
-                    pickImageFromGalleryForEdit();
-                  },
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A2342).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-                _buildImageSourceOption(
-                  icon: Icons.camera_alt_outlined,
-                  label: 'Camera',
-                  onTap: () {
-                    Get.back();
-                    pickImageFromCameraForEdit();
-                  },
+                const SizedBox(height: 24),
+                const Text(
+                  'Select Image Source',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0A2342),
+                  ),
                 ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildImageSourceOption(
+                      icon: Icons.photo_library_outlined,
+                      label: 'Gallery',
+                      onTap: () {
+                        // Close bottom sheet using its own context
+                        Navigator.of(bottomSheetContext).pop();
+                        // Small delay to ensure bottom sheet is fully closed
+                        Future.delayed(const Duration(milliseconds: 200), () {
+                          pickImageFromGalleryForEdit();
+                        });
+                      },
+                    ),
+                    _buildImageSourceOption(
+                      icon: Icons.camera_alt_outlined,
+                      label: 'Camera',
+                      onTap: () {
+                        // Close bottom sheet using its own context
+                        Navigator.of(bottomSheetContext).pop();
+                        // Small delay to ensure bottom sheet is fully closed
+                        Future.delayed(const Duration(milliseconds: 200), () {
+                          pickImageFromCameraForEdit();
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
               ],
             ),
-            const SizedBox(height: 24),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
