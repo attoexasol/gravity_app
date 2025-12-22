@@ -22,22 +22,145 @@ class CommunityPage extends GetView<CommunityController> {
 
     return Stack(
       children: [
-        // Main feed - Match React: px-6 py-6 space-y-4
-        Obx(() {
-          // Always show posts, never show community cards
-          return ListView.builder(
-            padding: EdgeInsets.only(
-              left: 24.w,  // px-6 = 24px
-              right: 24.w, // px-6 = 24px
-              top: 24.h,   // py-6 = 24px
-              bottom: 100.h, // Prevent overflow with bottom nav
-            ),
-            itemCount: controller.posts.length,
-            itemBuilder: (context, index) {
-              return _buildPostCard(controller.posts[index], index);
-            },
-          );
-        }),
+        // Main feed with pull-to-refresh - Match React: px-6 py-6 space-y-4
+        RefreshIndicator(
+          onRefresh: controller.refreshPosts,
+          color: const Color(0xFF00B8A9),
+          backgroundColor: Colors.white,
+          child: Obx(() {
+            // Show loading indicator while fetching posts
+            if (controller.isLoadingPosts.value && controller.posts.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const CircularProgressIndicator(
+                      color: Color(0xFF00B8A9),
+                      strokeWidth: 3,
+                    ),
+                    SizedBox(height: 16.h),
+                    Text(
+                      'Loading posts...',
+                      style: ResponsiveTextStyles.textBase.copyWith(
+                        color: const Color(0xFF0A2342).withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            // Show error message if posts failed to load
+            if (controller.postsError.value.isNotEmpty && controller.posts.isEmpty) {
+              // Wrap in ListView to enable pull-to-refresh even on error
+              return ListView(
+                padding: EdgeInsets.all(40.r),
+                children: [
+                  SizedBox(height: 200.h), // Center vertically
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 64.sp,
+                        color: Colors.red.withOpacity(0.6),
+                      ),
+                      SizedBox(height: 16.h),
+                      Text(
+                        controller.postsError.value,
+                        style: ResponsiveTextStyles.textBase.copyWith(
+                          color: const Color(0xFF0A2342).withOpacity(0.6),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: 24.h),
+                      ElevatedButton(
+                        onPressed: () => controller.onReady(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00B8A9),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 24.w,
+                            vertical: 12.h,
+                          ),
+                        ),
+                        child: Text(
+                          'Retry',
+                          style: ResponsiveTextStyles.textBase.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 16.h),
+                      Text(
+                        'Or pull down to refresh',
+                        style: ResponsiveTextStyles.textSm.copyWith(
+                          color: const Color(0xFF0A2342).withOpacity(0.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            }
+
+            // Show empty state if no posts
+            if (controller.posts.isEmpty) {
+              // Wrap in ListView to enable pull-to-refresh even when empty
+              return ListView(
+                padding: EdgeInsets.all(40.r),
+                children: [
+                  SizedBox(height: 200.h), // Center vertically
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.forum_outlined,
+                        size: 64.sp,
+                        color: const Color(0xFF0A2342).withOpacity(0.3),
+                      ),
+                      SizedBox(height: 16.h),
+                      Text(
+                        'No posts yet',
+                        style: ResponsiveTextStyles.textXl.copyWith(
+                          color: const Color(0xFF0A2342),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 8.h),
+                      Text(
+                        'Be the first to share something!',
+                        style: ResponsiveTextStyles.textBase.copyWith(
+                          color: const Color(0xFF0A2342).withOpacity(0.6),
+                        ),
+                      ),
+                      SizedBox(height: 16.h),
+                      Text(
+                        'Pull down to refresh',
+                        style: ResponsiveTextStyles.textSm.copyWith(
+                          color: const Color(0xFF0A2342).withOpacity(0.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            }
+
+            // Show posts list
+            return ListView.builder(
+              padding: EdgeInsets.only(
+                left: 24.w,  // px-6 = 24px
+                right: 24.w, // px-6 = 24px
+                top: 24.h,   // py-6 = 24px
+                bottom: 100.h, // Prevent overflow with bottom nav
+              ),
+              itemCount: controller.posts.length,
+              itemBuilder: (context, index) {
+                return _buildPostCard(controller.posts[index], index);
+              },
+            );
+          }),
+        ),
 
         // Floating Action Button - Create Post
         Positioned(

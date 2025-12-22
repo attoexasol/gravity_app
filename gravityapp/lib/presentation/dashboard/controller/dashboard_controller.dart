@@ -129,7 +129,7 @@ class DashboardController extends GetxController {
   /// Get data source string from platform
   String? _getDataSourceFromPlatform(HealthPlatform platform) {
     if (kIsWeb) return null;
-    if (Platform.isIOS) return 'apple_health';
+    if (Platform.isIOS) return 'health_connect';
     if (Platform.isAndroid) return 'google_fit';
     return null;
   }
@@ -221,10 +221,20 @@ class DashboardController extends GetxController {
       final currentSleepHours = healthMetrics.value.sleepHours;
       final currentHydration = waterIntake.value > 0 ? waterIntake.value : null;
 
+      // Log the data being sent to API
+      Get.printInfo(info: '📤 Preparing to call /create_user_gravity API:');
+      Get.printInfo(info: '   Data Source: $dataSource');
+      Get.printInfo(info: '   Weight: $currentWeight kg');
+      Get.printInfo(info: '   Steps: $currentSteps');
+      Get.printInfo(info: '   Sleep Hours: $currentSleepHours');
+      Get.printInfo(info: '   Hydration: $currentHydration L');
+      Get.printInfo(info: '   Date: $todayStr');
+
       ApiResponse<UserGravityEntry> response;
 
       if (todayEntryId.value != null) {
         // Update existing entry
+        Get.printInfo(info: '🔄 Updating existing entry (ID: ${todayEntryId.value})');
         response = await _gravityRepository.updateUserGravity(
           id: todayEntryId.value!,
           apiToken: apiToken,
@@ -238,6 +248,7 @@ class DashboardController extends GetxController {
         );
       } else {
         // Create new entry
+        Get.printInfo(info: '➕ Creating new entry');
         response = await _gravityRepository.createUserGravity(
           apiToken: apiToken,
           weight: currentWeight,
@@ -253,7 +264,7 @@ class DashboardController extends GetxController {
       if (response.isSuccess && response.data != null) {
         todayEntry.value = response.data;
         todayEntryId.value = response.data!.id;
-        Get.printInfo(info: '✅ Saved today\'s gravity entry to DB');
+        Get.printInfo(info: '✅ Saved today\'s gravity entry to DB (ID: ${response.data!.id})');
       } else {
         Get.snackbar(
           'Save Failed',
@@ -324,7 +335,8 @@ class DashboardController extends GetxController {
 
   @override
   void onClose() {
-    _healthService.dispose();
+    // Don't dispose the health service since it's a singleton
+    // and may be used by other controllers
     super.onClose();
   }
 

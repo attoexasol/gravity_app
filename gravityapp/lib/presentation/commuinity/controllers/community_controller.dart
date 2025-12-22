@@ -789,6 +789,11 @@ class CommunityController extends GetxController {
     }
   }
 
+  /// Public method to refresh posts (for pull-to-refresh)
+  Future<void> refreshPosts() async {
+    await _fetchAllPosts();
+  }
+
   /// Fetch comment counts for posts and update them
   /// Fetches comments in parallel for better performance
   Future<void> _fetchCommentCountsForPosts(List<Post> postsList) async {
