@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:get/get.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../../core/services/health_sync_service.dart';
 import '../../../core/services/preferences_service.dart';
@@ -350,7 +351,7 @@ class DashboardController extends GetxController {
 
   // --- Manual Entry Handlers (CORRECTED AGAIN) ---
 
-  void handleWeightSubmit() {
+  Future<void> handleWeightSubmit() async {
     final value = double.tryParse(weightInput.value);
     if (value != null && value > 0 && value < 300) {
       // Update local state immediately (optimistic update)
@@ -358,12 +359,12 @@ class DashboardController extends GetxController {
       weightInput.value = '';
       showWeightModal.value = false;
       
-      // Save to DB
-      upsertTodayGravity(dataSource: 'manual');
+      // Save to DB using manual entry API
+      await _saveManualEntry(type: 'weight', value: value.toString());
     }
   }
 
-  void handleStepsSubmit() {
+  Future<void> handleStepsSubmit() async {
     final value = int.tryParse(stepsInput.value);
     if (value != null && value >= 0) {
       // Update local state immediately (optimistic update)
@@ -380,12 +381,12 @@ class DashboardController extends GetxController {
       stepsInput.value = '';
       showStepsModal.value = false;
       
-      // Save to DB
-      upsertTodayGravity(dataSource: 'manual');
+      // Save to DB using manual entry API
+      await _saveManualEntry(type: 'steps', value: value.toString());
     }
   }
 
-  void handleSleepSubmit() {
+  Future<void> handleSleepSubmit() async {
     final value = double.tryParse(sleepInput.value);
     if (value != null && value >= 0 && value <= 24) {
       // Update local state immediately (optimistic update)
@@ -402,12 +403,12 @@ class DashboardController extends GetxController {
       sleepInput.value = '';
       showSleepModal.value = false;
       
-      // Save to DB
-      upsertTodayGravity(dataSource: 'manual');
+      // Save to DB using manual entry API
+      await _saveManualEntry(type: 'sleep_hours', value: value.toString());
     }
   }
 
-  void handleHydrationSubmit() {
+  Future<void> handleHydrationSubmit() async {
     final value = double.tryParse(hydrationInput.value);
     if (value != null && value >= 0) {
       // Update local state immediately (optimistic update)
@@ -415,8 +416,77 @@ class DashboardController extends GetxController {
       hydrationInput.value = '';
       showHydrationModal.value = false;
       
-      // Save to DB
-      upsertTodayGravity(dataSource: 'manual');
+      // Save to DB using manual entry API
+      await _saveManualEntry(type: 'hydration', value: value.toString());
+    }
+  }
+
+  /// Save manual entry using the create_manual_user_gravity API
+  Future<void> _saveManualEntry({required String type, required String value}) async {
+    try {
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        Get.snackbar(
+          'Error',
+          'Session expired. Please login again.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Color(0xFFE53935),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+        return;
+      }
+
+      final todayStr = _todayString;
+      
+      debugPrint('💾 Saving manual entry:');
+      debugPrint('   - Type: $type');
+      debugPrint('   - Value: $value');
+      debugPrint('   - Date: $todayStr');
+
+      final response = await _gravityRepository.createManualUserGravity(
+        apiToken: apiToken,
+        date: todayStr,
+        type: type,
+        value: value,
+      );
+
+      if (response.isSuccess) {
+        debugPrint('✅ Manual entry saved successfully: ${response.message}');
+        
+        // Show success message
+        Get.snackbar(
+          'Success',
+          response.message.isNotEmpty ? response.message : 'Data saved successfully',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Color(0xFF00B8A9),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+        
+        // Reload today's entry from DB to get updated data
+        await loadTodayFromDb();
+      } else {
+        debugPrint('❌ Failed to save manual entry: ${response.message}');
+        Get.snackbar(
+          'Error',
+          response.message.isNotEmpty ? response.message : 'Failed to save data',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Color(0xFFE53935),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Error saving manual entry: $e');
+      Get.snackbar(
+        'Error',
+        'An unexpected error occurred. Please try again.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Color(0xFFE53935),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
     }
   }
 

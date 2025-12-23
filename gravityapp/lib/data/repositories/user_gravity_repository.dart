@@ -275,5 +275,59 @@ class UserGravityRepository {
       );
     }
   }
+
+  /// Create manual user gravity entry
+  /// API: POST https://gravity.attoexasolutions.com/api/create_manual_user_gravity
+  /// This endpoint is specifically for manual entries from Quick Actions
+  Future<ApiResponse<Map<String, dynamic>>> createManualUserGravity({
+    required String apiToken,
+    required String date,
+    required String type, // "weight", "steps", "sleep_hours", "hydration"
+    required String value, // Value as string
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'api_token': apiToken,
+        'date': date,
+        'type': type,
+        'value': value,
+      };
+
+      debugPrint('📤 CREATE Manual User Gravity Request:');
+      debugPrint('   - Type: $type');
+      debugPrint('   - Value: $value');
+      debugPrint('   - Date: $date');
+
+      final response = await _apiService.post(
+        '/create_manual_user_gravity',
+        body: body,
+      );
+
+      debugPrint('📥 CREATE Manual User Gravity Response Status: ${response['status']}');
+      debugPrint('📥 Response Message: ${response['message'] ?? ''}');
+
+      return ApiResponse<Map<String, dynamic>>(
+        status: response['status'] ?? false,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is Map<String, dynamic>
+            ? response['data'] as Map<String, dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ CreateManualUserGravity API Error: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ CreateManualUserGravity Unknown Error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
 }
 
