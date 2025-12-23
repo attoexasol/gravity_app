@@ -366,7 +366,7 @@ class CommunityPage extends GetView<CommunityController> {
                         ],
                       ),
                       // Right side: Comment button - Match React: flex items-center gap-2 text-[#0A2342]/60
-                      _buildCommentButton(post.id, post.comments.length),
+                      _buildCommentButton(post.id, _getTotalCommentCount(post)),
                     ],
                   ),
                 ),
@@ -428,6 +428,19 @@ class CommunityPage extends GetView<CommunityController> {
         ),
       );
     });
+  }
+
+  /// Calculate total comment count including replies
+  int _getTotalCommentCount(Post post) {
+    // Count top-level comments
+    int totalCount = post.comments.length;
+    
+    // Add count of replies for each comment
+    for (final comment in post.comments) {
+      totalCount += comment.replies.length;
+    }
+    
+    return totalCount;
   }
 
   // Comment button - Match React: motion.button with MessageCircle icon
@@ -504,58 +517,61 @@ class CommunityPage extends GetView<CommunityController> {
 
   // Build Comments Bottom Sheet
   Widget _buildCommentsBottomSheet() {
-    return Obx(() {
-      final postId = controller.selectedPostId.value;
-      final comments = controller.postComments;
-      final isLoading = controller.isLoadingComments.value;
-      final error = controller.commentsError.value;
-      
-      if (postId == 0) return const SizedBox.shrink();
+    return Builder(
+      builder: (BuildContext bottomSheetContext) {
+        return Obx(() {
+          final postId = controller.selectedPostId.value;
+          final comments = controller.postComments;
+          final isLoading = controller.isLoadingComments.value;
+          final error = controller.commentsError.value;
+          
+          if (postId == 0) return const SizedBox.shrink();
 
-      return Container(
-        constraints: BoxConstraints(maxHeight: 0.9.sh),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.15),
-              blurRadius: 20.r,
-              offset: Offset(0, -4.h),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header with gradient
-            Container(
-              padding: EdgeInsets.all(24.r),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF0A2342), Color(0xFF00B8A9)],
+          return Container(
+            constraints: BoxConstraints(maxHeight: 0.9.sh),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 20.r,
+                  offset: Offset(0, -4.h),
                 ),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    isLoading 
-                        ? 'Loading...' 
-                        : 'Comments (${comments.length})',
-                    style: ResponsiveTextStyles.textXl.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header with gradient
+                Container(
+                  padding: EdgeInsets.all(24.r),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF0A2342), Color(0xFF00B8A9)],
                     ),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(40.r)),
                   ),
-                  _AnimatedTapWidget(
-                    onTap: () {
-                      controller.closeComments();
-                      Get.back();
-                    },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isLoading 
+                            ? 'Loading...' 
+                            : 'Comments (${comments.length})',
+                        style: ResponsiveTextStyles.textXl.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      _AnimatedTapWidget(
+                        onTap: () {
+                          controller.closeComments();
+                          // Use Navigator.pop() with bottom sheet context to avoid snackbar LateInitializationError
+                          Navigator.of(bottomSheetContext).pop();
+                        },
                     child: Container(
                       width: 40.w,
                       height: 40.h,
@@ -767,7 +783,9 @@ class CommunityPage extends GetView<CommunityController> {
           ],
         ),
       );
-    });
+        });
+      },
+    );
   }
 
   // Edit Post Modal - Similar to Create Post Modal but for editing
