@@ -312,6 +312,7 @@ class CommunityRepository {
 
   /// Update an existing post
   /// API: POST https://gravity.attoexasolutions.com/api/update_post
+  /// Note: Only include reaction fields that have a value > 0 (Facebook-like behavior)
   Future<ApiResponse<Map<String, dynamic>>> updatePost({
     required String apiToken,
     required int postId,
@@ -330,10 +331,18 @@ class CommunityRepository {
         'community_id': communityId,
         'post_text': postText,
         'post_status': postStatus,
-        'like_count': likeCount,
-        'thumsup_count': thumbsUpCount,
-        'other_count': otherCount,
       };
+
+      // Only include reaction fields that have a value > 0 (Facebook-like: only send selected reaction)
+      if (likeCount > 0) {
+        body['like_count'] = likeCount;
+      }
+      if (thumbsUpCount > 0) {
+        body['thumsup_count'] = thumbsUpCount;
+      }
+      if (otherCount > 0) {
+        body['other_count'] = otherCount;
+      }
 
       // Add post_image if provided
       if (postImageBase64 != null && postImageBase64.isNotEmpty) {

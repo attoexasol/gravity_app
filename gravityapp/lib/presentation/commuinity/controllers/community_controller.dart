@@ -564,8 +564,57 @@ class CommunityController extends GetxController {
   @override
   void onReady() {
     super.onReady();
+    // Load active reactions from storage before fetching posts
+    _loadActiveReactionsFromStorage();
     // Reload posts when page becomes visible to ensure reaction and comment counts are up-to-date
     _fetchAllPosts();
+  }
+
+  /// Load active reactions from local storage
+  void _loadActiveReactionsFromStorage() {
+    try {
+      final storage = PreferencesService.getStorage();
+      final reactionsJson = storage.read('user_active_reactions') as String?;
+      
+      if (reactionsJson != null && reactionsJson.isNotEmpty) {
+        final Map<String, dynamic> reactionsMap = jsonDecode(reactionsJson);
+        activeReactions.clear();
+        
+        reactionsMap.forEach((postIdStr, reactionsList) {
+          final postId = int.tryParse(postIdStr);
+          if (postId != null && reactionsList is List) {
+            activeReactions[postId] = Set<String>.from(
+              reactionsList.map((r) => r.toString())
+            );
+          }
+        });
+        
+        activeReactions.refresh();
+        debugPrint('✅ Loaded ${activeReactions.length} active reactions from storage');
+      } else {
+        debugPrint('ℹ️ No active reactions found in storage');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error loading active reactions from storage: $e');
+    }
+  }
+
+  /// Save active reactions to local storage
+  void _saveActiveReactionsToStorage() {
+    try {
+      final storage = PreferencesService.getStorage();
+      final reactionsMap = <String, dynamic>{};
+      
+      activeReactions.forEach((postId, reactions) {
+        reactionsMap[postId.toString()] = reactions.toList();
+      });
+      
+      final reactionsJson = jsonEncode(reactionsMap);
+      storage.write('user_active_reactions', reactionsJson);
+      debugPrint('✅ Saved ${activeReactions.length} active reactions to storage');
+    } catch (e) {
+      debugPrint('⚠️ Error saving active reactions to storage: $e');
+    }
   }
 
   @override
@@ -1177,6 +1226,9 @@ class CommunityController extends GetxController {
     
     activeReactions[postId] = postReactions;
     activeReactions.refresh();
+    
+    // Save active reactions to local storage for persistence
+    _saveActiveReactionsToStorage();
 
     // Update post reactions count locally first (optimistic update)
     final postIndex = posts.indexWhere((p) => p.id == postId);
@@ -1223,11 +1275,39 @@ class CommunityController extends GetxController {
       posts.refresh();
 
       // Save to backend to persist the reaction
-      await _saveReactionToBackend(postId, newHeart, newThumbsUp, newFire);
+      // Facebook-like: Only send the user's selected reaction (1), others should be 0
+      final userReaction = activeReactions[postId]?.isNotEmpty == true 
+          ? activeReactions[postId]!.first 
+          : null;
+      
+      // Determine which reaction to send to backend
+      // Only the selected reaction should be 1, others should be 0
+      int backendHeart = 0;
+      int backendThumbsUp = 0;
+      int backendFire = 0;
+      
+      if (userReaction != null) {
+        // User has selected a reaction - send only that one as 1
+        if (userReaction == 'heart') {
+          backendHeart = 1;
+        } else if (userReaction == 'thumbsUp') {
+          backendThumbsUp = 1;
+        } else if (userReaction == 'fire') {
+          backendFire = 1;
+        }
+      }
+      // If userReaction is null, all counts remain 0 (user removed their reaction)
+      
+      debugPrint('📤 Sending reaction to backend (Facebook-like):');
+      debugPrint('   - User selected: ${userReaction ?? "none"}');
+      debugPrint('   - like_count: $backendHeart, thumsup_count: $backendThumbsUp, other_count: $backendFire');
+      
+      await _saveReactionToBackend(postId, backendHeart, backendThumbsUp, backendFire);
     }
   }
 
   /// Save reaction counts to backend by updating the post
+  /// Facebook-like: Only the user's selected reaction should be 1, others should be 0
   Future<void> _saveReactionToBackend(int postId, int heartCount, int thumbsUpCount, int fireCount) async {
     try {
       final apiToken = PreferencesService.getAuthToken();
