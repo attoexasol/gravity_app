@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
 
@@ -62,6 +64,27 @@ class MessagesPage extends GetView<MessagesController> {
         // Conversations list
         Expanded(
           child: Obx(() {
+            // Show loading indicator
+            if (controller.isLoadingConversations.value) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const CircularProgressIndicator(
+                      color: Color(0xFF00B8A9),
+                    ),
+                    SizedBox(height: 16.h),
+                    Text(
+                      'Loading conversations...',
+                      style: ResponsiveTextStyles.textSm.copyWith(
+                        color: const Color(0xFF0A2342).withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
             final filteredConvs = controller.filteredConversations;
 
             if (filteredConvs.isEmpty) {
@@ -107,21 +130,9 @@ class MessagesPage extends GetView<MessagesController> {
           child: Row(
             children: [
               // Avatar
-              Container(
-                width: 48.w,
-                height: 48.w,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                  ),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    conversation.avatar,
-                    style: TextStyle(fontSize: 24.sp),
-                  ),
-                ),
+              _buildUserAvatar(
+                imageUrl: conversation.avatar,
+                size: 48.w,
               ),
               SizedBox(width: 12.w),
 
@@ -243,47 +254,95 @@ class MessagesPage extends GetView<MessagesController> {
   }
 
   Widget _buildChatView() {
-    final conversation = controller.currentConversation;
-    if (conversation == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    return Obx(() {
+      // Watch conversations list to trigger rebuild when messages are added
+      final conversationsList = controller.conversations;
+      final selectedId = controller.selectedConversationId.value;
+      
+      if (selectedId.isEmpty) {
+        return const Center(child: CircularProgressIndicator());
+      }
 
-    return Column(
-      children: [
-        // Chat header
-        _buildChatHeader(conversation),
+      // Find conversation from the reactive list
+      Conversation? conversation;
+      try {
+        conversation = conversationsList.firstWhere((c) => c.id == selectedId);
+      } catch (e) {
+        conversation = null;
+      }
+      
+      if (conversation == null) {
+        return const Center(child: CircularProgressIndicator());
+      }
 
-        // Messages list
-        Expanded(
-          child: Obx(() {
-            final messages = conversation.messages;
-            final isTyping = controller.isTyping.value;
+      return Column(
+        children: [
+          // Chat header
+          _buildChatHeader(conversation),
 
-            return ListView.builder(
-              padding: EdgeInsets.only(
-                left: 20.w,
-                right: 20.w,
-                top: 20.h,
-                bottom: 20.h,
-              ),
-              itemCount: messages.length + (isTyping ? 1 : 0),
-              itemBuilder: (context, index) {
-                // Typing indicator
-                if (index == messages.length && isTyping) {
-                  return _buildTypingIndicator();
-                }
+          // Messages list
+          Expanded(
+            child: Obx(() {
+              // Watch conversations again to get fresh messages
+              final freshConversations = controller.conversations;
+              Conversation? freshConv;
+              try {
+                freshConv = freshConversations.firstWhere((c) => c.id == selectedId);
+              } catch (e) {
+                freshConv = null;
+              }
+              
+              if (freshConv == null) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-                final message = messages[index];
-                return _buildMessageBubble(message);
-              },
-            );
-          }),
-        ),
+              final messages = freshConv.messages;
+              final isTyping = controller.isTyping.value;
 
-        // Input area
-        _buildInputArea(),
-      ],
-    );
+              debugPrint('📱 Messages: Displaying ${messages.length} messages for conversation ${freshConv.id}');
+
+              if (messages.isEmpty) {
+                return Center(
+                  child: Text(
+                    'No messages yet. Start the conversation!',
+                    style: ResponsiveTextStyles.textSm.copyWith(
+                      color: const Color(0xFF0A2342).withOpacity(0.6),
+                    ),
+                  ),
+                );
+              }
+
+              // Ensure freshConv is not null before using it
+              if (freshConv == null) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              return ListView.builder(
+                padding: EdgeInsets.only(
+                  left: 20.w,
+                  right: 20.w,
+                  top: 20.h,
+                  bottom: 20.h,
+                ),
+                itemCount: messages.length + (isTyping ? 1 : 0),
+                itemBuilder: (context, index) {
+                  // Typing indicator
+                  if (index == messages.length && isTyping) {
+                    return _buildTypingIndicator();
+                  }
+
+                  final message = messages[index];
+                  return _buildMessageBubble(message, freshConv!);
+                },
+              );
+            }),
+          ),
+
+          // Input area
+          _buildInputArea(),
+        ],
+      );
+    });
   }
 
   Widget _buildChatHeader(Conversation conversation) {
@@ -324,21 +383,9 @@ class MessagesPage extends GetView<MessagesController> {
           SizedBox(width: 12.w),
 
           // Avatar
-          Container(
-            width: 40.w,
-            height: 40.w,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-              ),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                conversation.avatar,
-                style: TextStyle(fontSize: 20.sp),
-              ),
-            ),
+          _buildUserAvatar(
+            imageUrl: conversation.avatar,
+            size: 40.w,
           ),
           SizedBox(width: 12.w),
 
@@ -389,109 +436,202 @@ class MessagesPage extends GetView<MessagesController> {
     );
   }
 
-  Widget _buildMessageBubble(Message message) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 16.h),
-      child: Row(
-        mainAxisAlignment:
-        message.isSent ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Other person's avatar (left side)
-          if (!message.isSent) ...[
-            Container(
-              width: 32.w,
-              height: 32.w,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                ),
-                shape: BoxShape.circle,
+  Widget _buildMessageBubble(Message message, Conversation conversation) {
+    return Obx(() {
+      final isEditing = controller.editingMessageId.value == message.id;
+      final conversationId = conversation.id;
+
+      return Padding(
+        padding: EdgeInsets.only(bottom: 16.h),
+        child: Row(
+          mainAxisAlignment:
+          message.isSent ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Other person's avatar (left side)
+            if (!message.isSent) ...[
+              _buildUserAvatar(
+                imageUrl: conversation.avatar,
+                size: 32.w,
               ),
-              child: Icon(
-                Icons.person,
-                size: 18.sp,
-                color: Colors.white,
+              SizedBox(width: 8.w),
+            ],
+
+            // Message content
+            Flexible(
+              child: Column(
+                crossAxisAlignment: message.isSent
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                children: [
+                  // Edit mode or message bubble
+                  if (isEditing && message.isSent)
+                    _buildEditMessageField(conversationId, message)
+                  else
+                    GestureDetector(
+                      onLongPress: message.isSent
+                          ? () => controller.showMessageActions(conversationId, message)
+                          : null,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 16.w,
+                          vertical: 12.h,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: message.isSent
+                              ? const LinearGradient(
+                            colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+                          )
+                              : null,
+                          color: message.isSent ? null : Colors.white,
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(20.r),
+                            topRight: Radius.circular(20.r),
+                            bottomLeft: Radius.circular(message.isSent ? 20.r : 4.r),
+                            bottomRight: Radius.circular(message.isSent ? 4.r : 20.r),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10.r,
+                              offset: Offset(0, 2.h),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          message.text,
+                          style: ResponsiveTextStyles.textSm.copyWith(
+                            color: message.isSent
+                                ? Colors.white
+                                : const Color(0xFF0A2342).withOpacity(0.8),
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // Timestamp & read status (only show when not editing)
+                  if (!isEditing)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        left: message.isSent ? 0 : 4.w,
+                        right: message.isSent ? 4.w : 0,
+                        top: 4.h,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            controller.formatMessageTime(message.timestamp),
+                            style: TextStyle(
+                              fontSize: 10.sp,
+                              color: const Color(0xFF0A2342).withOpacity(0.4),
+                            ),
+                          ),
+                          if (message.isSent) ...[
+                            SizedBox(width: 4.w),
+                            Icon(
+                              message.isRead ? Icons.done_all : Icons.done,
+                              size: 12.sp,
+                              color: const Color(0xFF00B8A9),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ),
-            SizedBox(width: 8.w),
           ],
+        ),
+      );
+    });
+  }
 
-          // Message content
-          Flexible(
-            child: Column(
-              crossAxisAlignment: message.isSent
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
-              children: [
-                // Message bubble
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16.w,
-                    vertical: 12.h,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: message.isSent
-                        ? const LinearGradient(
-                      colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                    )
-                        : null,
-                    color: message.isSent ? null : Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(20.r),
-                      topRight: Radius.circular(20.r),
-                      bottomLeft: Radius.circular(message.isSent ? 20.r : 4.r),
-                      bottomRight: Radius.circular(message.isSent ? 4.r : 20.r),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10.r,
-                        offset: Offset(0, 2.h),
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    message.text,
-                    style: ResponsiveTextStyles.textSm.copyWith(
-                      color: message.isSent
-                          ? Colors.white
-                          : const Color(0xFF0A2342).withOpacity(0.8),
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-
-                // Timestamp & read status
-                Padding(
-                  padding: EdgeInsets.only(
-                    left: message.isSent ? 0 : 4.w,
-                    right: message.isSent ? 4.w : 0,
-                    top: 4.h,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        controller.formatMessageTime(message.timestamp),
-                        style: TextStyle(
-                          fontSize: 10.sp,
-                          color: const Color(0xFF0A2342).withOpacity(0.4),
-                        ),
-                      ),
-                      if (message.isSent) ...[
-                        SizedBox(width: 4.w),
-                        Icon(
-                          message.isRead ? Icons.done_all : Icons.done,
-                          size: 12.sp,
-                          color: const Color(0xFF00B8A9),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
+  Widget _buildEditMessageField(String conversationId, Message message) {
+    return Container(
+      padding: EdgeInsets.all(12.r),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20.r),
+        border: Border.all(
+          color: const Color(0xFF00B8A9),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10.r,
+            offset: Offset(0, 2.h),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          TextField(
+            controller: controller.editMessageController,
+            onChanged: (value) => controller.editMessageText.value = value,
+            maxLines: null,
+            autofocus: true,
+            style: ResponsiveTextStyles.textSm.copyWith(
+              color: const Color(0xFF0A2342),
             ),
+            decoration: InputDecoration(
+              hintText: 'Edit message...',
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+          SizedBox(height: 8.h),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(
+                onPressed: () => controller.closeEditMessage(),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: const Color(0xFF0A2342).withOpacity(0.6),
+                    fontSize: 12.sp,
+                  ),
+                ),
+              ),
+              SizedBox(width: 8.w),
+              Obx(() {
+                final canSave = controller.editMessageText.value.trim().isNotEmpty &&
+                    !controller.isUpdatingMessage.value;
+                return ElevatedButton(
+                  onPressed: canSave
+                      ? () => controller.updateMessage(conversationId)
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00B8A9),
+                    disabledBackgroundColor: const Color(0xFF0A2342).withOpacity(0.3),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                  ),
+                  child: controller.isUpdatingMessage.value
+                      ? SizedBox(
+                          width: 16.w,
+                          height: 16.h,
+                          child: const CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Text(
+                          'Save',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12.sp,
+                          ),
+                        ),
+                );
+              }),
+            ],
           ),
         ],
       ),
@@ -499,6 +639,7 @@ class MessagesPage extends GetView<MessagesController> {
   }
 
   Widget _buildTypingIndicator() {
+    final conversation = controller.currentConversation;
     return Padding(
       padding: EdgeInsets.only(bottom: 16.h),
       child: Row(
@@ -506,20 +647,9 @@ class MessagesPage extends GetView<MessagesController> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Avatar
-          Container(
-            width: 32.w,
-            height: 32.w,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-              ),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.person,
-              size: 18.sp,
-              color: Colors.white,
-            ),
+          _buildUserAvatar(
+            imageUrl: conversation?.avatar ?? '',
+            size: 32.w,
           ),
           SizedBox(width: 8.w),
 
@@ -685,6 +815,99 @@ class MessagesPage extends GetView<MessagesController> {
             );
           }),
         ],
+      ),
+    );
+  }
+
+  /// Build user avatar widget - displays profile image or default avatar
+  Widget _buildUserAvatar({
+    required String imageUrl,
+    required double size,
+  }) {
+    // Check if imageUrl is a valid URL (starts with http:// or https://)
+    final bool isNetworkUrl = imageUrl.isNotEmpty &&
+        (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'));
+    
+    // Check if it's a local file path
+    final bool isLocalFile = imageUrl.isNotEmpty &&
+        (imageUrl.startsWith('/') || imageUrl.contains('\\') || imageUrl.startsWith('file://'));
+
+    if (isNetworkUrl) {
+      // Network image
+      return ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          placeholder: (context, url) => Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+              ),
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+          ),
+          errorWidget: (context, url, error) => _buildDefaultAvatar(size: size),
+        ),
+      );
+    } else if (isLocalFile) {
+      // Local file image
+      try {
+        final file = File(imageUrl.replaceFirst('file://', ''));
+        if (file.existsSync()) {
+          return ClipOval(
+            child: Image.file(
+              file,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => _buildDefaultAvatar(size: size),
+            ),
+          );
+        }
+      } catch (e) {
+        // Fall through to default avatar
+      }
+    }
+
+    // Default avatar (emoji or icon)
+    return _buildDefaultAvatar(size: size, emoji: imageUrl.isNotEmpty ? imageUrl : null);
+  }
+
+  /// Build default avatar widget
+  Widget _buildDefaultAvatar({
+    required double size,
+    String? emoji,
+  }) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+        ),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: emoji != null && emoji.length <= 2
+            ? Text(
+                emoji,
+                style: TextStyle(fontSize: size * 0.5),
+              )
+            : Icon(
+                Icons.person,
+                size: size * 0.5,
+                color: Colors.white,
+              ),
       ),
     );
   }
