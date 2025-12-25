@@ -593,9 +593,12 @@ class CommunityController extends GetxController {
               final postId = postData['id'];
               if (postId is int) {
                 // Determine which reaction the user has (Facebook-like: only one reaction per post)
+                // IMPORTANT: Backend should return only ONE active reaction per post
+                // If multiple reactions are true, we take the first one found (but this shouldn't happen)
                 final Set<String> reactions = <String>{};
                 
                 // Only one of these should be true based on API response
+                // Backend must ensure only one reaction is active (status = 1) per user per post
                 if (item['like'] == true) {
                   reactions.add('heart');
                 } else if (item['thumsup'] == true) {
@@ -604,9 +607,26 @@ class CommunityController extends GetxController {
                   reactions.add('fire');
                 }
                 
-                // Only add if user has a reaction
+                // Validate: Only one reaction should be active
+                if (reactions.length > 1) {
+                  debugPrint('⚠️ Warning: Multiple active reactions found for post $postId. Taking first: ${reactions.first}');
+                  reactions.clear();
+                  // Take the first one found (shouldn't happen if backend is correct)
+                  if (item['like'] == true) {
+                    reactions.add('heart');
+                  } else if (item['thumsup'] == true) {
+                    reactions.add('thumbsUp');
+                  } else if (item['other'] == true) {
+                    reactions.add('fire');
+                  }
+                }
+                
+                // Only add if user has a reaction (should be exactly one or zero)
                 if (reactions.isNotEmpty) {
                   activeReactions[postId] = reactions;
+                } else {
+                  // Ensure no reaction is stored if all are false
+                  activeReactions.remove(postId);
                 }
               }
             }
@@ -1266,8 +1286,21 @@ class CommunityController extends GetxController {
   // Match React: User can only have ONE reaction per post
   // If clicking the same reaction, remove it (toggle off)
   // If clicking a different reaction, remove previous and add new one
+  // 
+  // IMPORTANT: Only ONE reaction should be active per user per post at any time.
+  // When switching reactions, the backend must:
+  // 1. Set the previous reaction status to 0 (inactive)
+  // 2. Set the new reaction status to 1 (active)
+  // 3. Ensure only one active reaction record exists in the database
   Future<void> toggleReaction(int postId, String reaction) async {
+    // Get current reactions for this post (should be empty or contain only one reaction)
     final postReactions = Set<String>.from(activeReactions[postId] ?? <String>{});
+    
+    // Validate: Ensure only one reaction exists (safety check)
+    if (postReactions.length > 1) {
+      debugPrint('⚠️ Warning: Multiple reactions found for post $postId. Clearing all.');
+      postReactions.clear();
+    }
     
     // Check if user already has this exact reaction
     final hasThisReaction = postReactions.contains(reaction);
@@ -1275,15 +1308,17 @@ class CommunityController extends GetxController {
     // Get the previous reaction if user had one (can only have one at a time)
     final previousReaction = postReactions.isNotEmpty ? postReactions.first : null;
     
-    // Clear all reactions for this post (since user can only have one)
+    // CRITICAL: Clear ALL reactions for this post first (ensures only one active reaction)
+    // This ensures the frontend state matches the backend expectation: only one active reaction
     postReactions.clear();
     
-    // If clicking the same reaction, remove it (toggle off)
-    // If clicking a different reaction, add the new one
+    // If clicking the same reaction, remove it (toggle off) - postReactions stays empty
+    // If clicking a different reaction, add the new one - postReactions will have only the new reaction
     if (!hasThisReaction) {
       postReactions.add(reaction);
     }
     
+    // Update state: Only one reaction (or none) should be stored per post
     activeReactions[postId] = postReactions;
     activeReactions.refresh();
     
@@ -1335,18 +1370,27 @@ class CommunityController extends GetxController {
       posts.refresh();
 
       // Save to backend to persist the reaction using dedicated reaction API
-      // Facebook-like: Only send the user's selected reaction as true, others as false
+      // 
+      // BACKEND REQUIREMENT: When this request is sent, the backend MUST:
+      // 1. Set the user's previous reaction (if any) to status = 0 (inactive)
+      // 2. Set the new reaction (if any) to status = 1 (active)
+      // 3. Ensure only ONE active reaction record exists per user per post in the database
+      // 4. Update reaction counts accordingly
+      //
+      // Facebook-like: Only send the user's selected reaction as true, others are omitted
       // Use the reaction parameter directly (what user just tapped) instead of reading from activeReactions
       final currentReaction = !hasThisReaction ? reaction : null; // null if removing, otherwise the reaction type
       
       // Determine which reaction to send to backend
-      // Only the selected reaction should be true, others should be false
+      // CRITICAL: Only ONE field should be sent (or none if removing reaction)
+      // The backend will handle deactivating the previous reaction
       bool like = false;
       bool thumsup = false;
       bool other = false;
       
       if (currentReaction != null) {
         // User has selected a reaction - send only that one as true
+        // Backend must deactivate any previous reaction and activate this one
         if (currentReaction == 'heart') {
           like = true;
         } else if (currentReaction == 'thumbsUp') {
@@ -1356,6 +1400,7 @@ class CommunityController extends GetxController {
         }
       }
       // If currentReaction is null, all remain false (user removed their reaction)
+      // Backend should set all reactions to inactive (status = 0) for this user/post
       
       debugPrint('📤 Sending reaction to backend (Facebook-like):');
       debugPrint('   - User tapped: $reaction, isRemoving: $hasThisReaction');

@@ -645,7 +645,19 @@ class CommunityRepository {
 
   /// React to a post
   /// API: POST https://gravity.attoexasolutions.com/api/post/react
-  /// Request: { "api_token": string, "post_id": number, "like": boolean, "thumsup": boolean, "other": boolean }
+  /// 
+  /// IMPORTANT: Backend expects only ONE reaction field to be sent at a time (not all three).
+  /// When a user switches reactions, the backend should:
+  /// 1. Set the previous reaction status to 0 (inactive)
+  /// 2. Set the new reaction status to 1 (active)
+  /// 3. Update counts accordingly
+  /// 
+  /// Request format (only send the selected reaction):
+  /// - For like: { "api_token": string, "post_id": number, "like": true }
+  /// - For thumbs up: { "api_token": string, "post_id": number, "thumsup": true }
+  /// - For fire: { "api_token": string, "post_id": number, "other": true }
+  /// - To remove: { "api_token": string, "post_id": number } (no reaction field)
+  /// 
   /// Response: { "status": true, "message": "...", "data": { "like_count": number, "thumsup_count": number, "other_count": number } }
   Future<ApiResponse<Map<String, dynamic>>> reactToPost({
     required String apiToken,
@@ -658,16 +670,25 @@ class CommunityRepository {
       debugPrint('🔄 Reacting to post (Post ID: $postId)...');
       debugPrint('   - like: $like, thumsup: $thumsup, other: $other');
 
-      // Convert booleans to integers (0/1) as backend may expect integers
-      final requestBody = {
+      // Based on Postman testing, backend expects only ONE field to be sent
+      // Send only the selected reaction field, omit others
+      final requestBody = <String, dynamic>{
         'api_token': apiToken,
         'post_id': postId,
-        'like': like ? 1 : 0,
-        'thumsup': thumsup ? 1 : 0,
-        'other': other ? 1 : 0,
       };
       
-      debugPrint('📤 Request body values: like=${requestBody['like']}, thumsup=${requestBody['thumsup']}, other=${requestBody['other']}');
+      // Only include the field that is true (only one should be true at a time)
+      if (like) {
+        requestBody['like'] = true;
+      } else if (thumsup) {
+        requestBody['thumsup'] = true;
+      } else if (other) {
+        requestBody['other'] = true;
+      }
+      // If all are false, send nothing (removes reaction)
+      
+      debugPrint('📤 Request body: ${requestBody.keys}');
+      debugPrint('📤 Request body values: ${requestBody.toString()}');
 
       final response = await _apiService.post(
         '/post/react',
