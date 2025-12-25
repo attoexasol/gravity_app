@@ -564,13 +564,73 @@ class CommunityController extends GetxController {
   @override
   void onReady() {
     super.onReady();
-    // Load active reactions from storage before fetching posts
-    _loadActiveReactionsFromStorage();
+    // Load user reactions from API
+    loadUserReactions();
     // Reload posts when page becomes visible to ensure reaction and comment counts are up-to-date
     _fetchAllPosts();
   }
 
-  /// Load active reactions from local storage
+  /// Load user reactions from API
+  /// API: POST /api/user_wise_react
+  Future<void> loadUserReactions() async {
+    try {
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        debugPrint('⚠️ Cannot load user reactions: No auth token');
+        return;
+      }
+
+      debugPrint('🔄 Loading user reactions from API...');
+      final response = await _communityRepository.getUserWiseReact(apiToken: apiToken);
+
+      if (response.isSuccess && response.data != null) {
+        activeReactions.clear();
+        
+        for (final item in response.data!) {
+          if (item is Map<String, dynamic>) {
+            final postData = item['post'];
+            if (postData is Map<String, dynamic>) {
+              final postId = postData['id'];
+              if (postId is int) {
+                // Determine which reaction the user has (Facebook-like: only one reaction per post)
+                final Set<String> reactions = <String>{};
+                
+                // Only one of these should be true based on API response
+                if (item['like'] == true) {
+                  reactions.add('heart');
+                } else if (item['thumsup'] == true) {
+                  reactions.add('thumbsUp');
+                } else if (item['other'] == true) {
+                  reactions.add('fire');
+                }
+                
+                // Only add if user has a reaction
+                if (reactions.isNotEmpty) {
+                  activeReactions[postId] = reactions;
+                }
+              }
+            }
+          }
+        }
+        
+        activeReactions.refresh();
+        debugPrint('✅ Loaded ${activeReactions.length} user reactions from API');
+        
+        // Save to local storage for offline access
+        _saveActiveReactionsToStorage();
+      } else {
+        debugPrint('⚠️ Failed to load user reactions: ${response.message}');
+        // Fallback to local storage if API fails
+        _loadActiveReactionsFromStorage();
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading user reactions: $e');
+      // Fallback to local storage if API fails
+      _loadActiveReactionsFromStorage();
+    }
+  }
+
+  /// Load active reactions from local storage (fallback)
   void _loadActiveReactionsFromStorage() {
     try {
       final storage = PreferencesService.getStorage();
@@ -1274,41 +1334,42 @@ class CommunityController extends GetxController {
       posts[postIndex] = post.copyWith(reactions: updatedReactions);
       posts.refresh();
 
-      // Save to backend to persist the reaction
-      // Facebook-like: Only send the user's selected reaction (1), others should be 0
-      final userReaction = activeReactions[postId]?.isNotEmpty == true 
-          ? activeReactions[postId]!.first 
-          : null;
+      // Save to backend to persist the reaction using dedicated reaction API
+      // Facebook-like: Only send the user's selected reaction as true, others as false
+      // Use the reaction parameter directly (what user just tapped) instead of reading from activeReactions
+      final currentReaction = !hasThisReaction ? reaction : null; // null if removing, otherwise the reaction type
       
       // Determine which reaction to send to backend
-      // Only the selected reaction should be 1, others should be 0
-      int backendHeart = 0;
-      int backendThumbsUp = 0;
-      int backendFire = 0;
+      // Only the selected reaction should be true, others should be false
+      bool like = false;
+      bool thumsup = false;
+      bool other = false;
       
-      if (userReaction != null) {
-        // User has selected a reaction - send only that one as 1
-        if (userReaction == 'heart') {
-          backendHeart = 1;
-        } else if (userReaction == 'thumbsUp') {
-          backendThumbsUp = 1;
-        } else if (userReaction == 'fire') {
-          backendFire = 1;
+      if (currentReaction != null) {
+        // User has selected a reaction - send only that one as true
+        if (currentReaction == 'heart') {
+          like = true;
+        } else if (currentReaction == 'thumbsUp') {
+          thumsup = true;
+        } else if (currentReaction == 'fire') {
+          other = true;
         }
       }
-      // If userReaction is null, all counts remain 0 (user removed their reaction)
+      // If currentReaction is null, all remain false (user removed their reaction)
       
       debugPrint('📤 Sending reaction to backend (Facebook-like):');
-      debugPrint('   - User selected: ${userReaction ?? "none"}');
-      debugPrint('   - like_count: $backendHeart, thumsup_count: $backendThumbsUp, other_count: $backendFire');
+      debugPrint('   - User tapped: $reaction, isRemoving: $hasThisReaction');
+      debugPrint('   - Current reaction: ${currentReaction ?? "none"}');
+      debugPrint('   - like: $like, thumsup: $thumsup, other: $other');
       
-      await _saveReactionToBackend(postId, backendHeart, backendThumbsUp, backendFire);
+      await _saveReactionToBackend(postId, like, thumsup, other);
     }
   }
 
-  /// Save reaction counts to backend by updating the post
-  /// Facebook-like: Only the user's selected reaction should be 1, others should be 0
-  Future<void> _saveReactionToBackend(int postId, int heartCount, int thumbsUpCount, int fireCount) async {
+  /// Save reaction to backend using dedicated reaction API
+  /// API: POST /api/post/react
+  /// Facebook-like: Only the user's selected reaction should be true, others should be false
+  Future<void> _saveReactionToBackend(int postId, bool like, bool thumsup, bool other) async {
     try {
       final apiToken = PreferencesService.getAuthToken();
       if (apiToken == null || apiToken.isEmpty) {
@@ -1325,34 +1386,28 @@ class CommunityController extends GetxController {
       final post = posts[postIndex];
       
       debugPrint('🔄 Saving reaction to backend for post $postId...');
-      debugPrint('   - Heart: $heartCount, ThumbsUp: $thumbsUpCount, Fire: $fireCount');
+      debugPrint('   - like: $like, thumsup: $thumsup, other: $other');
 
-      // Update post with new reaction counts
-      final response = await _communityRepository.updatePost(
+      // Call dedicated reaction API
+      final response = await _communityRepository.reactToPost(
         apiToken: apiToken,
         postId: postId,
-        communityId: selectedCommunityId.value,
-        postText: post.text,
-        postStatus: 'published',
-        likeCount: heartCount,
-        thumbsUpCount: thumbsUpCount,
-        otherCount: fireCount,
-        postImageBase64: null, // Don't update image
+        like: like,
+        thumsup: thumsup,
+        other: other,
       );
 
-      if (response.isSuccess) {
+      if (response.isSuccess && response.data != null) {
         debugPrint('✅ Reaction saved to backend successfully');
         // Update post with response data to ensure sync
-        if (response.data != null) {
-          final updatedPostData = response.data!;
-          final updatedReactions = Reactions(
-            heart: updatedPostData['like_count'] ?? heartCount,
-            thumbsUp: updatedPostData['thumsup_count'] ?? thumbsUpCount,
-            fire: updatedPostData['other_count'] ?? fireCount,
-          );
-          posts[postIndex] = post.copyWith(reactions: updatedReactions);
-          posts.refresh();
-        }
+        final responseData = response.data!;
+        final updatedReactions = Reactions(
+          heart: responseData['like_count'] ?? post.reactions.heart,
+          thumbsUp: responseData['thumsup_count'] ?? post.reactions.thumbsUp,
+          fire: responseData['other_count'] ?? post.reactions.fire,
+        );
+        posts[postIndex] = post.copyWith(reactions: updatedReactions);
+        posts.refresh();
       } else {
         debugPrint('⚠️ Failed to save reaction to backend: ${response.message}');
         // Revert to previous counts if save failed

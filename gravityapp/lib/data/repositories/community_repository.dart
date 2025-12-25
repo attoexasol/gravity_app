@@ -642,5 +642,105 @@ class CommunityRepository {
       );
     }
   }
+
+  /// React to a post
+  /// API: POST https://gravity.attoexasolutions.com/api/post/react
+  /// Request: { "api_token": string, "post_id": number, "like": boolean, "thumsup": boolean, "other": boolean }
+  /// Response: { "status": true, "message": "...", "data": { "like_count": number, "thumsup_count": number, "other_count": number } }
+  Future<ApiResponse<Map<String, dynamic>>> reactToPost({
+    required String apiToken,
+    required int postId,
+    required bool like,
+    required bool thumsup,
+    required bool other,
+  }) async {
+    try {
+      debugPrint('🔄 Reacting to post (Post ID: $postId)...');
+      debugPrint('   - like: $like, thumsup: $thumsup, other: $other');
+
+      // Convert booleans to integers (0/1) as backend may expect integers
+      final requestBody = {
+        'api_token': apiToken,
+        'post_id': postId,
+        'like': like ? 1 : 0,
+        'thumsup': thumsup ? 1 : 0,
+        'other': other ? 1 : 0,
+      };
+      
+      debugPrint('📤 Request body values: like=${requestBody['like']}, thumsup=${requestBody['thumsup']}, other=${requestBody['other']}');
+
+      final response = await _apiService.post(
+        '/post/react',
+        body: requestBody,
+      );
+
+      debugPrint('📥 ReactToPost Response Status: ${response['status']}');
+
+      return ApiResponse<Map<String, dynamic>>(
+        status: response['status'] ?? true,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is Map<String, dynamic>
+            ? response['data'] as Map<String, dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ ReactToPost API Error: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ ReactToPost Unknown Error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Get user-wise reactions for all posts
+  /// API: POST https://gravity.attoexasolutions.com/api/user_wise_react
+  /// Request: { "api_token": string }
+  /// Response: { "status": true, "data": [{ "id": number, "post": { "id": number, "post_text": string }, "like": boolean, "thumsup": boolean, "other": boolean, "token": string }] }
+  Future<ApiResponse<List<dynamic>>> getUserWiseReact({
+    required String apiToken,
+  }) async {
+    try {
+      debugPrint('🔄 Fetching user-wise reactions...');
+
+      final response = await _apiService.post(
+        '/user_wise_react',
+        body: {
+          'api_token': apiToken,
+        },
+      );
+
+      debugPrint('📥 GetUserWiseReact Response Status: ${response['status']}');
+
+      return ApiResponse<List<dynamic>>(
+        status: response['status'] ?? true,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is List
+            ? response['data'] as List<dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ GetUserWiseReact API Error: ${e.message}');
+      return ApiResponse<List<dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ GetUserWiseReact Unknown Error: $e');
+      return ApiResponse<List<dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
 }
 
