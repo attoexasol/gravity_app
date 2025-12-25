@@ -317,7 +317,10 @@ class MessagesPage extends GetView<MessagesController> {
                 return const Center(child: CircularProgressIndicator());
               }
 
+              // Use a stable key based on conversation ID to preserve scroll position
               return ListView.builder(
+                key: ValueKey('messages_${freshConv.id}'),
+                controller: controller.messagesScrollController,
                 padding: EdgeInsets.only(
                   left: 20.w,
                   right: 20.w,
@@ -758,6 +761,7 @@ class MessagesPage extends GetView<MessagesController> {
           Expanded(
             child: TextField(
               controller: controller.messageController,
+              focusNode: controller.messageFocusNode,
               onChanged: (value) => controller.messageInput.value = value,
               onSubmitted: (_) {
                 if (controller.messageInput.value.trim().isNotEmpty) {
