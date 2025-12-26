@@ -1,16 +1,35 @@
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import '../../../data/repositories/ai_coach_repository.dart';
+import '../../../core/services/preferences_service.dart';
 
 class AiCoachController extends GetxController {
+  // Repository
+  final AiCoachRepository _aiCoachRepository = AiCoachRepository();
+
   // Chat messages list
   final RxList<ChatMessage> messages = <ChatMessage>[].obs;
+
+  // Scroll controller for messages list
+  final ScrollController messagesScrollController = ScrollController();
 
   // Input state
   final RxString inputMessage = ''.obs;
   final RxBool isTyping = false.obs;
+  final RxBool isSending = false.obs;
+  final RxString errorMessage = ''.obs;
 
   // Text editing controller
   final TextEditingController messageController = TextEditingController();
+  
+  // Focus node to detect TextField focus state
+  final FocusNode messageFocusNode = FocusNode();
+  
+  // Keyboard visibility state (true = keyboard is visible)
+  // This will be updated by the screen widget based on MediaQuery.viewInsets
+  final RxBool isKeyboardVisible = false.obs;
 
   // Quick actions
   final List<QuickAction> quickActions = [
@@ -36,66 +55,298 @@ class AiCoachController extends GetxController {
     ),
   ];
 
+  // Storage key for AI coach messages
+  static const String _messagesStorageKey = 'ai_coach_messages';
+
   @override
   void onInit() {
     super.onInit();
-    _loadInitialMessage();
+    // Load saved messages from storage, or show initial greeting if none exist
+    _loadMessagesFromStorage();
+    if (messages.isEmpty) {
+      _loadInitialMessage();
+    }
+    // Scroll to bottom after messages are loaded to show most recent chat
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
   }
 
   @override
   void onClose() {
     messageController.dispose();
+    messageFocusNode.dispose();
+    messagesScrollController.dispose();
     super.onClose();
+  }
+  
+  /// ============================================
+  /// ANIMATION STATE COMPUTATION
+  /// ============================================
+  /// Single source of truth for Quick Actions visibility
+  /// Quick Actions are hidden when:
+  /// - Keyboard is visible (user is typing)
+  /// - AND TextField has focus (user is actively using the input)
+  /// 
+  /// This ensures Quick Actions only hide when the user is actually typing,
+  /// not just when the keyboard happens to be open for other reasons.
+  bool get shouldHideQuickActions {
+    return isKeyboardVisible.value && messageFocusNode.hasFocus;
   }
 
   void _loadInitialMessage() {
+    // Get logged-in user's name from storage
+    final userName = PreferencesService.getUserName() ?? 'there';
+    
     messages.add(
       ChatMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        text: "Hello Sarah! 👋 I'm your AI wellness coach. I'm here to help you reach your health goals. How are you feeling today?",
+        text: "Hello $userName! 👋 I'm your AI wellness coach. I'm here to help you reach your health goals. How are you feeling today?",
         sender: MessageSender.ai,
         timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
       ),
     );
   }
 
-  void sendMessage() {
+  Future<void> sendMessage() async {
     if (inputMessage.value.trim().isEmpty) return;
+    if (isSending.value) return; // Prevent duplicate calls
+
+    // Get auth token
+    final apiToken = PreferencesService.getAuthToken();
+    if (apiToken == null || apiToken.isEmpty) {
+      errorMessage.value = 'Please login to use AI Coach';
+      Get.snackbar(
+        'Authentication Required',
+        'Please login to use AI Coach',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Get.theme.colorScheme.error,
+        colorText: Get.theme.colorScheme.onError,
+        duration: const Duration(seconds: 3),
+      );
+      return;
+    }
 
     // Add user message
+    final messageText = inputMessage.value.trim();
     final userMessage = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      text: inputMessage.value.trim(),
+      text: messageText,
       sender: MessageSender.user,
       timestamp: DateTime.now(),
     );
 
     messages.add(userMessage);
+    _saveMessagesToStorage(); // Save to local storage
+    _scrollToBottom(); // Scroll to show most recent message
 
     // Clear input
-    final messageText = inputMessage.value.trim();
     inputMessage.value = '';
     messageController.clear();
 
     // Show typing indicator
     isTyping.value = true;
+    isSending.value = true;
+    errorMessage.value = '';
 
-    // Simulate AI response
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      final aiResponse = ChatMessage(
+    try {
+      // Call AI Coach API
+      final response = await _aiCoachRepository.getAiCoachReply(
+        apiToken: apiToken,
+        message: messageText,
+      );
+
+      if (response.isSuccess && response.data != null) {
+        // Extract AI reply from response
+        // API Response format: { "success": true, "data": { "from_user": number, "user_message": string, "ai_coach_reply": string } }
+        final aiReply = response.data!['ai_coach_reply'] as String?;
+        
+        if (aiReply != null && aiReply.isNotEmpty) {
+          final aiResponse = ChatMessage(
+            id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+            text: aiReply,
+            sender: MessageSender.ai,
+            timestamp: DateTime.now(),
+          );
+
+          messages.add(aiResponse);
+          _saveMessagesToStorage(); // Save to local storage
+          _scrollToBottom(); // Scroll to show most recent message
+          debugPrint('✅ AI Coach reply added to chat: ${aiReply.substring(0, aiReply.length > 50 ? 50 : aiReply.length)}...');
+        } else {
+          // Fallback if ai_coach_reply is missing or empty
+          final errorResponse = ChatMessage(
+            id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+            text: 'I apologize, but I couldn\'t generate a response. Please try again.',
+            sender: MessageSender.ai,
+            timestamp: DateTime.now(),
+          );
+          messages.add(errorResponse);
+          _saveMessagesToStorage(); // Save to local storage
+          debugPrint('⚠️ AI Coach reply is empty or missing in response');
+        }
+      } else {
+        // Show error message
+        errorMessage.value = response.message.isNotEmpty 
+            ? response.message 
+            : 'Failed to get AI response. Please try again.';
+        
+        // Add error message to chat
+        final errorResponse = ChatMessage(
+          id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+          text: 'Sorry, I encountered an error. Please try again.',
+          sender: MessageSender.ai,
+          timestamp: DateTime.now(),
+        );
+        messages.add(errorResponse);
+        _saveMessagesToStorage(); // Save to local storage
+
+        Get.snackbar(
+          'Error',
+          errorMessage.value,
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Get.theme.colorScheme.error,
+          colorText: Get.theme.colorScheme.onError,
+          duration: const Duration(seconds: 3),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Error sending message to AI Coach: $e');
+      errorMessage.value = 'An unexpected error occurred. Please try again.';
+      
+      // Add error message to chat
+      final errorResponse = ChatMessage(
         id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-        text: _getAiResponse(messageText),
+        text: 'Sorry, I encountered an error. Please try again.',
         sender: MessageSender.ai,
         timestamp: DateTime.now(),
       );
+      messages.add(errorResponse);
+      _saveMessagesToStorage(); // Save to local storage
 
-      messages.add(aiResponse);
+      Get.snackbar(
+        'Error',
+        errorMessage.value,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Get.theme.colorScheme.error,
+        colorText: Get.theme.colorScheme.onError,
+        duration: const Duration(seconds: 3),
+      );
+    } finally {
       isTyping.value = false;
+      isSending.value = false;
+    }
+  }
+
+  /// Save messages to local storage
+  void _saveMessagesToStorage() {
+    try {
+      final storage = PreferencesService.getStorage();
+      final messagesJson = messages.map((message) => {
+        'id': message.id,
+        'text': message.text,
+        'sender': message.sender == MessageSender.user ? 'user' : 'ai',
+        'timestamp': message.timestamp.toIso8601String(),
+      }).toList();
+      
+      storage.write(_messagesStorageKey, jsonEncode(messagesJson));
+      debugPrint('✅ Saved ${messages.length} AI Coach messages to storage');
+    } catch (e) {
+      debugPrint('⚠️ Error saving AI Coach messages to storage: $e');
+    }
+  }
+
+  /// Load messages from local storage
+  void _loadMessagesFromStorage() {
+    try {
+      final storage = PreferencesService.getStorage();
+      final messagesJsonString = storage.read(_messagesStorageKey) as String?;
+      
+      if (messagesJsonString != null && messagesJsonString.isNotEmpty) {
+        final messagesJson = jsonDecode(messagesJsonString) as List<dynamic>;
+        messages.clear();
+        
+        for (final messageData in messagesJson) {
+          if (messageData is Map<String, dynamic>) {
+            final sender = messageData['sender'] == 'user' 
+                ? MessageSender.user 
+                : MessageSender.ai;
+            final timestamp = DateTime.parse(messageData['timestamp'] as String);
+            
+            messages.add(
+              ChatMessage(
+                id: messageData['id'] as String,
+                text: messageData['text'] as String,
+                sender: sender,
+                timestamp: timestamp,
+              ),
+            );
+          }
+        }
+        
+        // Sort messages by timestamp (oldest first, newest last) to ensure chronological order
+        messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        
+        messages.refresh();
+        debugPrint('✅ Loaded ${messages.length} AI Coach messages from storage');
+      } else {
+        debugPrint('ℹ️ No saved AI Coach messages found in storage');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error loading AI Coach messages from storage: $e');
+      // If loading fails, ensure messages list is empty so initial message can be shown
+      messages.clear();
+    }
+  }
+
+  /// Scroll to bottom of messages list to show most recent chat
+  void _scrollToBottom() {
+    if (!messagesScrollController.hasClients) return;
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!messagesScrollController.hasClients) return;
+      
+      final position = messagesScrollController.position;
+      final maxScroll = position.maxScrollExtent;
+      
+      // Scroll to bottom to show most recent messages
+      messagesScrollController.animateTo(
+        maxScroll,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     });
   }
 
+  /// Clear all messages from storage (useful for logout or reset)
+  void clearMessages() {
+    messages.clear();
+    final storage = PreferencesService.getStorage();
+    storage.remove(_messagesStorageKey);
+    debugPrint('✅ Cleared AI Coach messages from storage');
+  }
+
   void handleQuickAction(String label) {
-    inputMessage.value = 'Tell me about ${label.toLowerCase()}';
+    // Map quick action labels to appropriate messages
+    String message;
+    switch (label.toLowerCase()) {
+      case 'weight tips':
+        message = 'Give me weight management tips';
+        break;
+      case 'hydration':
+        message = 'Tell me about hydration';
+        break;
+      case 'sleep better':
+        message = 'How can I sleep better?';
+        break;
+      case 'meal ideas':
+        message = 'Give me meal ideas';
+        break;
+      default:
+        message = 'Tell me about ${label.toLowerCase()}';
+    }
+
+    inputMessage.value = message;
     messageController.text = inputMessage.value;
 
     // Auto-send after brief delay
@@ -104,40 +355,7 @@ class AiCoachController extends GetxController {
     });
   }
 
-  String _getAiResponse(String userMessage) {
-    final msg = userMessage.toLowerCase();
-
-    if (msg.contains('weight') || msg.contains('lose')) {
-      return "Great question about weight management! Based on your current progress, you're doing well. I recommend focusing on consistent hydration and getting 7-8 hours of sleep. Small, sustainable changes work best! 💪";
-    }
-
-    if (msg.contains('sleep')) {
-      return "Sleep is crucial for your wellness journey! Try to maintain a consistent bedtime routine, avoid screens 1 hour before bed, and keep your room cool and dark. You're currently averaging 6.5 hours - let's work towards 8 hours! 🌙";
-    }
-
-    if (msg.contains('water') || msg.contains('hydration')) {
-      return "Hydration is key! You're currently at 1.2L today. I recommend spreading your water intake throughout the day. Try having a glass when you wake up, before meals, and keeping a bottle nearby. Goal: 2.5L daily! 💧";
-    }
-
-    if (msg.contains('meal') || msg.contains('food') || msg.contains('eat')) {
-      return "Nutrition is essential! Focus on balanced meals with lean proteins, whole grains, and plenty of vegetables. I can analyze your meal photos to provide personalized recommendations. Upload your next meal and I'll help! 🍎";
-    }
-
-    if (msg.contains('exercise') || msg.contains('workout') || msg.contains('activity')) {
-      return "Physical activity is wonderful for your health! Based on your current activity level, I suggest starting with 30 minutes of moderate exercise 5 times per week. Mix cardio and strength training for best results! 🏃‍♀️";
-    }
-
-    if (msg.contains('stress') || msg.contains('anxiety') || msg.contains('mental')) {
-      return "Mental health is just as important as physical health! Try incorporating 10 minutes of meditation daily, practice deep breathing exercises, and ensure you're getting quality sleep. I'm here to support you! 🧘‍♀️";
-    }
-
-    if (msg.contains('progress') || msg.contains('how am i doing')) {
-      return "You're making fantastic progress! You've been consistent with tracking for 7 days straight. Your hydration is improving, and your sleep quality is trending upward. Keep up the great work! 📈";
-    }
-
-    // Default response
-    return "I'm here to help with your wellness journey! Feel free to ask me about your weight goals, sleep patterns, hydration, nutrition, exercise routines, or mental wellness. What would you like to focus on? 🌟";
-  }
+  // Removed _getAiResponse - now using API instead of mock responses
 
   String formatTime(DateTime dateTime) {
     final hour = dateTime.hour > 12 ? dateTime.hour - 12 : dateTime.hour;

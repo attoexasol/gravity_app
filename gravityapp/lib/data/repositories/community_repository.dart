@@ -763,5 +763,52 @@ class CommunityRepository {
       );
     }
   }
+
+  /// Pin a community post
+  /// API: POST https://gravity.attoexasolutions.com/api/pin_community_post
+  /// Request: { "api_token": string, "post_id": number, "community_id": number }
+  /// Response: { "status": true, "message": "Post pinned successfully", "data": { "id": number, "post_id": number, "community_id": number, "is_pin_post": true } }
+  Future<ApiResponse<Map<String, dynamic>>> pinCommunityPost({
+    required String apiToken,
+    required int postId,
+    required int communityId,
+  }) async {
+    try {
+      debugPrint('📌 Pinning post $postId in community $communityId...');
+
+      final response = await _apiService.post(
+        '/pin_community_post',
+        body: {
+          'api_token': apiToken,
+          'post_id': postId,
+          'community_id': communityId,
+        },
+      );
+
+      debugPrint('📥 PinCommunityPost Response Status: ${response['status']}');
+
+      return ApiResponse<Map<String, dynamic>>(
+        status: response['status'] ?? true,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is Map<String, dynamic>
+            ? response['data'] as Map<String, dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ PinCommunityPost API Error: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ PinCommunityPost Unknown Error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
 }
 

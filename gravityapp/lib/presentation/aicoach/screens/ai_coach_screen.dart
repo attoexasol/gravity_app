@@ -6,25 +6,88 @@ import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
 import '../controllers/ai_coach_controller.dart';
 
-class AiCoachScreen extends GetView<AiCoachController> {
+class AiCoachScreen extends StatefulWidget {
   const AiCoachScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  State<AiCoachScreen> createState() => _AiCoachScreenState();
+}
+
+class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserver {
+  // Initialize controller
+  late final AiCoachController controller;
+
+  @override
+  void initState() {
+    super.initState();
     // Initialize controller
-    Get.put(AiCoachController());
+    controller = Get.put(AiCoachController());
+    
+    // Observe keyboard visibility changes
+    WidgetsBinding.instance.addObserver(this);
+    
+    // Initial keyboard state check
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateKeyboardVisibility();
+    });
+  }
+
+  @override
+  void dispose() {
+    // Remove observer
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Called when keyboard visibility changes (via WidgetsBindingObserver)
+  /// Also handles screen rotation and other layout changes
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    // Update keyboard visibility when metrics change (keyboard open/close, rotation, etc.)
+    _updateKeyboardVisibility();
+  }
+
+  /// ============================================
+  /// KEYBOARD VISIBILITY DETECTION
+  /// ============================================
+  /// Detects keyboard visibility using MediaQuery.viewInsets.bottom
+  /// - viewInsets.bottom > 0 means keyboard is visible
+  /// - Updates controller state to trigger animations
+  /// - Threshold of 50 pixels to avoid false positives from small insets
+  void _updateKeyboardVisibility() {
+    if (!mounted) return;
+    
+    final viewInsets = MediaQuery.of(context).viewInsets;
+    final keyboardHeight = viewInsets.bottom;
+    
+    // Keyboard is considered visible if bottom inset is significant (> 50 pixels)
+    // This threshold prevents false positives from small safe area insets
+    final isKeyboardVisible = keyboardHeight > 50;
+    
+    // Update controller state (triggers reactive updates)
+    controller.isKeyboardVisible.value = isKeyboardVisible;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Update keyboard visibility on every build (handles MediaQuery changes)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateKeyboardVisibility();
+    });
 
     return Scaffold(
       backgroundColor: Colors.white,
+      // Use resizeToAvoidBottomInset to handle keyboard properly
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: Column(
           children: [
             // Custom Header with Back Button
             _buildHeader(),
 
-            // Quick Actions
-            QuickActionsSection(controller: controller),
-
+            // Quick Actions (with keyboard-aware animation)
+            _buildAnimatedQuickActions(),
 
             // Messages List
             Expanded(
@@ -214,11 +277,87 @@ class AiCoachScreen extends GetView<AiCoachController> {
     );
   }
 
+  /// ============================================
+  /// ANIMATED QUICK ACTIONS SECTION
+  /// ============================================
+  /// Animates Quick Actions based on keyboard visibility and TextField focus:
+  /// - When keyboard opens AND TextField is focused → slide up and fade
+  /// - When keyboard closes OR TextField loses focus → slide down and restore
+  /// 
+  /// Animation Strategy:
+  /// 1. ClipRect: Prevents overflow during animation
+  /// 2. AnimatedSize: Smoothly animates height changes (no layout jump)
+  ///    - Always renders QuickActionsSection to allow proper measurement
+  ///    - Uses SizedBox with height 0 when hidden to collapse smoothly
+  /// 3. AnimatedOpacity: Fades in/out for smooth visual transition
+  /// 4. AnimatedSlide: Slides up/down on Y-axis for natural movement
+  /// 
+  /// Edge Cases Handled:
+  /// - Fast keyboard open/close: Animation completes smoothly without lag
+  /// - Screen rotation: Maintains correct state via didChangeMetrics
+  /// - Multiple focus changes: No flickering or layout jumps
+  /// - Keyboard dismissal via back button: Properly detects via viewInsets
+  /// - Layout stability: AnimatedSize prevents jumping during transitions
+  Widget _buildAnimatedQuickActions() {
+    return Obx(() {
+      // Single source of truth: Hide when keyboard is visible AND TextField is focused
+      final shouldHide = controller.shouldHideQuickActions;
+      
+      return ClipRect(
+        // Clip overflow to prevent content from showing during animation
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 300), // Smooth height animation
+          curve: Curves.easeInOut,
+          alignment: Alignment.topCenter, // Align from top for upward slide
+          // AnimatedSize requires the child to be present in both states for proper measurement
+          // We always render QuickActionsSection but constrain its height when hidden
+          child: shouldHide
+              ? SizedBox(
+                  // When hidden: zero height collapses the widget smoothly
+                  height: 0,
+                  child: _buildQuickActionsWithAnimation(
+                    opacity: 0.0,
+                    slideOffset: const Offset(0, -1), // Slide upward (off-screen)
+                  ),
+                )
+              : _buildQuickActionsWithAnimation(
+                  opacity: 1.0,
+                  slideOffset: Offset.zero, // Normal position (no offset)
+                ),
+        ),
+      );
+    });
+  }
 
+  /// Helper method to build Quick Actions with consistent animation widgets
+  /// This ensures the same animation structure is used in both visible and hidden states
+  Widget _buildQuickActionsWithAnimation({
+    required double opacity,
+    required Offset slideOffset,
+  }) {
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 250), // Slightly faster fade
+      opacity: opacity,
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        offset: slideOffset,
+        child: QuickActionsSection(controller: controller),
+      ),
+    );
+  }
 
   Widget _buildMessagesList() {
     return Obx(() {
+      // Auto-scroll to bottom when new messages arrive
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Scroll will happen automatically with reverse: true or we can use a key-based approach
+        // For now, we'll rely on ListView's natural scrolling behavior
+      });
+
       return ListView.builder(
+        controller: controller.messagesScrollController, // Add scroll controller
+        reverse: false, // Normal order: oldest at top, newest at bottom
         padding: EdgeInsets.only(
           left: 20.w,
           right: 20.w,
@@ -490,14 +629,16 @@ class AiCoachScreen extends GetView<AiCoachController> {
 
           // Input field
           Expanded(
-            child: TextField(
+            child: Obx(() => TextField(
               controller: controller.messageController,
+              focusNode: controller.messageFocusNode, // Connect FocusNode for focus detection
               onChanged: (value) => controller.inputMessage.value = value,
               onSubmitted: (_) {
-                if (controller.inputMessage.value.trim().isNotEmpty) {
+                if (controller.inputMessage.value.trim().isNotEmpty && !controller.isSending.value) {
                   controller.sendMessage();
                 }
               },
+              enabled: !controller.isSending.value,
               maxLines: null,
               decoration: InputDecoration(
                 hintText: 'Ask your AI coach',
@@ -516,13 +657,14 @@ class AiCoachScreen extends GetView<AiCoachController> {
                 ),
               ),
               style: ResponsiveTextStyles.textSm,
-            ),
+            )),
           ),
           SizedBox(width: 8.w),
 
           // Send button
           Obx(() {
-            final canSend = controller.inputMessage.value.trim().isNotEmpty;
+            final canSend = controller.inputMessage.value.trim().isNotEmpty && !controller.isSending.value;
+            final isSending = controller.isSending.value;
             return InkWell(
               onTap: canSend ? controller.sendMessage : null,
               borderRadius: BorderRadius.circular(20.r),
@@ -530,19 +672,28 @@ class AiCoachScreen extends GetView<AiCoachController> {
                 width: 48.w,
                 height: 48.w,
                 decoration: BoxDecoration(
-                  gradient: canSend
+                  gradient: (canSend || isSending)
                       ? const LinearGradient(
                     colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
                   )
                       : null,
-                  color: canSend ? null : const Color(0xFF0A2342).withOpacity(0.1),
+                  color: (canSend || isSending) ? null : const Color(0xFF0A2342).withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  Icons.send,
-                  color: canSend ? Colors.white : const Color(0xFF0A2342).withOpacity(0.4),
-                  size: 22.sp,
-                ),
+                child: isSending
+                    ? SizedBox(
+                        width: 20.sp,
+                        height: 20.sp,
+                        child: const CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Icon(
+                        Icons.send,
+                        color: canSend ? Colors.white : const Color(0xFF0A2342).withOpacity(0.4),
+                        size: 22.sp,
+                      ),
               ),
             );
           }),

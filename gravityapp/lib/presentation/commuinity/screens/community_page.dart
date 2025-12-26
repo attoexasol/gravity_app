@@ -185,21 +185,46 @@ class CommunityPage extends GetView<CommunityController> {
   }
 
   Widget _buildPostCard(Post post, int index) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 16.h), // space-y-4 = 16px spacing between posts
-      decoration: BoxDecoration(
-        color: Colors.white, // bg-white
-        borderRadius: BorderRadius.circular(28.r), // rounded-[28px]
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1), // shadow-md
-            blurRadius: 10.r,
-            offset: Offset(0, 2.h),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.hardEdge, // overflow-hidden
-      child: Column(
+    return GestureDetector(
+      // Long-press to pin/unpin post (WhatsApp-style interaction)
+      onLongPress: () {
+        if (post.communityId > 0) {
+          controller.pinPost(post.id, post.communityId);
+        } else {
+          Get.snackbar(
+            'Error',
+            'Community ID not available',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: const Color(0xFFE53935),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2),
+          );
+        }
+      },
+      child: Container(
+        margin: EdgeInsets.only(bottom: 16.h), // space-y-4 = 16px spacing between posts
+        decoration: BoxDecoration(
+          color: Colors.white, // bg-white
+          borderRadius: BorderRadius.circular(28.r), // rounded-[28px]
+          // Optional: Subtle left border for pinned posts (WhatsApp-style enhancement)
+          border: post.isPinned
+              ? Border(
+                  left: BorderSide(
+                    color: const Color(0xFF00B8A9),
+                    width: 3.w,
+                  ),
+                )
+              : null,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1), // shadow-md
+              blurRadius: 10.r,
+              offset: Offset(0, 2.h),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.hardEdge, // overflow-hidden
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // User Header - Match React: p-5 flex items-center gap-3
@@ -271,6 +296,16 @@ class CommunityPage extends GetView<CommunityController> {
                     ],
                   ),
                 ),
+                // Pin Icon - WhatsApp-style: Show only when post is pinned
+                if (post.isPinned)
+                  Padding(
+                    padding: EdgeInsets.only(left: 8.w),
+                    child: Icon(
+                      Icons.push_pin,
+                      size: 20.sp,
+                      color: const Color(0xFF00B8A9), // Subtle pin color
+                    ),
+                  ),
               ],
             ),
           ),
@@ -374,6 +409,7 @@ class CommunityPage extends GetView<CommunityController> {
             ),
           ),
         ],
+      ),
       ),
     )
         // Match React AnimatePresence animation: initial={{ opacity: 0, y: 20 }}, animate={{ opacity: 1, y: 0 }}, delay: index * 0.1

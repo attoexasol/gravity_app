@@ -888,7 +888,9 @@ class CommunityController extends GetxController {
         if (fetchedPosts.isNotEmpty) {
           // Fetch comment counts for each post
           await _fetchCommentCountsForPosts(fetchedPosts);
-          posts.value = fetchedPosts;
+          // Sort posts: pinned first, then by created_at DESC
+          final sortedPosts = _sortPostsWithPinnedFirst(fetchedPosts);
+          posts.value = sortedPosts;
           debugPrint('✅ Successfully loaded ${fetchedPosts.length} posts from API');
         } else {
           debugPrint('⚠️ No posts found in API response, keeping initial posts');
@@ -910,6 +912,157 @@ class CommunityController extends GetxController {
   /// Public method to refresh posts (for pull-to-refresh)
   Future<void> refreshPosts() async {
     await _fetchAllPosts();
+  }
+
+  /// ============================================
+  /// POST PINNING FEATURE (Multiple Pinned Posts)
+  /// ============================================
+  
+  /// Sort posts: Pinned posts first (preserving their relative order), then normal posts
+  /// This ensures all pinned posts always appear at the top of the feed
+  List<Post> _sortPostsWithPinnedFirst(List<Post> postsList) {
+    // Separate pinned and unpinned posts while preserving original order
+    final List<Post> pinnedPosts = [];
+    final List<Post> unpinnedPosts = [];
+    
+    for (final post in postsList) {
+      if (post.isPinned) {
+        pinnedPosts.add(post);
+      } else {
+        unpinnedPosts.add(post);
+      }
+    }
+    
+    // Combine: all pinned posts first (in their original order), then unpinned posts
+    return [...pinnedPosts, ...unpinnedPosts];
+  }
+
+  /// Pin a community post (supports multiple pinned posts)
+  /// - Calls API to pin the post
+  /// - On success: Updates local state, keeps other pinned posts, reorders list
+  /// - On failure: Shows snackbar and rolls back
+  Future<void> pinPost(int postId, int communityId) async {
+    // Get auth token
+    final apiToken = PreferencesService.getAuthToken();
+    if (apiToken == null || apiToken.isEmpty) {
+      Get.snackbar(
+        'Error',
+        'Please login to pin posts',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFE53935),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+
+    // Find the post to pin
+    final postIndex = posts.indexWhere((p) => p.id == postId);
+    if (postIndex == -1) {
+      Get.snackbar(
+        'Error',
+        'Post not found',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFE53935),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+
+    final postToPin = posts[postIndex];
+    
+    // Check if post is already pinned
+    if (postToPin.isPinned) {
+      Get.snackbar(
+        'Info',
+        'Post is already pinned',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFF00B8A9),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+    
+    // Optimistic update: Pin the post immediately
+    // Keep all other pinned posts as they are (support multiple pinned posts)
+    final updatedPosts = posts.map((post) {
+      if (post.id == postId) {
+        // Pin the selected post
+        return post.copyWith(isPinned: true);
+      }
+      // Keep all other posts unchanged (including other pinned posts)
+      return post;
+    }).toList();
+
+    // Sort: pinned first (all pinned posts will be at top)
+    final sortedPosts = _sortPostsWithPinnedFirst(updatedPosts);
+    posts.value = sortedPosts;
+
+    try {
+      debugPrint('📌 Pinning post $postId in community $communityId...');
+      
+      // Call API
+      final response = await _communityRepository.pinCommunityPost(
+        apiToken: apiToken,
+        postId: postId,
+        communityId: communityId,
+      );
+
+      if (response.isSuccess) {
+        // API success - state already updated optimistically
+        Get.snackbar(
+          'Success',
+          'Post pinned successfully',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFF00B8A9),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+        debugPrint('✅ Post pinned successfully');
+      } else {
+        // API failure - rollback optimistic update
+        posts.value = _sortPostsWithPinnedFirst(
+          posts.map((post) {
+            if (post.id == postId) {
+              return post.copyWith(isPinned: false);
+            }
+            return post;
+          }).toList(),
+        );
+        
+        Get.snackbar(
+          'Error',
+          response.message.isNotEmpty ? response.message : 'Failed to pin post',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFE53935),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+        debugPrint('❌ Failed to pin post: ${response.message}');
+      }
+    } catch (e) {
+      // Exception - rollback optimistic update
+      posts.value = _sortPostsWithPinnedFirst(
+        posts.map((post) {
+          if (post.id == postId) {
+            return post.copyWith(isPinned: false);
+          }
+          return post;
+        }).toList(),
+      );
+      
+      Get.snackbar(
+        'Error',
+        'An error occurred while pinning the post',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFE53935),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+      debugPrint('❌ Error pinning post: $e');
+    }
   }
 
   /// Fetch comment counts for posts and update them
@@ -1055,6 +1208,11 @@ class CommunityController extends GetxController {
       userAvatarUrl = 'https://i.pravatar.cc/150?img=${postId % 10}';
     }
 
+    // Extract pin status for single post
+    final isPinned = postData['is_pin_post'] == true || 
+                    postData['is_pin_post'] == 1 ||
+                    (postData['is_pin_post']?.toString().toLowerCase() == 'true');
+
     debugPrint('📊 Single Post Details:');
     debugPrint('   - ID: $postId');
     debugPrint('   - Text: $postText');
@@ -1063,6 +1221,7 @@ class CommunityController extends GetxController {
     debugPrint('   - User: $userName');
     debugPrint('   - Community: $communityName (ID: $communityId)');
     debugPrint('   - Reactions: ❤️$heartCount 👍$thumbsUpCount 🔥$fireCount');
+    debugPrint('   - Pinned: $isPinned');
 
     return Post(
       id: postId,
@@ -1079,6 +1238,8 @@ class CommunityController extends GetxController {
         fire: fireCount,
       ),
       comments: [], // API response doesn't include comments
+      isPinned: isPinned,
+      communityId: communityId,
     );
   }
 
@@ -1114,6 +1275,16 @@ class CommunityController extends GetxController {
         // Extract post information
         final postId = postData['id'] is int ? postData['id'] : int.tryParse(postData['id'].toString()) ?? 0;
         final postText = postData['post_text']?.toString() ?? '';
+        
+        // Extract pin status (mapped from is_pin_post API field)
+        final isPinned = postData['is_pin_post'] == true || 
+                        postData['is_pin_post'] == 1 ||
+                        (postData['is_pin_post']?.toString().toLowerCase() == 'true');
+        
+        // Extract community ID (required for pinning API)
+        final communityId = postData['community_id'] is int 
+            ? postData['community_id'] 
+            : int.tryParse(postData['community_id'].toString()) ?? 0;
         
         // Format timestamp
         final createdAt = postData['created_at']?.toString() ?? '';
@@ -1158,6 +1329,8 @@ class CommunityController extends GetxController {
             fire: fireCount,
           ),
           comments: [], // API response doesn't include comments
+          isPinned: isPinned, // Map pin status from API
+          communityId: communityId, // Map community ID from API
         );
       }).toList();
     } catch (e) {
@@ -3030,6 +3203,8 @@ class Post {
   final String timestamp;
   final Reactions reactions;
   final List<Comment> comments;
+  final bool isPinned; // WhatsApp-style pinning: true if post is pinned
+  final int communityId; // Required for pinning API call
 
   Post({
     required this.id,
@@ -3039,6 +3214,8 @@ class Post {
     required this.timestamp,
     required this.reactions,
     required this.comments,
+    this.isPinned = false, // Default to false if not provided
+    this.communityId = 0, // Default to 0 if not provided
   });
 
   Post copyWith({
@@ -3049,6 +3226,8 @@ class Post {
     String? timestamp,
     Reactions? reactions,
     List<Comment>? comments,
+    bool? isPinned,
+    int? communityId,
   }) {
     return Post(
       id: id ?? this.id,
@@ -3058,6 +3237,8 @@ class Post {
       timestamp: timestamp ?? this.timestamp,
       reactions: reactions ?? this.reactions,
       comments: comments ?? this.comments,
+      isPinned: isPinned ?? this.isPinned,
+      communityId: communityId ?? this.communityId,
     );
   }
 }
