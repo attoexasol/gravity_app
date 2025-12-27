@@ -22,7 +22,7 @@ class SignupScreen extends GetView<SignupController> {
             left: 0,
             right: 0,
             child: Container(
-              height: size.height * 0.27,
+              height: size.height * 0.30,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -87,7 +87,7 @@ class SignupScreen extends GetView<SignupController> {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    SizedBox(height: size.height * 0.22),
+                    SizedBox(height: size.height * 0.18),
 
                     // SIGNUP CARD
                     Padding(

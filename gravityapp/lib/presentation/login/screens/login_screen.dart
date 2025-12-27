@@ -24,7 +24,7 @@ class LoginScreen extends GetView<LoginController> {
             left: 0,
             right: 0,
             child: Container(
-              height: size.height * 0.22, // ← increase freely, UI will NOT move
+              height: size.height * 0.30,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -66,7 +66,7 @@ class LoginScreen extends GetView<LoginController> {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    SizedBox(height: size.height * 0.15), // OVERLAP POINT
+                    SizedBox(height: size.height * 0.18),
                     // LOGIN CARD
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
