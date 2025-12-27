@@ -153,7 +153,7 @@ class MessagesController extends GetxController {
       
       if (usersResponse.isSuccess && usersResponse.data != null && usersResponse.data!.isNotEmpty) {
         // Load conversations for each user (don't sort during loading)
-        // IMPORTANT: Filter out the current user to prevent showing own profile
+        // IMPORTANT: Filter out the current user and filter by role to prevent showing wrong role profiles
         for (final userData in usersResponse.data!) {
           final otherUserId = userData['id'] ?? userData['user_id'];
           if (otherUserId == null) continue;
@@ -167,6 +167,14 @@ class MessagesController extends GetxController {
             continue;
           }
           
+          // CRITICAL: Verify user role matches target role (client-side filtering)
+          // This ensures only the correct role profiles are shown even if API returns wrong data
+          final userRole = _extractUserRole(userData);
+          if (!_isValidRoleForUser(userRole, targetRole)) {
+            debugPrint('⏭️ Messages: Skipping user (ID: $otherUserIdInt) - Role mismatch. User role: $userRole, Expected: $targetRole');
+            continue;
+          }
+          
           // Load messages for this user (pass false to skip individual sorting)
           await _loadConversationForUser(otherUserIdInt, userData, sortImmediately: false);
         }
@@ -175,8 +183,9 @@ class MessagesController extends GetxController {
         // This ensures proper sorting on app restart
         _sortConversationsByTimestamp();
         
-        // Final cleanup: Remove any conversations with current user (safety check)
+        // Final cleanup: Remove any conversations with current user or incorrect role (safety checks)
         _removeConversationsWithCurrentUser();
+        _removeConversationsWithIncorrectRole();
         
         debugPrint('✅ Loaded and sorted ${conversations.length} conversations');
     } else {
@@ -222,6 +231,31 @@ class MessagesController extends GetxController {
     if (conversationsToRemove.isNotEmpty) {
       conversations.refresh();
       debugPrint('✅ Messages: Removed ${conversationsToRemove.length} conversation(s) with current user');
+    }
+  }
+
+  /// Remove conversations with incorrect roles (cleanup method)
+  /// Ensures only conversations with the correct role are shown
+  void _removeConversationsWithIncorrectRole() {
+    final targetRole = userType.value == 'customer' ? 'coach' : 'customer';
+    final expectedRole = targetRole == 'coach' ? ConversationRole.coach : ConversationRole.customer;
+    
+    final conversationsToRemove = <String>[];
+    for (final conversation in conversations) {
+      if (conversation.role != expectedRole) {
+        conversationsToRemove.add(conversation.id);
+        debugPrint('🗑️ Messages: Removing conversation with incorrect role. Conversation role: ${conversation.role}, Expected: $expectedRole');
+      }
+    }
+    
+    for (final conversationId in conversationsToRemove) {
+      conversations.removeWhere((c) => c.id == conversationId);
+      _conversationUserIds.remove(conversationId);
+    }
+    
+    if (conversationsToRemove.isNotEmpty) {
+      conversations.refresh();
+      debugPrint('✅ Messages: Removed ${conversationsToRemove.length} conversation(s) with incorrect role');
     }
   }
 
@@ -278,7 +312,38 @@ class MessagesController extends GetxController {
           final isFromCurrentToOther = fromUserIdInt == _currentUserId && toUserIdInt == otherUserId;
           final isFromOtherToCurrent = fromUserIdInt == otherUserId && toUserIdInt == _currentUserId;
           
-          return isFromCurrentToOther || isFromOtherToCurrent;
+          if (!isFromCurrentToOther && !isFromOtherToCurrent) {
+            return false;
+          }
+          
+          // CRITICAL: Verify role from message data (if available)
+          // Extract role from the other user in the message
+          final targetRole = userType.value == 'customer' ? 'coach' : 'customer';
+          String? otherUserRole;
+          
+          if (isFromOtherToCurrent) {
+            // Other user is the sender, check from_user role
+            final fromUser = msg['from_user'];
+            if (fromUser is Map<String, dynamic>) {
+              otherUserRole = _extractUserRole(fromUser);
+            }
+          } else if (isFromCurrentToOther) {
+            // Other user is the recipient, check to_user role
+            final toUser = msg['to_user'];
+            if (toUser is Map<String, dynamic>) {
+              otherUserRole = _extractUserRole(toUser);
+            }
+          }
+          
+          // If we can extract role from message, verify it matches target role
+          if (otherUserRole != null && otherUserRole.isNotEmpty) {
+            if (!_isValidRoleForUser(otherUserRole, targetRole)) {
+              debugPrint('⏭️ Messages: Skipping message - Role mismatch. User role: $otherUserRole, Expected: $targetRole');
+              return false;
+            }
+          }
+          
+          return true;
         }).toList();
         
         debugPrint('📱 Filtered ${filteredMessages.length} messages for conversation with user $otherUserId (from ${allMessages.length} total)');
@@ -589,12 +654,62 @@ class MessagesController extends GetxController {
     return emojis[userId % emojis.length];
   }
 
-  // Filtered conversations based on search
-  List<Conversation> get filteredConversations {
-    if (searchQuery.value.isEmpty) {
-      return conversations;
+  /// Extract user role from user data
+  /// Checks multiple possible field names: 'role', 'user_type', 'type'
+  String _extractUserRole(Map<String, dynamic> userData) {
+    final role = userData['role'] ?? 
+                 userData['user_type'] ?? 
+                 userData['type'] ?? 
+                 userData['user_role'] ?? 
+                 '';
+    return role.toString().toLowerCase().trim();
+  }
+
+  /// Check if user role is valid for the current user type
+  /// - Customers should only see coaches
+  /// - Coaches should only see customers
+  bool _isValidRoleForUser(String userRole, String targetRole) {
+    // Normalize role strings for comparison
+    final normalizedUserRole = userRole.toLowerCase().trim();
+    final normalizedTargetRole = targetRole.toLowerCase().trim();
+    
+    // If role is empty or unknown, we can't verify - skip for safety
+    if (normalizedUserRole.isEmpty) {
+      debugPrint('⚠️ Messages: User role is empty, skipping for safety');
+      return false;
     }
-    return conversations
+    
+    // Check if user role matches target role
+    // Support variations: 'coach', 'coaches', 'customer', 'customers'
+    final isCoach = normalizedUserRole == 'coach' || normalizedUserRole == 'coaches';
+    final isCustomer = normalizedUserRole == 'customer' || normalizedUserRole == 'customers';
+    
+    final targetIsCoach = normalizedTargetRole == 'coach' || normalizedTargetRole == 'coaches';
+    final targetIsCustomer = normalizedTargetRole == 'customer' || normalizedTargetRole == 'customers';
+    
+    // Match: if target is coach, user should be coach; if target is customer, user should be customer
+    if (targetIsCoach && isCoach) return true;
+    if (targetIsCustomer && isCustomer) return true;
+    
+    return false;
+  }
+
+  // Filtered conversations based on search and role
+  List<Conversation> get filteredConversations {
+    // First filter by role (safety check)
+    final targetRole = userType.value == 'customer' ? 'coach' : 'customer';
+    final roleFilteredConversations = conversations.where((conv) {
+      // Verify conversation role matches target role
+      final expectedRole = targetRole == 'coach' ? ConversationRole.coach : ConversationRole.customer;
+      return conv.role == expectedRole;
+    }).toList();
+    
+    // Then filter by search query if provided
+    if (searchQuery.value.isEmpty) {
+      return roleFilteredConversations;
+    }
+    
+    return roleFilteredConversations
         .where((conv) =>
         conv.name.toLowerCase().contains(searchQuery.value.toLowerCase()))
         .toList();
@@ -1087,6 +1202,7 @@ class MessagesController extends GetxController {
     conversations.clear();
     _conversationUserIds.clear();
     _userNames.clear();
+    _userProfileImages.clear();
     await _loadConversations();
   }
 
