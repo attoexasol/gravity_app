@@ -126,20 +126,23 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               // Back button
-              InkWell(
-                onTap: () => Get.back(),
-                borderRadius: BorderRadius.circular(20.r),
-                child: Container(
-                  width: 40.w,
-                  height: 40.w,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20.r),
-                  ),
-                  child: Icon(
-                    Icons.arrow_back,
-                    color: Colors.white,
-                    size: 22.sp,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => Get.back(),
+                  borderRadius: BorderRadius.circular(20.r),
+                  child: Container(
+                    width: 40.w,
+                    height: 40.w,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20.r),
+                    ),
+                    child: Icon(
+                      Icons.arrow_back,
+                      color: Colors.white,
+                      size: 22.sp,
+                    ),
                   ),
                 ),
               ),

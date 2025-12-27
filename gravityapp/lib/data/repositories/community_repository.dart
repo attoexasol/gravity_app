@@ -810,5 +810,95 @@ class CommunityRepository {
       );
     }
   }
+
+  /// Unpin a community post
+  /// API: POST https://gravity.attoexasolutions.com/api/unpin_community_post
+  /// Request: { "api_token": string, "post_id": number, "community_id": number }
+  /// Response: { "status": true, "message": "Post unpinned successfully" }
+  Future<ApiResponse<Map<String, dynamic>>> unpinCommunityPost({
+    required String apiToken,
+    required int postId,
+    required int communityId,
+  }) async {
+    try {
+      debugPrint('📌 Unpinning post $postId in community $communityId...');
+
+      final response = await _apiService.post(
+        '/unpin_community_post',
+        body: {
+          'api_token': apiToken,
+          'post_id': postId,
+          'community_id': communityId,
+        },
+      );
+
+      debugPrint('📥 UnpinCommunityPost Response Status: ${response['status']}');
+
+      return ApiResponse<Map<String, dynamic>>(
+        status: response['status'] ?? true,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is Map<String, dynamic>
+            ? response['data'] as Map<String, dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ UnpinCommunityPost API Error: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ UnpinCommunityPost Unknown Error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Get user-wise pinned posts
+  /// API: POST https://gravity.attoexasolutions.com/api/user_wise_pinned_posts
+  /// Request: { "api_token": string }
+  /// Response: { "status": true, "message": "Pined Post get successfully", "data": [{ "id": number, "post": { "id": number, "post_text": string }, "community": { "id": number, "name": string }, "is_pin_post": boolean }] }
+  Future<ApiResponse<List<dynamic>>> getUserWisePinnedPosts({
+    required String apiToken,
+  }) async {
+    try {
+      debugPrint('🔄 Fetching user-wise pinned posts...');
+
+      final response = await _apiService.post(
+        '/user_wise_pinned_posts',
+        body: {
+          'api_token': apiToken,
+        },
+      );
+
+      debugPrint('📥 GetUserWisePinnedPosts Response Status: ${response['status']}');
+
+      return ApiResponse<List<dynamic>>(
+        status: response['status'] ?? true,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is List
+            ? response['data'] as List<dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ GetUserWisePinnedPosts API Error: ${e.message}');
+      return ApiResponse<List<dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ GetUserWisePinnedPosts Unknown Error: $e');
+      return ApiResponse<List<dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
 }
 

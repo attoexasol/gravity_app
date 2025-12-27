@@ -566,6 +566,8 @@ class CommunityController extends GetxController {
     super.onReady();
     // Load user reactions from API
     loadUserReactions();
+    // Load user pinned posts from API
+    loadUserPinnedPosts();
     // Reload posts when page becomes visible to ensure reaction and comment counts are up-to-date
     _fetchAllPosts();
   }
@@ -694,6 +696,68 @@ class CommunityController extends GetxController {
       debugPrint('✅ Saved ${activeReactions.length} active reactions to storage');
     } catch (e) {
       debugPrint('⚠️ Error saving active reactions to storage: $e');
+    }
+  }
+
+  /// Load user pinned posts from API
+  /// API: POST /api/user_wise_pinned_posts
+  /// Updates the posts list to mark which posts are pinned by the user
+  Future<void> loadUserPinnedPosts() async {
+    try {
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        debugPrint('⚠️ Cannot load user pinned posts: No auth token');
+        return;
+      }
+
+      debugPrint('🔄 Loading user pinned posts from API...');
+      final response = await _communityRepository.getUserWisePinnedPosts(apiToken: apiToken);
+
+      if (response.isSuccess && response.data != null) {
+        // Extract post IDs that are pinned by the user
+        final Set<int> pinnedPostIds = <int>{};
+        
+        for (final item in response.data!) {
+          if (item is Map<String, dynamic>) {
+            final postData = item['post'];
+            if (postData is Map<String, dynamic>) {
+              final postId = postData['id'];
+              if (postId is int) {
+                // Check if is_pin_post is true
+                final isPinned = item['is_pin_post'] == true || 
+                                item['is_pin_post'] == 1 ||
+                                (item['is_pin_post']?.toString().toLowerCase() == 'true');
+                
+                if (isPinned) {
+                  pinnedPostIds.add(postId);
+                }
+              }
+            }
+          }
+        }
+        
+        debugPrint('✅ Found ${pinnedPostIds.length} pinned posts by user');
+        
+        // Update posts list to mark pinned posts
+        if (pinnedPostIds.isNotEmpty) {
+          final updatedPosts = posts.map((post) {
+            if (pinnedPostIds.contains(post.id)) {
+              // Mark as pinned if user has pinned it
+              return post.copyWith(isPinned: true);
+            }
+            return post;
+          }).toList();
+          
+          // Sort: pinned first
+          final sortedPosts = _sortPostsWithPinnedFirst(updatedPosts);
+          posts.value = sortedPosts;
+          debugPrint('✅ Updated ${pinnedPostIds.length} posts as pinned');
+        }
+      } else {
+        debugPrint('⚠️ Failed to load user pinned posts: ${response.message}');
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading user pinned posts: $e');
     }
   }
 
@@ -891,6 +955,9 @@ class CommunityController extends GetxController {
           // Sort posts: pinned first, then by created_at DESC
           final sortedPosts = _sortPostsWithPinnedFirst(fetchedPosts);
           posts.value = sortedPosts;
+          // Load user pinned posts to mark which posts are pinned by the user
+          // This will update the posts list with correct pinned status
+          await loadUserPinnedPosts();
           debugPrint('✅ Successfully loaded ${fetchedPosts.length} posts from API');
         } else {
           debugPrint('⚠️ No posts found in API response, keeping initial posts');
@@ -937,8 +1004,10 @@ class CommunityController extends GetxController {
     return [...pinnedPosts, ...unpinnedPosts];
   }
 
-  /// Pin a community post (supports multiple pinned posts)
-  /// - Calls API to pin the post
+  /// Pin or unpin a community post (supports multiple pinned posts)
+  /// - If post is pinned: Unpins it
+  /// - If post is not pinned: Pins it
+  /// - Calls appropriate API based on current state
   /// - On success: Updates local state, keeps other pinned posts, reorders list
   /// - On failure: Shows snackbar and rolls back
   Future<void> pinPost(int postId, int communityId) async {
@@ -947,7 +1016,7 @@ class CommunityController extends GetxController {
     if (apiToken == null || apiToken.isEmpty) {
       Get.snackbar(
         'Error',
-        'Please login to pin posts',
+        'Please login to pin/unpin posts',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFFE53935),
         colorText: Colors.white,
@@ -956,7 +1025,7 @@ class CommunityController extends GetxController {
       return;
     }
 
-    // Find the post to pin
+    // Find the post
     final postIndex = posts.indexWhere((p) => p.id == postId);
     if (postIndex == -1) {
       Get.snackbar(
@@ -970,30 +1039,19 @@ class CommunityController extends GetxController {
       return;
     }
 
-    final postToPin = posts[postIndex];
+    final post = posts[postIndex];
+    final isCurrentlyPinned = post.isPinned;
+    final newPinnedState = !isCurrentlyPinned;
     
-    // Check if post is already pinned
-    if (postToPin.isPinned) {
-      Get.snackbar(
-        'Info',
-        'Post is already pinned',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF00B8A9),
-        colorText: Colors.white,
-        duration: const Duration(seconds: 2),
-      );
-      return;
-    }
-    
-    // Optimistic update: Pin the post immediately
+    // Optimistic update: Toggle pin state immediately
     // Keep all other pinned posts as they are (support multiple pinned posts)
-    final updatedPosts = posts.map((post) {
-      if (post.id == postId) {
-        // Pin the selected post
-        return post.copyWith(isPinned: true);
+    final updatedPosts = posts.map((p) {
+      if (p.id == postId) {
+        // Toggle pin state for the selected post
+        return p.copyWith(isPinned: newPinnedState);
       }
       // Keep all other posts unchanged (including other pinned posts)
-      return post;
+      return p;
     }).toList();
 
     // Sort: pinned first (all pinned posts will be at top)
@@ -1001,67 +1059,119 @@ class CommunityController extends GetxController {
     posts.value = sortedPosts;
 
     try {
-      debugPrint('📌 Pinning post $postId in community $communityId...');
-      
-      // Call API
-      final response = await _communityRepository.pinCommunityPost(
-        apiToken: apiToken,
-        postId: postId,
-        communityId: communityId,
-      );
-
-      if (response.isSuccess) {
-        // API success - state already updated optimistically
-        Get.snackbar(
-          'Success',
-          'Post pinned successfully',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: const Color(0xFF00B8A9),
-          colorText: Colors.white,
-          duration: const Duration(seconds: 2),
-        );
-        debugPrint('✅ Post pinned successfully');
-      } else {
-        // API failure - rollback optimistic update
-        posts.value = _sortPostsWithPinnedFirst(
-          posts.map((post) {
-            if (post.id == postId) {
-              return post.copyWith(isPinned: false);
-            }
-            return post;
-          }).toList(),
-        );
+      if (isCurrentlyPinned) {
+        // Unpin the post
+        debugPrint('📌 Unpinning post $postId in community $communityId...');
         
-        Get.snackbar(
-          'Error',
-          response.message.isNotEmpty ? response.message : 'Failed to pin post',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: const Color(0xFFE53935),
-          colorText: Colors.white,
-          duration: const Duration(seconds: 2),
+        final response = await _communityRepository.unpinCommunityPost(
+          apiToken: apiToken,
+          postId: postId,
+          communityId: communityId,
         );
-        debugPrint('❌ Failed to pin post: ${response.message}');
+
+        if (response.isSuccess) {
+          // API success - state already updated optimistically
+          // Refresh pinned posts to ensure consistency
+          loadUserPinnedPosts();
+          
+          Get.snackbar(
+            'Success',
+            response.message.isNotEmpty ? response.message : 'Post unpinned successfully',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: const Color(0xFF00B8A9),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2),
+          );
+          debugPrint('✅ Post unpinned successfully');
+        } else {
+          // API failure - rollback optimistic update
+          posts.value = _sortPostsWithPinnedFirst(
+            posts.map((p) {
+              if (p.id == postId) {
+                return p.copyWith(isPinned: true); // Rollback to pinned
+              }
+              return p;
+            }).toList(),
+          );
+          
+          Get.snackbar(
+            'Error',
+            response.message.isNotEmpty ? response.message : 'Failed to unpin post',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: const Color(0xFFE53935),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2),
+          );
+          debugPrint('❌ Failed to unpin post: ${response.message}');
+        }
+      } else {
+        // Pin the post
+        debugPrint('📌 Pinning post $postId in community $communityId...');
+        
+        final response = await _communityRepository.pinCommunityPost(
+          apiToken: apiToken,
+          postId: postId,
+          communityId: communityId,
+        );
+
+        if (response.isSuccess) {
+          // API success - state already updated optimistically
+          // Refresh pinned posts to ensure consistency
+          loadUserPinnedPosts();
+          
+          Get.snackbar(
+            'Success',
+            response.message.isNotEmpty ? response.message : 'Post pinned successfully',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: const Color(0xFF00B8A9),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2),
+          );
+          debugPrint('✅ Post pinned successfully');
+        } else {
+          // API failure - rollback optimistic update
+          posts.value = _sortPostsWithPinnedFirst(
+            posts.map((p) {
+              if (p.id == postId) {
+                return p.copyWith(isPinned: false); // Rollback to unpinned
+              }
+              return p;
+            }).toList(),
+          );
+          
+          Get.snackbar(
+            'Error',
+            response.message.isNotEmpty ? response.message : 'Failed to pin post',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: const Color(0xFFE53935),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2),
+          );
+          debugPrint('❌ Failed to pin post: ${response.message}');
+        }
       }
     } catch (e) {
       // Exception - rollback optimistic update
       posts.value = _sortPostsWithPinnedFirst(
-        posts.map((post) {
-          if (post.id == postId) {
-            return post.copyWith(isPinned: false);
+        posts.map((p) {
+          if (p.id == postId) {
+            return p.copyWith(isPinned: isCurrentlyPinned); // Rollback to original state
           }
-          return post;
+          return p;
         }).toList(),
       );
       
       Get.snackbar(
         'Error',
-        'An error occurred while pinning the post',
+        isCurrentlyPinned 
+            ? 'An error occurred while unpinning the post'
+            : 'An error occurred while pinning the post',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFFE53935),
         colorText: Colors.white,
         duration: const Duration(seconds: 2),
       );
-      debugPrint('❌ Error pinning post: $e');
+      debugPrint('❌ Error ${isCurrentlyPinned ? "unpinning" : "pinning"} post: $e');
     }
   }
 
