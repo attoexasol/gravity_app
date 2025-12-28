@@ -9,6 +9,11 @@ import '../../../data/repositories/community_repository.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_text_styles.dart';
+import '../../../data/model/post.dart';
+import '../../../data/model/post_user.dart';
+import '../../../data/model/reactions.dart';
+import '../../../data/model/reply.dart';
+import '../../../data/model/comment.dart';
 
 class CommunityController extends GetxController {
   // Repository for API calls
@@ -19,19 +24,25 @@ class CommunityController extends GetxController {
   final RxBool isLoadingCommunities = false.obs;
 
   // Single community from API
-  final Rx<Map<String, dynamic>?> singleCommunity = Rx<Map<String, dynamic>?>(null);
+  final Rx<Map<String, dynamic>?> singleCommunity = Rx<Map<String, dynamic>?>(
+    null,
+  );
   final RxBool isLoadingSingleCommunity = false.obs;
   final RxString singleCommunityError = ''.obs;
 
   // Create community state
   final RxBool isCreatingCommunity = false.obs;
   final RxString createCommunityError = ''.obs;
-  final Rx<Map<String, dynamic>?> createdCommunity = Rx<Map<String, dynamic>?>(null);
+  final Rx<Map<String, dynamic>?> createdCommunity = Rx<Map<String, dynamic>?>(
+    null,
+  );
 
   // Update community state
   final RxBool isUpdatingCommunity = false.obs;
   final RxString updateCommunityError = ''.obs;
-  final Rx<Map<String, dynamic>?> updatedCommunity = Rx<Map<String, dynamic>?>(null);
+  final Rx<Map<String, dynamic>?> updatedCommunity = Rx<Map<String, dynamic>?>(
+    null,
+  );
 
   // Delete community state
   final RxBool isDeletingCommunity = false.obs;
@@ -59,7 +70,8 @@ class CommunityController extends GetxController {
   final RxInt editingPostId = 0.obs;
   final RxString editPostText = ''.obs;
   final RxString editPostImage = ''.obs;
-  final RxString editPostImagePath = ''.obs; // Local file path for picked edit image
+  final RxString editPostImagePath =
+      ''.obs; // Local file path for picked edit image
   final RxInt editPostCommunityId = 2.obs;
 
   // Delete post state
@@ -84,7 +96,8 @@ class CommunityController extends GetxController {
   final RxInt editingCommentId = 0.obs;
   final RxString editCommentText = ''.obs;
   final RxInt editCommentPostId = 0.obs;
-  final TextEditingController editCommentTextController = TextEditingController();
+  final TextEditingController editCommentTextController =
+      TextEditingController();
 
   // Delete comment state
   final RxBool isDeletingComment = false.obs;
@@ -101,9 +114,10 @@ class CommunityController extends GetxController {
   final RxString selectedImage = ''.obs;
   final RxString selectedImagePath = ''.obs; // Local file path for picked image
   final RxBool isPickingImage = false.obs;
-  
+
   // TextEditingController for create post text field to ensure proper state sync
-  final TextEditingController createPostTextController = TextEditingController();
+  final TextEditingController createPostTextController =
+      TextEditingController();
 
   // Image picker instance
   final ImagePicker _imagePicker = ImagePicker();
@@ -123,13 +137,16 @@ class CommunityController extends GetxController {
   void _loadUserProfile() {
     // Load user name
     userName.value = PreferencesService.getUserName() ?? 'You';
-    
+
     // Load profile image - prefer API URL over local path
-    final profileImageUrl = PreferencesService.getStorage().read('user_profile_image_url') as String?;
-    final profileImagePath = PreferencesService.getStorage().read('user_profile_image') as String?;
-    
+    final profileImageUrl =
+        PreferencesService.getStorage().read('user_profile_image_url')
+            as String?;
+    final profileImagePath =
+        PreferencesService.getStorage().read('user_profile_image') as String?;
+
     userProfileImage.value = profileImageUrl ?? profileImagePath ?? '';
-    
+
     debugPrint('👤 User profile loaded:');
     debugPrint('   - Name: ${userName.value}');
     debugPrint('   - Profile Image: ${userProfileImage.value}');
@@ -140,7 +157,7 @@ class CommunityController extends GetxController {
   void safeBack() {
     // Don't try to close snackbars - Get.back() internally calls closeCurrentSnackbar()
     // which causes LateInitializationError. Use Navigator directly instead.
-    
+
     try {
       final context = Get.context;
       if (context != null && Navigator.of(context).canPop()) {
@@ -151,7 +168,7 @@ class CommunityController extends GetxController {
     } catch (e) {
       debugPrint('⚠️ Navigator.pop() failed: $e');
     }
-    
+
     // Fallback: try Get.back() if Navigator fails (but this may still cause errors)
     try {
       if (Get.isDialogOpen == true) {
@@ -159,7 +176,9 @@ class CommunityController extends GetxController {
         debugPrint('✅ Navigated back via Get.back()');
       }
     } catch (e) {
-      debugPrint('⚠️ Get.back() also failed: $e - Navigation may have already occurred');
+      debugPrint(
+        '⚠️ Get.back() also failed: $e - Navigation may have already occurred',
+      );
     }
   }
 
@@ -181,14 +200,14 @@ class CommunityController extends GetxController {
   void closeCreatePostDialog() {
     // Reset state when closing dialog to ensure clean state for next open
     resetCreatePostState();
-    
+
     // Set the flag first
     showCreatePost.value = false;
-    
+
     // Use Navigator.pop() first to avoid Get.back()'s internal snackbar closing logic
     // which can cause LateInitializationError on subsequent calls
     bool dialogClosed = false;
-    
+
     // Method 1: Try Navigator.pop() first (more reliable, doesn't interfere with snackbars)
     try {
       final context = Get.context;
@@ -200,7 +219,7 @@ class CommunityController extends GetxController {
     } catch (e) {
       debugPrint('⚠️ Navigator.pop() failed: $e');
     }
-    
+
     // Method 2: Fallback to Get.back() only if Navigator.pop() didn't work
     if (!dialogClosed) {
       try {
@@ -217,9 +236,10 @@ class CommunityController extends GetxController {
 
   /// Get user profile image URL or empty string
   String get currentUserProfileImage => userProfileImage.value;
-  
+
   /// Get current user name
-  String get currentUserName => userName.value.isNotEmpty ? userName.value : 'You';
+  String get currentUserName =>
+      userName.value.isNotEmpty ? userName.value : 'You';
 
   /// Get current user ID
   int get currentUserId => PreferencesService.getUserId() ?? 0;
@@ -343,7 +363,7 @@ class CommunityController extends GetxController {
   Future<void> pickImageFromGallery() async {
     try {
       isPickingImage.value = true;
-      
+
       final XFile? pickedFile = await _imagePicker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1024,
@@ -379,7 +399,7 @@ class CommunityController extends GetxController {
   Future<void> pickImageFromCamera() async {
     try {
       isPickingImage.value = true;
-      
+
       final XFile? pickedFile = await _imagePicker.pickImage(
         source: ImageSource.camera,
         maxWidth: 1024,
@@ -440,7 +460,7 @@ class CommunityController extends GetxController {
   void showImageSourcePicker() {
     // Reset picking state before showing picker to ensure clean state
     isPickingImage.value = false;
-    
+
     Get.bottomSheet(
       Builder(
         builder: (BuildContext bottomSheetContext) {
@@ -532,11 +552,7 @@ class CommunityController extends GetxController {
         ),
         child: Column(
           children: [
-            Icon(
-              icon,
-              size: 40,
-              color: const Color(0xFF00B8A9),
-            ),
+            Icon(icon, size: 40, color: const Color(0xFF00B8A9)),
             const SizedBox(height: 8),
             Text(
               label,
@@ -583,11 +599,13 @@ class CommunityController extends GetxController {
       }
 
       debugPrint('🔄 Loading user reactions from API...');
-      final response = await _communityRepository.getUserWiseReact(apiToken: apiToken);
+      final response = await _communityRepository.getUserWiseReact(
+        apiToken: apiToken,
+      );
 
       if (response.isSuccess && response.data != null) {
         activeReactions.clear();
-        
+
         for (final item in response.data!) {
           if (item is Map<String, dynamic>) {
             final postData = item['post'];
@@ -598,7 +616,7 @@ class CommunityController extends GetxController {
                 // IMPORTANT: Backend should return only ONE active reaction per post
                 // If multiple reactions are true, we take the first one found (but this shouldn't happen)
                 final Set<String> reactions = <String>{};
-                
+
                 // Only one of these should be true based on API response
                 // Backend must ensure only one reaction is active (status = 1) per user per post
                 if (item['like'] == true) {
@@ -608,10 +626,12 @@ class CommunityController extends GetxController {
                 } else if (item['other'] == true) {
                   reactions.add('fire');
                 }
-                
+
                 // Validate: Only one reaction should be active
                 if (reactions.length > 1) {
-                  debugPrint('⚠️ Warning: Multiple active reactions found for post $postId. Taking first: ${reactions.first}');
+                  debugPrint(
+                    '⚠️ Warning: Multiple active reactions found for post $postId. Taking first: ${reactions.first}',
+                  );
                   reactions.clear();
                   // Take the first one found (shouldn't happen if backend is correct)
                   if (item['like'] == true) {
@@ -622,7 +642,7 @@ class CommunityController extends GetxController {
                     reactions.add('fire');
                   }
                 }
-                
+
                 // Only add if user has a reaction (should be exactly one or zero)
                 if (reactions.isNotEmpty) {
                   activeReactions[postId] = reactions;
@@ -634,10 +654,12 @@ class CommunityController extends GetxController {
             }
           }
         }
-        
+
         activeReactions.refresh();
-        debugPrint('✅ Loaded ${activeReactions.length} user reactions from API');
-        
+        debugPrint(
+          '✅ Loaded ${activeReactions.length} user reactions from API',
+        );
+
         // Save to local storage for offline access
         _saveActiveReactionsToStorage();
       } else {
@@ -657,22 +679,24 @@ class CommunityController extends GetxController {
     try {
       final storage = PreferencesService.getStorage();
       final reactionsJson = storage.read('user_active_reactions') as String?;
-      
+
       if (reactionsJson != null && reactionsJson.isNotEmpty) {
         final Map<String, dynamic> reactionsMap = jsonDecode(reactionsJson);
         activeReactions.clear();
-        
+
         reactionsMap.forEach((postIdStr, reactionsList) {
           final postId = int.tryParse(postIdStr);
           if (postId != null && reactionsList is List) {
             activeReactions[postId] = Set<String>.from(
-              reactionsList.map((r) => r.toString())
+              reactionsList.map((r) => r.toString()),
             );
           }
         });
-        
+
         activeReactions.refresh();
-        debugPrint('✅ Loaded ${activeReactions.length} active reactions from storage');
+        debugPrint(
+          '✅ Loaded ${activeReactions.length} active reactions from storage',
+        );
       } else {
         debugPrint('ℹ️ No active reactions found in storage');
       }
@@ -686,14 +710,16 @@ class CommunityController extends GetxController {
     try {
       final storage = PreferencesService.getStorage();
       final reactionsMap = <String, dynamic>{};
-      
+
       activeReactions.forEach((postId, reactions) {
         reactionsMap[postId.toString()] = reactions.toList();
       });
-      
+
       final reactionsJson = jsonEncode(reactionsMap);
       storage.write('user_active_reactions', reactionsJson);
-      debugPrint('✅ Saved ${activeReactions.length} active reactions to storage');
+      debugPrint(
+        '✅ Saved ${activeReactions.length} active reactions to storage',
+      );
     } catch (e) {
       debugPrint('⚠️ Error saving active reactions to storage: $e');
     }
@@ -711,12 +737,14 @@ class CommunityController extends GetxController {
       }
 
       debugPrint('🔄 Loading user pinned posts from API...');
-      final response = await _communityRepository.getUserWisePinnedPosts(apiToken: apiToken);
+      final response = await _communityRepository.getUserWisePinnedPosts(
+        apiToken: apiToken,
+      );
 
       if (response.isSuccess && response.data != null) {
         // Extract post IDs that are pinned by the user
         final Set<int> pinnedPostIds = <int>{};
-        
+
         for (final item in response.data!) {
           if (item is Map<String, dynamic>) {
             final postData = item['post'];
@@ -724,10 +752,11 @@ class CommunityController extends GetxController {
               final postId = postData['id'];
               if (postId is int) {
                 // Check if is_pin_post is true
-                final isPinned = item['is_pin_post'] == true || 
-                                item['is_pin_post'] == 1 ||
-                                (item['is_pin_post']?.toString().toLowerCase() == 'true');
-                
+                final isPinned =
+                    item['is_pin_post'] == true ||
+                    item['is_pin_post'] == 1 ||
+                    (item['is_pin_post']?.toString().toLowerCase() == 'true');
+
                 if (isPinned) {
                   pinnedPostIds.add(postId);
                 }
@@ -735,9 +764,9 @@ class CommunityController extends GetxController {
             }
           }
         }
-        
+
         debugPrint('✅ Found ${pinnedPostIds.length} pinned posts by user');
-        
+
         // Update posts list to mark pinned posts
         if (pinnedPostIds.isNotEmpty) {
           final updatedPosts = posts.map((post) {
@@ -747,10 +776,9 @@ class CommunityController extends GetxController {
             }
             return post;
           }).toList();
-          
-          // Sort: pinned first
-          final sortedPosts = _sortPostsWithPinnedFirst(updatedPosts);
-          posts.value = sortedPosts;
+
+          // Don't sort - keep posts in original order
+          posts.value = updatedPosts;
           debugPrint('✅ Updated ${pinnedPostIds.length} posts as pinned');
         }
       } else {
@@ -776,7 +804,7 @@ class CommunityController extends GetxController {
     try {
       debugPrint('🔄 Fetching communities from API...');
       final response = await _communityRepository.getAllCommunities();
-      
+
       if (response.isSuccess && response.data != null) {
         communities.value = response.data!
             .map((item) => item as Map<String, dynamic>)
@@ -806,7 +834,9 @@ class CommunityController extends GetxController {
 
       if (response.isSuccess && response.data != null) {
         singleCommunity.value = response.data!;
-        debugPrint('✅ Successfully loaded community: ${response.data!['community_name']}');
+        debugPrint(
+          '✅ Successfully loaded community: ${response.data!['community_name']}',
+        );
       } else {
         singleCommunityError.value = response.message.isNotEmpty
             ? response.message
@@ -839,7 +869,9 @@ class CommunityController extends GetxController {
 
       if (response.isSuccess && response.data != null) {
         createdCommunity.value = response.data!;
-        debugPrint('✅ Successfully created community: ${response.data!['community_name']}');
+        debugPrint(
+          '✅ Successfully created community: ${response.data!['community_name']}',
+        );
         // Optionally refresh the communities list
         _fetchCommunities();
         return true;
@@ -879,7 +911,9 @@ class CommunityController extends GetxController {
 
       if (response.isSuccess && response.data != null) {
         updatedCommunity.value = response.data!;
-        debugPrint('✅ Successfully updated community: ${response.data!['community_name']}');
+        debugPrint(
+          '✅ Successfully updated community: ${response.data!['community_name']}',
+        );
         // Update the community in the list if it exists
         final index = communities.indexWhere((c) => c['id'] == communityId);
         if (index != -1) {
@@ -952,15 +986,18 @@ class CommunityController extends GetxController {
         if (fetchedPosts.isNotEmpty) {
           // Fetch comment counts for each post
           await _fetchCommentCountsForPosts(fetchedPosts);
-          // Sort posts: pinned first, then by created_at DESC
-          final sortedPosts = _sortPostsWithPinnedFirst(fetchedPosts);
-          posts.value = sortedPosts;
+          // Don't sort - keep posts in original order from API
+          posts.value = fetchedPosts;
           // Load user pinned posts to mark which posts are pinned by the user
           // This will update the posts list with correct pinned status
           await loadUserPinnedPosts();
-          debugPrint('✅ Successfully loaded ${fetchedPosts.length} posts from API');
+          debugPrint(
+            '✅ Successfully loaded ${fetchedPosts.length} posts from API',
+          );
         } else {
-          debugPrint('⚠️ No posts found in API response, keeping initial posts');
+          debugPrint(
+            '⚠️ No posts found in API response, keeping initial posts',
+          );
         }
       } else {
         postsError.value = response.message.isNotEmpty
@@ -984,14 +1021,14 @@ class CommunityController extends GetxController {
   /// ============================================
   /// POST PINNING FEATURE (Multiple Pinned Posts)
   /// ============================================
-  
+
   /// Sort posts: Pinned posts first (preserving their relative order), then normal posts
   /// This ensures all pinned posts always appear at the top of the feed
   List<Post> _sortPostsWithPinnedFirst(List<Post> postsList) {
     // Separate pinned and unpinned posts while preserving original order
     final List<Post> pinnedPosts = [];
     final List<Post> unpinnedPosts = [];
-    
+
     for (final post in postsList) {
       if (post.isPinned) {
         pinnedPosts.add(post);
@@ -999,7 +1036,7 @@ class CommunityController extends GetxController {
         unpinnedPosts.add(post);
       }
     }
-    
+
     // Combine: all pinned posts first (in their original order), then unpinned posts
     return [...pinnedPosts, ...unpinnedPosts];
   }
@@ -1042,7 +1079,7 @@ class CommunityController extends GetxController {
     final post = posts[postIndex];
     final isCurrentlyPinned = post.isPinned;
     final newPinnedState = !isCurrentlyPinned;
-    
+
     // Optimistic update: Toggle pin state immediately
     // Keep all other pinned posts as they are (support multiple pinned posts)
     final updatedPosts = posts.map((p) {
@@ -1054,15 +1091,14 @@ class CommunityController extends GetxController {
       return p;
     }).toList();
 
-    // Sort: pinned first (all pinned posts will be at top)
-    final sortedPosts = _sortPostsWithPinnedFirst(updatedPosts);
-    posts.value = sortedPosts;
+    // Don't sort - keep posts in original order
+    posts.value = updatedPosts;
 
     try {
       if (isCurrentlyPinned) {
         // Unpin the post
         debugPrint('📌 Unpinning post $postId in community $communityId...');
-        
+
         final response = await _communityRepository.unpinCommunityPost(
           apiToken: apiToken,
           postId: postId,
@@ -1073,10 +1109,12 @@ class CommunityController extends GetxController {
           // API success - state already updated optimistically
           // Refresh pinned posts to ensure consistency
           loadUserPinnedPosts();
-          
+
           Get.snackbar(
             'Success',
-            response.message.isNotEmpty ? response.message : 'Post unpinned successfully',
+            response.message.isNotEmpty
+                ? response.message
+                : 'Post unpinned successfully',
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: const Color(0xFF00B8A9),
             colorText: Colors.white,
@@ -1085,18 +1123,18 @@ class CommunityController extends GetxController {
           debugPrint('✅ Post unpinned successfully');
         } else {
           // API failure - rollback optimistic update
-          posts.value = _sortPostsWithPinnedFirst(
-            posts.map((p) {
-              if (p.id == postId) {
-                return p.copyWith(isPinned: true); // Rollback to pinned
-              }
-              return p;
-            }).toList(),
-          );
-          
+          posts.value = posts.map((p) {
+            if (p.id == postId) {
+              return p.copyWith(isPinned: true); // Rollback to pinned
+            }
+            return p;
+          }).toList();
+
           Get.snackbar(
             'Error',
-            response.message.isNotEmpty ? response.message : 'Failed to unpin post',
+            response.message.isNotEmpty
+                ? response.message
+                : 'Failed to unpin post',
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: const Color(0xFFE53935),
             colorText: Colors.white,
@@ -1107,7 +1145,7 @@ class CommunityController extends GetxController {
       } else {
         // Pin the post
         debugPrint('📌 Pinning post $postId in community $communityId...');
-        
+
         final response = await _communityRepository.pinCommunityPost(
           apiToken: apiToken,
           postId: postId,
@@ -1118,10 +1156,12 @@ class CommunityController extends GetxController {
           // API success - state already updated optimistically
           // Refresh pinned posts to ensure consistency
           loadUserPinnedPosts();
-          
+
           Get.snackbar(
             'Success',
-            response.message.isNotEmpty ? response.message : 'Post pinned successfully',
+            response.message.isNotEmpty
+                ? response.message
+                : 'Post pinned successfully',
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: const Color(0xFF00B8A9),
             colorText: Colors.white,
@@ -1130,18 +1170,18 @@ class CommunityController extends GetxController {
           debugPrint('✅ Post pinned successfully');
         } else {
           // API failure - rollback optimistic update
-          posts.value = _sortPostsWithPinnedFirst(
-            posts.map((p) {
-              if (p.id == postId) {
-                return p.copyWith(isPinned: false); // Rollback to unpinned
-              }
-              return p;
-            }).toList(),
-          );
-          
+          posts.value = posts.map((p) {
+            if (p.id == postId) {
+              return p.copyWith(isPinned: false); // Rollback to unpinned
+            }
+            return p;
+          }).toList();
+
           Get.snackbar(
             'Error',
-            response.message.isNotEmpty ? response.message : 'Failed to pin post',
+            response.message.isNotEmpty
+                ? response.message
+                : 'Failed to pin post',
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: const Color(0xFFE53935),
             colorText: Colors.white,
@@ -1152,18 +1192,18 @@ class CommunityController extends GetxController {
       }
     } catch (e) {
       // Exception - rollback optimistic update
-      posts.value = _sortPostsWithPinnedFirst(
-        posts.map((p) {
-          if (p.id == postId) {
-            return p.copyWith(isPinned: isCurrentlyPinned); // Rollback to original state
-          }
-          return p;
-        }).toList(),
-      );
-      
+      posts.value = posts.map((p) {
+        if (p.id == postId) {
+          return p.copyWith(
+            isPinned: isCurrentlyPinned,
+          ); // Rollback to original state
+        }
+        return p;
+      }).toList();
+
       Get.snackbar(
         'Error',
-        isCurrentlyPinned 
+        isCurrentlyPinned
             ? 'An error occurred while unpinning the post'
             : 'An error occurred while pinning the post',
         snackPosition: SnackPosition.BOTTOM,
@@ -1171,7 +1211,9 @@ class CommunityController extends GetxController {
         colorText: Colors.white,
         duration: const Duration(seconds: 2),
       );
-      debugPrint('❌ Error ${isCurrentlyPinned ? "unpinning" : "pinning"} post: $e');
+      debugPrint(
+        '❌ Error ${isCurrentlyPinned ? "unpinning" : "pinning"} post: $e',
+      );
     }
   }
 
@@ -1179,19 +1221,19 @@ class CommunityController extends GetxController {
   /// Fetches comments in parallel for better performance
   Future<void> _fetchCommentCountsForPosts(List<Post> postsList) async {
     if (postsList.isEmpty) return;
-    
+
     debugPrint('🔄 Fetching comments for ${postsList.length} posts...');
-    
+
     // Fetch comments for all posts in parallel
     final futures = postsList.asMap().entries.map((entry) async {
       final index = entry.key;
       final post = entry.value;
-      
+
       try {
         final commentsResponse = await _communityRepository.getAllPostComments(
           postId: post.id,
         );
-        
+
         if (commentsResponse.isSuccess && commentsResponse.data != null) {
           final comments = _mapApiResponseToComments(commentsResponse.data!);
           return MapEntry(index, comments);
@@ -1199,13 +1241,13 @@ class CommunityController extends GetxController {
       } catch (e) {
         debugPrint('⚠️ Could not fetch comments for post ${post.id}: $e');
       }
-      
+
       return MapEntry(index, <Comment>[]);
     });
-    
+
     // Wait for all comment fetches to complete
     final results = await Future.wait(futures);
-    
+
     // Update posts with their comments
     for (final entry in results) {
       final index = entry.key;
@@ -1213,11 +1255,13 @@ class CommunityController extends GetxController {
       if (index < postsList.length) {
         postsList[index] = postsList[index].copyWith(comments: comments);
         if (comments.isNotEmpty) {
-          debugPrint('✅ Loaded ${comments.length} comments for post ${postsList[index].id}');
+          debugPrint(
+            '✅ Loaded ${comments.length} comments for post ${postsList[index].id}',
+          );
         }
       }
     }
-    
+
     debugPrint('✅ Finished loading comments for all posts');
   }
 
@@ -1230,9 +1274,7 @@ class CommunityController extends GetxController {
 
     try {
       debugPrint('🔄 Fetching single post (ID: $postId) from API...');
-      final response = await _communityRepository.getSinglePost(
-        postId: postId,
-      );
+      final response = await _communityRepository.getSinglePost(postId: postId);
 
       if (response.isSuccess && response.data != null) {
         final postData = response.data!;
@@ -1272,18 +1314,22 @@ class CommunityController extends GetxController {
 
     // Construct full image URL if post_image exists
     String postImageUrl = '';
-    if (postData['post_image'] != null && postData['post_image'].toString().isNotEmpty) {
+    if (postData['post_image'] != null &&
+        postData['post_image'].toString().isNotEmpty) {
       final imagePath = postData['post_image'].toString();
       if (imagePath.startsWith('http')) {
         postImageUrl = imagePath;
       } else {
         // Construct full URL
-        postImageUrl = 'https://gravity.attoexasolutions.com/storage/$imagePath';
+        postImageUrl =
+            'https://gravity.attoexasolutions.com/storage/$imagePath';
       }
     }
 
     // Extract post information
-    final postId = postData['id'] is int ? postData['id'] : int.tryParse(postData['id'].toString()) ?? 0;
+    final postId = postData['id'] is int
+        ? postData['id']
+        : int.tryParse(postData['id'].toString()) ?? 0;
     final postText = postData['post_text']?.toString() ?? '';
     final postStatus = postData['post_status']?.toString() ?? '';
     final communityId = postData['community_id'] is int
@@ -1311,7 +1357,8 @@ class CommunityController extends GetxController {
       if (userProfileImage.startsWith('http')) {
         userAvatarUrl = userProfileImage;
       } else {
-        userAvatarUrl = 'https://gravity.attoexasolutions.com/storage/$userProfileImage';
+        userAvatarUrl =
+            'https://gravity.attoexasolutions.com/storage/$userProfileImage';
       }
     } else {
       // Default avatar if no profile image
@@ -1319,9 +1366,10 @@ class CommunityController extends GetxController {
     }
 
     // Extract pin status for single post
-    final isPinned = postData['is_pin_post'] == true || 
-                    postData['is_pin_post'] == 1 ||
-                    (postData['is_pin_post']?.toString().toLowerCase() == 'true');
+    final isPinned =
+        postData['is_pin_post'] == true ||
+        postData['is_pin_post'] == 1 ||
+        (postData['is_pin_post']?.toString().toLowerCase() == 'true');
 
     debugPrint('📊 Single Post Details:');
     debugPrint('   - ID: $postId');
@@ -1335,10 +1383,7 @@ class CommunityController extends GetxController {
 
     return Post(
       id: postId,
-      user: User(
-        name: userName,
-        avatar: userAvatarUrl,
-      ),
+      user: PostUser(name: userName, avatar: userAvatarUrl),
       image: postImageUrl,
       text: postText,
       timestamp: timestamp,
@@ -1369,40 +1414,45 @@ class CommunityController extends GetxController {
         final userProfileImage = userData is Map
             ? (userData['profile_image']?.toString() ?? '')
             : '';
-        
+
         // Construct full image URL if post_image exists
         String postImageUrl = '';
-        if (postData['post_image'] != null && postData['post_image'].toString().isNotEmpty) {
+        if (postData['post_image'] != null &&
+            postData['post_image'].toString().isNotEmpty) {
           final imagePath = postData['post_image'].toString();
           if (imagePath.startsWith('http')) {
             postImageUrl = imagePath;
           } else {
             // Construct full URL
-            postImageUrl = 'https://gravity.attoexasolutions.com/storage/$imagePath';
+            postImageUrl =
+                'https://gravity.attoexasolutions.com/storage/$imagePath';
           }
         }
 
         // Extract post information
-        final postId = postData['id'] is int ? postData['id'] : int.tryParse(postData['id'].toString()) ?? 0;
+        final postId = postData['id'] is int
+            ? postData['id']
+            : int.tryParse(postData['id'].toString()) ?? 0;
         final postText = postData['post_text']?.toString() ?? '';
-        
+
         // Extract pin status (mapped from is_pin_post API field)
-        final isPinned = postData['is_pin_post'] == true || 
-                        postData['is_pin_post'] == 1 ||
-                        (postData['is_pin_post']?.toString().toLowerCase() == 'true');
-        
+        final isPinned =
+            postData['is_pin_post'] == true ||
+            postData['is_pin_post'] == 1 ||
+            (postData['is_pin_post']?.toString().toLowerCase() == 'true');
+
         // Extract community ID (required for pinning API)
-        final communityId = postData['community_id'] is int 
-            ? postData['community_id'] 
+        final communityId = postData['community_id'] is int
+            ? postData['community_id']
             : int.tryParse(postData['community_id'].toString()) ?? 0;
-        
+
         // Format timestamp
         final createdAt = postData['created_at']?.toString() ?? '';
         final timestamp = _formatTimestamp(createdAt);
 
         // Extract reactions
-        final heartCount = postData['like_count'] is int 
-            ? postData['like_count'] 
+        final heartCount = postData['like_count'] is int
+            ? postData['like_count']
             : int.tryParse(postData['like_count'].toString()) ?? 0;
         final thumbsUpCount = postData['thumsup_count'] is int
             ? postData['thumsup_count']
@@ -1417,7 +1467,8 @@ class CommunityController extends GetxController {
           if (userProfileImage.startsWith('http')) {
             userAvatarUrl = userProfileImage;
           } else {
-            userAvatarUrl = 'https://gravity.attoexasolutions.com/storage/$userProfileImage';
+            userAvatarUrl =
+                'https://gravity.attoexasolutions.com/storage/$userProfileImage';
           }
         } else {
           // Default avatar if no profile image
@@ -1426,10 +1477,7 @@ class CommunityController extends GetxController {
 
         return Post(
           id: postId,
-          user: User(
-            name: userName,
-            avatar: userAvatarUrl,
-          ),
+          user: PostUser(name: userName, avatar: userAvatarUrl),
           image: postImageUrl,
           text: postText,
           timestamp: timestamp,
@@ -1475,7 +1523,7 @@ class CommunityController extends GetxController {
   //   posts.value = [
   //     Post(
   //       id: 1,
-  //       user: User(
+  //       user: PostUser(
   //         name: 'Sarah M.',
   //         avatar: 'https://images.unsplash.com/photo-1749700332038-640b00de758c?w=400',
   //       ),
@@ -1487,13 +1535,13 @@ class CommunityController extends GetxController {
   //         Comment(
   //           id: 1,
   //           commentBy: 0,
-  //           user: User(name: 'Mike R.', avatar: 'https://i.pravatar.cc/150?img=12'),
+  //           user: PostUser(name: 'Mike R.', avatar: 'https://i.pravatar.cc/150?img=12'),
   //           text: 'Looks delicious! What\'s in it?',
   //           timestamp: '1 hour ago',
   //           replies: [
   //             Reply(
   //               id: 1,
-  //               user: User(name: 'Sarah M.', avatar: 'https://images.unsplash.com/photo-1749700332038-640b00de758c?w=400'),
+  //               user: PostUser(name: 'Sarah M.', avatar: 'https://images.unsplash.com/photo-1749700332038-640b00de758c?w=400'),
   //               text: 'Quinoa, grilled chicken, avocado, and lots of veggies! 🥑',
   //               timestamp: '45 min ago',
   //             ),
@@ -1502,7 +1550,7 @@ class CommunityController extends GetxController {
   //         Comment(
   //           id: 2,
   //           commentBy: 0,
-  //           user: User(name: 'Emma L.', avatar: 'https://i.pravatar.cc/150?img=5'),
+  //           user: PostUser(name: 'Emma L.', avatar: 'https://i.pravatar.cc/150?img=5'),
   //           text: 'This is inspiring! I need to meal prep better.',
   //           timestamp: '30 min ago',
   //           replies: [],
@@ -1511,7 +1559,7 @@ class CommunityController extends GetxController {
   //     ),
   //     Post(
   //       id: 2,
-  //       user: User(
+  //       user: PostUser(
   //         name: 'Mike R.',
   //         avatar: 'https://i.pravatar.cc/150?img=12',
   //       ),
@@ -1523,7 +1571,7 @@ class CommunityController extends GetxController {
   //         Comment(
   //           id: 1,
   //           commentBy: 0,
-  //           user: User(name: 'Alex K.', avatar: 'https://i.pravatar.cc/150?img=8'),
+  //           user: PostUser(name: 'Alex K.', avatar: 'https://i.pravatar.cc/150?img=8'),
   //           text: 'Beast mode! 💪 I did a 3k this morning.',
   //           timestamp: '4 hours ago',
   //           replies: [],
@@ -1532,7 +1580,7 @@ class CommunityController extends GetxController {
   //     ),
   //     Post(
   //       id: 3,
-  //       user: User(
+  //       user: PostUser(
   //         name: 'Emma L.',
   //         avatar: 'https://i.pravatar.cc/150?img=5',
   //       ),
@@ -1544,7 +1592,7 @@ class CommunityController extends GetxController {
   //         Comment(
   //           id: 1,
   //           commentBy: 0,
-  //           user: User(name: 'Sarah M.', avatar: 'https://images.unsplash.com/photo-1749700332038-640b00de758c?w=400'),
+  //           user: PostUser(name: 'Sarah M.', avatar: 'https://images.unsplash.com/photo-1749700332038-640b00de758c?w=400'),
   //           text: 'Sleep is so important! Great job! 🌙',
   //           timestamp: '7 hours ago',
   //           replies: [],
@@ -1553,7 +1601,7 @@ class CommunityController extends GetxController {
   //     ),
   //     Post(
   //       id: 4,
-  //       user: User(
+  //       user: PostUser(
   //         name: 'Alex K.',
   //         avatar: 'https://i.pravatar.cc/150?img=8',
   //       ),
@@ -1569,7 +1617,7 @@ class CommunityController extends GetxController {
   // Match React: User can only have ONE reaction per post
   // If clicking the same reaction, remove it (toggle off)
   // If clicking a different reaction, remove previous and add new one
-  // 
+  //
   // IMPORTANT: Only ONE reaction should be active per user per post at any time.
   // When switching reactions, the backend must:
   // 1. Set the previous reaction status to 0 (inactive)
@@ -1577,34 +1625,40 @@ class CommunityController extends GetxController {
   // 3. Ensure only one active reaction record exists in the database
   Future<void> toggleReaction(int postId, String reaction) async {
     // Get current reactions for this post (should be empty or contain only one reaction)
-    final postReactions = Set<String>.from(activeReactions[postId] ?? <String>{});
-    
+    final postReactions = Set<String>.from(
+      activeReactions[postId] ?? <String>{},
+    );
+
     // Validate: Ensure only one reaction exists (safety check)
     if (postReactions.length > 1) {
-      debugPrint('⚠️ Warning: Multiple reactions found for post $postId. Clearing all.');
+      debugPrint(
+        '⚠️ Warning: Multiple reactions found for post $postId. Clearing all.',
+      );
       postReactions.clear();
     }
-    
+
     // Check if user already has this exact reaction
     final hasThisReaction = postReactions.contains(reaction);
-    
+
     // Get the previous reaction if user had one (can only have one at a time)
-    final previousReaction = postReactions.isNotEmpty ? postReactions.first : null;
-    
+    final previousReaction = postReactions.isNotEmpty
+        ? postReactions.first
+        : null;
+
     // CRITICAL: Clear ALL reactions for this post first (ensures only one active reaction)
     // This ensures the frontend state matches the backend expectation: only one active reaction
     postReactions.clear();
-    
+
     // If clicking the same reaction, remove it (toggle off) - postReactions stays empty
     // If clicking a different reaction, add the new one - postReactions will have only the new reaction
     if (!hasThisReaction) {
       postReactions.add(reaction);
     }
-    
+
     // Update state: Only one reaction (or none) should be stored per post
     activeReactions[postId] = postReactions;
     activeReactions.refresh();
-    
+
     // Save active reactions to local storage for persistence
     _saveActiveReactionsToStorage();
 
@@ -1613,12 +1667,12 @@ class CommunityController extends GetxController {
     if (postIndex != -1) {
       final post = posts[postIndex];
       final currentReactions = post.reactions;
-      
+
       // Start with current reaction counts
       int newHeart = currentReactions.heart;
       int newThumbsUp = currentReactions.thumbsUp;
       int newFire = currentReactions.fire;
-      
+
       // Decrement previous reaction if user had one
       if (previousReaction != null) {
         if (previousReaction == 'heart') {
@@ -1629,7 +1683,7 @@ class CommunityController extends GetxController {
           newFire = (newFire - 1).clamp(0, double.infinity).toInt();
         }
       }
-      
+
       // Increment new reaction if user is adding one (not removing)
       if (!hasThisReaction) {
         if (reaction == 'heart') {
@@ -1640,7 +1694,7 @@ class CommunityController extends GetxController {
           newFire = newFire + 1;
         }
       }
-      
+
       // Create updated reactions with new counts
       final updatedReactions = currentReactions.copyWith(
         heart: newHeart,
@@ -1653,7 +1707,7 @@ class CommunityController extends GetxController {
       posts.refresh();
 
       // Save to backend to persist the reaction using dedicated reaction API
-      // 
+      //
       // BACKEND REQUIREMENT: When this request is sent, the backend MUST:
       // 1. Set the user's previous reaction (if any) to status = 0 (inactive)
       // 2. Set the new reaction (if any) to status = 1 (active)
@@ -1662,15 +1716,17 @@ class CommunityController extends GetxController {
       //
       // Facebook-like: Only send the user's selected reaction as true, others are omitted
       // Use the reaction parameter directly (what user just tapped) instead of reading from activeReactions
-      final currentReaction = !hasThisReaction ? reaction : null; // null if removing, otherwise the reaction type
-      
+      final currentReaction = !hasThisReaction
+          ? reaction
+          : null; // null if removing, otherwise the reaction type
+
       // Determine which reaction to send to backend
       // CRITICAL: Only ONE field should be sent (or none if removing reaction)
       // The backend will handle deactivating the previous reaction
       bool like = false;
       bool thumsup = false;
       bool other = false;
-      
+
       if (currentReaction != null) {
         // User has selected a reaction - send only that one as true
         // Backend must deactivate any previous reaction and activate this one
@@ -1684,12 +1740,12 @@ class CommunityController extends GetxController {
       }
       // If currentReaction is null, all remain false (user removed their reaction)
       // Backend should set all reactions to inactive (status = 0) for this user/post
-      
+
       debugPrint('📤 Sending reaction to backend (Facebook-like):');
       debugPrint('   - User tapped: $reaction, isRemoving: $hasThisReaction');
       debugPrint('   - Current reaction: ${currentReaction ?? "none"}');
       debugPrint('   - like: $like, thumsup: $thumsup, other: $other');
-      
+
       await _saveReactionToBackend(postId, like, thumsup, other);
     }
   }
@@ -1697,7 +1753,12 @@ class CommunityController extends GetxController {
   /// Save reaction to backend using dedicated reaction API
   /// API: POST /api/post/react
   /// Facebook-like: Only the user's selected reaction should be true, others should be false
-  Future<void> _saveReactionToBackend(int postId, bool like, bool thumsup, bool other) async {
+  Future<void> _saveReactionToBackend(
+    int postId,
+    bool like,
+    bool thumsup,
+    bool other,
+  ) async {
     try {
       final apiToken = PreferencesService.getAuthToken();
       if (apiToken == null || apiToken.isEmpty) {
@@ -1712,7 +1773,7 @@ class CommunityController extends GetxController {
       }
 
       final post = posts[postIndex];
-      
+
       debugPrint('🔄 Saving reaction to backend for post $postId...');
       debugPrint('   - like: $like, thumsup: $thumsup, other: $other');
 
@@ -1737,7 +1798,9 @@ class CommunityController extends GetxController {
         posts[postIndex] = post.copyWith(reactions: updatedReactions);
         posts.refresh();
       } else {
-        debugPrint('⚠️ Failed to save reaction to backend: ${response.message}');
+        debugPrint(
+          '⚠️ Failed to save reaction to backend: ${response.message}',
+        );
         // Revert to previous counts if save failed
         // Note: We could revert here, but for better UX, we keep the optimistic update
       }
@@ -1760,10 +1823,11 @@ class CommunityController extends GetxController {
       // Get auth token
       final apiToken = PreferencesService.getAuthToken();
       if (apiToken == null || apiToken.isEmpty) {
-        createCommentError.value = 'Authentication required. Please login again.';
+        createCommentError.value =
+            'Authentication required. Please login again.';
         debugPrint('❌ AddComment Error: No auth token found');
         isCreatingComment.value = false;
-        
+
         Get.snackbar(
           'Error',
           createCommentError.value,
@@ -1788,36 +1852,34 @@ class CommunityController extends GetxController {
 
       if (response.isSuccess) {
         debugPrint('✅ Comment created successfully: ${response.message}');
-        
+
         // Get user info for the new comment
         final commentUserName = currentUserName;
-        final commentUserAvatar = currentUserProfileImage.isNotEmpty 
-            ? currentUserProfileImage 
+        final commentUserAvatar = currentUserProfileImage.isNotEmpty
+            ? currentUserProfileImage
             : 'https://i.pravatar.cc/150?img=1';
 
         // Get comment ID from response or generate a temporary one
         int commentId = 0;
         if (response.data != null && response.data!['id'] != null) {
-          commentId = response.data!['id'] is int 
-              ? response.data!['id'] 
-              : int.tryParse(response.data!['id'].toString()) ?? DateTime.now().millisecondsSinceEpoch;
+          commentId = response.data!['id'] is int
+              ? response.data!['id']
+              : int.tryParse(response.data!['id'].toString()) ??
+                    DateTime.now().millisecondsSinceEpoch;
         } else {
           commentId = DateTime.now().millisecondsSinceEpoch;
         }
 
         // Get comment_by from response or use current user ID
-        int commentByUserId = response.data?['comment_by'] is int 
-            ? response.data!['comment_by'] 
+        int commentByUserId = response.data?['comment_by'] is int
+            ? response.data!['comment_by']
             : (PreferencesService.getUserId() ?? 0);
 
         // Create the new comment object
         final newCommentObj = Comment(
           id: commentId,
           commentBy: commentByUserId,
-          user: User(
-            name: commentUserName,
-            avatar: commentUserAvatar,
-          ),
+          user: PostUser(name: commentUserName, avatar: commentUserAvatar),
           text: response.data?['comments']?.toString() ?? newComment.value,
           timestamp: 'Just now',
           replies: [],
@@ -1831,14 +1893,21 @@ class CommunityController extends GetxController {
         final postIndex = posts.indexWhere((p) => p.id == postId);
         if (postIndex != -1) {
           final updatedComments = [...posts[postIndex].comments, newCommentObj];
-          posts[postIndex] = posts[postIndex].copyWith(comments: updatedComments);
+          posts[postIndex] = posts[postIndex].copyWith(
+            comments: updatedComments,
+          );
           posts.refresh();
         }
 
         // Also update singlePost if it's the same post
         if (singlePost.value != null && singlePost.value!.id == postId) {
-          final updatedComments = [...singlePost.value!.comments, newCommentObj];
-          singlePost.value = singlePost.value!.copyWith(comments: updatedComments);
+          final updatedComments = [
+            ...singlePost.value!.comments,
+            newCommentObj,
+          ];
+          singlePost.value = singlePost.value!.copyWith(
+            comments: updatedComments,
+          );
         }
 
         // Clear input
@@ -1847,11 +1916,11 @@ class CommunityController extends GetxController {
 
         debugPrint('✅ Comment added to post $postId');
       } else {
-        createCommentError.value = response.message.isNotEmpty 
-            ? response.message 
+        createCommentError.value = response.message.isNotEmpty
+            ? response.message
             : 'Failed to create comment';
         debugPrint('❌ Failed to create comment: ${response.message}');
-        
+
         Get.snackbar(
           'Error',
           createCommentError.value,
@@ -1864,7 +1933,7 @@ class CommunityController extends GetxController {
     } catch (e) {
       createCommentError.value = 'An error occurred while creating comment';
       debugPrint('❌ Error creating comment: $e');
-      
+
       Get.snackbar(
         'Error',
         createCommentError.value,
@@ -1892,10 +1961,11 @@ class CommunityController extends GetxController {
       // Get auth token
       final apiToken = PreferencesService.getAuthToken();
       if (apiToken == null || apiToken.isEmpty) {
-        createCommentError.value = 'Authentication required. Please login again.';
+        createCommentError.value =
+            'Authentication required. Please login again.';
         debugPrint('❌ AddReply Error: No auth token found');
         isCreatingComment.value = false;
-        
+
         Get.snackbar(
           'Error',
           createCommentError.value,
@@ -1921,19 +1991,20 @@ class CommunityController extends GetxController {
 
       if (response.isSuccess) {
         debugPrint('✅ Reply created successfully: ${response.message}');
-        
+
         // Get user info for the new reply
         final replyUserName = currentUserName;
-        final replyUserAvatar = currentUserProfileImage.isNotEmpty 
-            ? currentUserProfileImage 
+        final replyUserAvatar = currentUserProfileImage.isNotEmpty
+            ? currentUserProfileImage
             : 'https://i.pravatar.cc/150?img=1';
 
         // Get reply ID from response or generate a temporary one
         int replyId = 0;
         if (response.data != null && response.data!['id'] != null) {
-          replyId = response.data!['id'] is int 
-              ? response.data!['id'] 
-              : int.tryParse(response.data!['id'].toString()) ?? DateTime.now().millisecondsSinceEpoch;
+          replyId = response.data!['id'] is int
+              ? response.data!['id']
+              : int.tryParse(response.data!['id'].toString()) ??
+                    DateTime.now().millisecondsSinceEpoch;
         } else {
           replyId = DateTime.now().millisecondsSinceEpoch;
         }
@@ -1941,10 +2012,7 @@ class CommunityController extends GetxController {
         // Create the new reply object
         final newReplyObj = Reply(
           id: replyId,
-          user: User(
-            name: replyUserName,
-            avatar: replyUserAvatar,
-          ),
+          user: PostUser(name: replyUserName, avatar: replyUserAvatar),
           text: response.data?['comments']?.toString() ?? newReply.value,
           timestamp: 'Just now',
         );
@@ -1952,36 +2020,59 @@ class CommunityController extends GetxController {
         // Update postComments list
         final commentIndex = postComments.indexWhere((c) => c.id == commentId);
         if (commentIndex != -1) {
-          final updatedReplies = [...postComments[commentIndex].replies, newReplyObj];
-          postComments[commentIndex] = postComments[commentIndex].copyWith(replies: updatedReplies);
+          final updatedReplies = [
+            ...postComments[commentIndex].replies,
+            newReplyObj,
+          ];
+          postComments[commentIndex] = postComments[commentIndex].copyWith(
+            replies: updatedReplies,
+          );
           postComments.refresh();
         }
 
         // Update local post with new reply
         final postIndex = posts.indexWhere((p) => p.id == postId);
         if (postIndex != -1) {
-          final postCommentIndex = posts[postIndex].comments.indexWhere((c) => c.id == commentId);
+          final postCommentIndex = posts[postIndex].comments.indexWhere(
+            (c) => c.id == commentId,
+          );
           if (postCommentIndex != -1) {
-            final updatedReplies = [...posts[postIndex].comments[postCommentIndex].replies, newReplyObj];
-            final updatedComment = posts[postIndex].comments[postCommentIndex].copyWith(replies: updatedReplies);
+            final updatedReplies = [
+              ...posts[postIndex].comments[postCommentIndex].replies,
+              newReplyObj,
+            ];
+            final updatedComment = posts[postIndex].comments[postCommentIndex]
+                .copyWith(replies: updatedReplies);
             final updatedComments = [...posts[postIndex].comments];
             updatedComments[postCommentIndex] = updatedComment;
 
-            posts[postIndex] = posts[postIndex].copyWith(comments: updatedComments);
+            posts[postIndex] = posts[postIndex].copyWith(
+              comments: updatedComments,
+            );
             posts.refresh();
           }
         }
 
         // Also update singlePost if it's the same post
         if (singlePost.value != null && singlePost.value!.id == postId) {
-          final singlePostCommentIndex = singlePost.value!.comments.indexWhere((c) => c.id == commentId);
+          final singlePostCommentIndex = singlePost.value!.comments.indexWhere(
+            (c) => c.id == commentId,
+          );
           if (singlePostCommentIndex != -1) {
-            final updatedReplies = [...singlePost.value!.comments[singlePostCommentIndex].replies, newReplyObj];
-            final updatedComment = singlePost.value!.comments[singlePostCommentIndex].copyWith(replies: updatedReplies);
+            final updatedReplies = [
+              ...singlePost.value!.comments[singlePostCommentIndex].replies,
+              newReplyObj,
+            ];
+            final updatedComment = singlePost
+                .value!
+                .comments[singlePostCommentIndex]
+                .copyWith(replies: updatedReplies);
             final updatedComments = [...singlePost.value!.comments];
             updatedComments[singlePostCommentIndex] = updatedComment;
 
-            singlePost.value = singlePost.value!.copyWith(comments: updatedComments);
+            singlePost.value = singlePost.value!.copyWith(
+              comments: updatedComments,
+            );
           }
         }
 
@@ -1993,11 +2084,11 @@ class CommunityController extends GetxController {
 
         debugPrint('✅ Reply added to comment $commentId on post $postId');
       } else {
-        createCommentError.value = response.message.isNotEmpty 
-            ? response.message 
+        createCommentError.value = response.message.isNotEmpty
+            ? response.message
             : 'Failed to create reply';
         debugPrint('❌ Failed to create reply: ${response.message}');
-        
+
         Get.snackbar(
           'Error',
           createCommentError.value,
@@ -2010,7 +2101,7 @@ class CommunityController extends GetxController {
     } catch (e) {
       createCommentError.value = 'An error occurred while creating reply';
       debugPrint('❌ Error creating reply: $e');
-      
+
       Get.snackbar(
         'Error',
         createCommentError.value,
@@ -2037,21 +2128,27 @@ class CommunityController extends GetxController {
       );
 
       if (response.isSuccess && response.data != null) {
-        final List<Comment> fetchedComments = _mapApiResponseToComments(response.data!);
+        final List<Comment> fetchedComments = _mapApiResponseToComments(
+          response.data!,
+        );
         postComments.value = fetchedComments;
-        
+
         // Also update the post's comments in the posts list
         final postIndex = posts.indexWhere((p) => p.id == postId);
         if (postIndex != -1) {
-          posts[postIndex] = posts[postIndex].copyWith(comments: fetchedComments);
+          posts[postIndex] = posts[postIndex].copyWith(
+            comments: fetchedComments,
+          );
           posts.refresh();
         }
-        
+
         // Update singlePost if it matches
         if (singlePost.value != null && singlePost.value!.id == postId) {
-          singlePost.value = singlePost.value!.copyWith(comments: fetchedComments);
+          singlePost.value = singlePost.value!.copyWith(
+            comments: fetchedComments,
+          );
         }
-        
+
         debugPrint('✅ Successfully loaded ${fetchedComments.length} comments');
       } else {
         commentsError.value = response.message.isNotEmpty
@@ -2096,7 +2193,8 @@ class CommunityController extends GetxController {
           if (userProfileImage.startsWith('http')) {
             userAvatarUrl = userProfileImage;
           } else {
-            userAvatarUrl = 'https://gravity.attoexasolutions.com/storage/$userProfileImage';
+            userAvatarUrl =
+                'https://gravity.attoexasolutions.com/storage/$userProfileImage';
           }
         } else {
           final commentId = commentData['id'] is int ? commentData['id'] : 0;
@@ -2104,14 +2202,14 @@ class CommunityController extends GetxController {
         }
 
         // Extract comment information
-        final commentId = commentData['id'] is int 
-            ? commentData['id'] 
+        final commentId = commentData['id'] is int
+            ? commentData['id']
             : int.tryParse(commentData['id'].toString()) ?? 0;
-        final commentBy = commentData['comment_by'] is int 
-            ? commentData['comment_by'] 
+        final commentBy = commentData['comment_by'] is int
+            ? commentData['comment_by']
             : int.tryParse(commentData['comment_by'].toString()) ?? 0;
         final commentText = commentData['comments']?.toString() ?? '';
-        
+
         // Format timestamp
         final createdAt = commentData['created_at']?.toString() ?? '';
         final timestamp = _formatTimestamp(createdAt);
@@ -2119,16 +2217,15 @@ class CommunityController extends GetxController {
         // Map replies
         final repliesData = commentData['replies'] ?? [];
         final List<Reply> replies = (repliesData is List)
-            ? repliesData.map((replyItem) => _mapApiResponseToReply(replyItem)).toList()
+            ? repliesData
+                  .map((replyItem) => _mapApiResponseToReply(replyItem))
+                  .toList()
             : [];
 
         return Comment(
           id: commentId,
           commentBy: commentBy,
-          user: User(
-            name: userName,
-            avatar: userAvatarUrl,
-          ),
+          user: PostUser(name: userName, avatar: userAvatarUrl),
           text: commentText,
           timestamp: timestamp,
           replies: replies,
@@ -2161,15 +2258,16 @@ class CommunityController extends GetxController {
       if (userProfileImage.startsWith('http')) {
         userAvatarUrl = userProfileImage;
       } else {
-        userAvatarUrl = 'https://gravity.attoexasolutions.com/storage/$userProfileImage';
+        userAvatarUrl =
+            'https://gravity.attoexasolutions.com/storage/$userProfileImage';
       }
     } else {
       final replyId = data['id'] is int ? data['id'] : 0;
       userAvatarUrl = 'https://i.pravatar.cc/150?img=${replyId % 10}';
     }
 
-    final replyId = data['id'] is int 
-        ? data['id'] 
+    final replyId = data['id'] is int
+        ? data['id']
         : int.tryParse(data['id'].toString()) ?? 0;
     final replyText = data['comments']?.toString() ?? '';
     final createdAt = data['created_at']?.toString() ?? '';
@@ -2177,10 +2275,7 @@ class CommunityController extends GetxController {
 
     return Reply(
       id: replyId,
-      user: User(
-        name: userName,
-        avatar: userAvatarUrl,
-      ),
+      user: PostUser(name: userName, avatar: userAvatarUrl),
       text: replyText,
       timestamp: timestamp,
     );
@@ -2199,43 +2294,59 @@ class CommunityController extends GetxController {
 
       if (response.isSuccess && response.data != null) {
         final commentData = response.data!;
-        
+
         // Map replies from the response
         final repliesData = commentData['replies'] ?? [];
         final List<Reply> replies = (repliesData is List)
-            ? repliesData.map((replyItem) => _mapApiResponseToReply(replyItem)).toList()
+            ? repliesData
+                  .map((replyItem) => _mapApiResponseToReply(replyItem))
+                  .toList()
             : [];
 
         // Update the comment's replies in postComments
         final commentIndex = postComments.indexWhere((c) => c.id == commentId);
         if (commentIndex != -1) {
-          postComments[commentIndex] = postComments[commentIndex].copyWith(replies: replies);
+          postComments[commentIndex] = postComments[commentIndex].copyWith(
+            replies: replies,
+          );
           postComments.refresh();
         }
 
         // Also update in posts list
         final postIndex = posts.indexWhere((p) => p.id == postId);
         if (postIndex != -1) {
-          final postCommentIndex = posts[postIndex].comments.indexWhere((c) => c.id == commentId);
+          final postCommentIndex = posts[postIndex].comments.indexWhere(
+            (c) => c.id == commentId,
+          );
           if (postCommentIndex != -1) {
             final updatedComments = [...posts[postIndex].comments];
-            updatedComments[postCommentIndex] = updatedComments[postCommentIndex].copyWith(replies: replies);
-            posts[postIndex] = posts[postIndex].copyWith(comments: updatedComments);
+            updatedComments[postCommentIndex] =
+                updatedComments[postCommentIndex].copyWith(replies: replies);
+            posts[postIndex] = posts[postIndex].copyWith(
+              comments: updatedComments,
+            );
             posts.refresh();
           }
         }
 
         // Update singlePost if it matches
         if (singlePost.value != null && singlePost.value!.id == postId) {
-          final postCommentIndex = singlePost.value!.comments.indexWhere((c) => c.id == commentId);
+          final postCommentIndex = singlePost.value!.comments.indexWhere(
+            (c) => c.id == commentId,
+          );
           if (postCommentIndex != -1) {
             final updatedComments = [...singlePost.value!.comments];
-            updatedComments[postCommentIndex] = updatedComments[postCommentIndex].copyWith(replies: replies);
-            singlePost.value = singlePost.value!.copyWith(comments: updatedComments);
+            updatedComments[postCommentIndex] =
+                updatedComments[postCommentIndex].copyWith(replies: replies);
+            singlePost.value = singlePost.value!.copyWith(
+              comments: updatedComments,
+            );
           }
         }
 
-        debugPrint('✅ Successfully loaded comment with ${replies.length} replies');
+        debugPrint(
+          '✅ Successfully loaded comment with ${replies.length} replies',
+        );
       } else {
         debugPrint('❌ Failed to load single comment: ${response.message}');
       }
@@ -2258,7 +2369,8 @@ class CommunityController extends GetxController {
     try {
       final apiToken = PreferencesService.getAuthToken();
       if (apiToken == null || apiToken.isEmpty) {
-        updateCommentError.value = 'Authentication required. Please login again.';
+        updateCommentError.value =
+            'Authentication required. Please login again.';
         debugPrint('❌ UpdateComment Error: No auth token found');
         isUpdatingComment.value = false;
         return false;
@@ -2280,31 +2392,52 @@ class CommunityController extends GetxController {
         debugPrint('✅ Comment updated successfully: ${response.message}');
 
         // Update in postComments
-        final commentIndex = postComments.indexWhere((c) => c.id == editingCommentId.value);
+        final commentIndex = postComments.indexWhere(
+          (c) => c.id == editingCommentId.value,
+        );
         if (commentIndex != -1) {
-          postComments[commentIndex] = postComments[commentIndex].copyWith(text: editCommentText.value);
+          postComments[commentIndex] = postComments[commentIndex].copyWith(
+            text: editCommentText.value,
+          );
           postComments.refresh();
         }
 
         // Update in posts list
-        final postIndex = posts.indexWhere((p) => p.id == editCommentPostId.value);
+        final postIndex = posts.indexWhere(
+          (p) => p.id == editCommentPostId.value,
+        );
         if (postIndex != -1) {
-          final postCommentIndex = posts[postIndex].comments.indexWhere((c) => c.id == editingCommentId.value);
+          final postCommentIndex = posts[postIndex].comments.indexWhere(
+            (c) => c.id == editingCommentId.value,
+          );
           if (postCommentIndex != -1) {
             final updatedComments = [...posts[postIndex].comments];
-            updatedComments[postCommentIndex] = updatedComments[postCommentIndex].copyWith(text: editCommentText.value);
-            posts[postIndex] = posts[postIndex].copyWith(comments: updatedComments);
+            updatedComments[postCommentIndex] =
+                updatedComments[postCommentIndex].copyWith(
+                  text: editCommentText.value,
+                );
+            posts[postIndex] = posts[postIndex].copyWith(
+              comments: updatedComments,
+            );
             posts.refresh();
           }
         }
 
         // Update singlePost if it matches
-        if (singlePost.value != null && singlePost.value!.id == editCommentPostId.value) {
-          final postCommentIndex = singlePost.value!.comments.indexWhere((c) => c.id == editingCommentId.value);
+        if (singlePost.value != null &&
+            singlePost.value!.id == editCommentPostId.value) {
+          final postCommentIndex = singlePost.value!.comments.indexWhere(
+            (c) => c.id == editingCommentId.value,
+          );
           if (postCommentIndex != -1) {
             final updatedComments = [...singlePost.value!.comments];
-            updatedComments[postCommentIndex] = updatedComments[postCommentIndex].copyWith(text: editCommentText.value);
-            singlePost.value = singlePost.value!.copyWith(comments: updatedComments);
+            updatedComments[postCommentIndex] =
+                updatedComments[postCommentIndex].copyWith(
+                  text: editCommentText.value,
+                );
+            singlePost.value = singlePost.value!.copyWith(
+              comments: updatedComments,
+            );
           }
         }
 
@@ -2313,7 +2446,9 @@ class CommunityController extends GetxController {
 
         Get.snackbar(
           'Success',
-          response.message.isNotEmpty ? response.message : 'Comment updated successfully',
+          response.message.isNotEmpty
+              ? response.message
+              : 'Comment updated successfully',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: const Color(0xFF00B8A9),
           colorText: const Color(0xFFFFFFFF),
@@ -2322,11 +2457,11 @@ class CommunityController extends GetxController {
 
         return true;
       } else {
-        updateCommentError.value = response.message.isNotEmpty 
-            ? response.message 
+        updateCommentError.value = response.message.isNotEmpty
+            ? response.message
             : 'Failed to update comment';
         debugPrint('❌ Failed to update comment: ${response.message}');
-        
+
         Get.snackbar(
           'Error',
           updateCommentError.value,
@@ -2335,13 +2470,13 @@ class CommunityController extends GetxController {
           colorText: const Color(0xFFFFFFFF),
           duration: const Duration(seconds: 2),
         );
-        
+
         return false;
       }
     } catch (e) {
       updateCommentError.value = 'An error occurred while updating comment';
       debugPrint('❌ Error updating comment: $e');
-      
+
       Get.snackbar(
         'Error',
         updateCommentError.value,
@@ -2350,7 +2485,7 @@ class CommunityController extends GetxController {
         colorText: const Color(0xFFFFFFFF),
         duration: const Duration(seconds: 2),
       );
-      
+
       return false;
     } finally {
       isUpdatingComment.value = false;
@@ -2383,7 +2518,8 @@ class CommunityController extends GetxController {
     try {
       final apiToken = PreferencesService.getAuthToken();
       if (apiToken == null || apiToken.isEmpty) {
-        deleteCommentError.value = 'Authentication required. Please login again.';
+        deleteCommentError.value =
+            'Authentication required. Please login again.';
         debugPrint('❌ DeleteComment Error: No auth token found');
         isDeletingComment.value = false;
         return false;
@@ -2407,20 +2543,30 @@ class CommunityController extends GetxController {
         // Remove from posts list
         final postIndex = posts.indexWhere((p) => p.id == postId);
         if (postIndex != -1) {
-          final updatedComments = posts[postIndex].comments.where((c) => c.id != commentId).toList();
-          posts[postIndex] = posts[postIndex].copyWith(comments: updatedComments);
+          final updatedComments = posts[postIndex].comments
+              .where((c) => c.id != commentId)
+              .toList();
+          posts[postIndex] = posts[postIndex].copyWith(
+            comments: updatedComments,
+          );
           posts.refresh();
         }
 
         // Update singlePost if it matches
         if (singlePost.value != null && singlePost.value!.id == postId) {
-          final updatedComments = singlePost.value!.comments.where((c) => c.id != commentId).toList();
-          singlePost.value = singlePost.value!.copyWith(comments: updatedComments);
+          final updatedComments = singlePost.value!.comments
+              .where((c) => c.id != commentId)
+              .toList();
+          singlePost.value = singlePost.value!.copyWith(
+            comments: updatedComments,
+          );
         }
 
         Get.snackbar(
           'Success',
-          response.message.isNotEmpty ? response.message : 'Comment deleted successfully',
+          response.message.isNotEmpty
+              ? response.message
+              : 'Comment deleted successfully',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: const Color(0xFF00B8A9),
           colorText: const Color(0xFFFFFFFF),
@@ -2429,11 +2575,11 @@ class CommunityController extends GetxController {
 
         return true;
       } else {
-        deleteCommentError.value = response.message.isNotEmpty 
-            ? response.message 
+        deleteCommentError.value = response.message.isNotEmpty
+            ? response.message
             : 'Failed to delete comment';
         debugPrint('❌ Failed to delete comment: ${response.message}');
-        
+
         Get.snackbar(
           'Error',
           deleteCommentError.value,
@@ -2442,13 +2588,13 @@ class CommunityController extends GetxController {
           colorText: const Color(0xFFFFFFFF),
           duration: const Duration(seconds: 2),
         );
-        
+
         return false;
       }
     } catch (e) {
       deleteCommentError.value = 'An error occurred while deleting comment';
       debugPrint('❌ Error deleting comment: $e');
-      
+
       Get.snackbar(
         'Error',
         deleteCommentError.value,
@@ -2457,7 +2603,7 @@ class CommunityController extends GetxController {
         colorText: const Color(0xFFFFFFFF),
         duration: const Duration(seconds: 2),
       );
-      
+
       return false;
     } finally {
       isDeletingComment.value = false;
@@ -2468,9 +2614,7 @@ class CommunityController extends GetxController {
   void confirmDeleteComment(int postId, int commentId) {
     Get.dialog(
       AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           'Delete Comment',
           style: TextStyle(
@@ -2480,23 +2624,19 @@ class CommunityController extends GetxController {
         ),
         content: const Text(
           'Are you sure you want to delete this comment? This action cannot be undone.',
-          style: TextStyle(
-            color: Color(0xFF0A2342),
-          ),
+          style: TextStyle(color: Color(0xFF0A2342)),
         ),
         actions: [
           TextButton(
             onPressed: () => Get.back(),
             child: const Text(
               'Cancel',
-              style: TextStyle(
-                color: Color(0xFF0A2342),
-              ),
+              style: TextStyle(color: Color(0xFF0A2342)),
             ),
           ),
           ElevatedButton(
             onPressed: () {
-             Get.back();
+              Get.back();
               deleteComment(postId, commentId);
             },
             style: ElevatedButton.styleFrom(
@@ -2505,12 +2645,7 @@ class CommunityController extends GetxController {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: const Text(
-              'Delete',
-              style: TextStyle(
-                color: Colors.white,
-              ),
-            ),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -2532,7 +2667,7 @@ class CommunityController extends GetxController {
         createPostError.value = 'Authentication required. Please login again.';
         debugPrint('❌ CreatePost Error: No auth token found');
         isCreatingPost.value = false;
-        
+
         // Navigate to login
         Future.delayed(const Duration(milliseconds: 500), () {
           Get.offAllNamed('/login');
@@ -2541,7 +2676,9 @@ class CommunityController extends GetxController {
       }
 
       debugPrint('🔄 Creating post via API...');
-      debugPrint('   - Token: ${apiToken.substring(0, apiToken.length > 20 ? 20 : apiToken.length)}... (${apiToken.length} chars)');
+      debugPrint(
+        '   - Token: ${apiToken.substring(0, apiToken.length > 20 ? 20 : apiToken.length)}... (${apiToken.length} chars)',
+      );
       debugPrint('   - Text: ${newPostText.value}');
       debugPrint('   - Community ID: ${selectedCommunityId.value}');
       debugPrint('   - Has Image: ${selectedImage.value.isNotEmpty}');
@@ -2550,7 +2687,8 @@ class CommunityController extends GetxController {
       // Prepare image data if selected
       // API expects full data URL format: data:image/png;base64,...
       String? postImageBase64;
-      if (selectedImage.value.isNotEmpty && selectedImage.value.startsWith('data:image')) {
+      if (selectedImage.value.isNotEmpty &&
+          selectedImage.value.startsWith('data:image')) {
         postImageBase64 = selectedImage.value;
         debugPrint('   - Base64 image size: ${postImageBase64.length} chars');
       }
@@ -2568,45 +2706,44 @@ class CommunityController extends GetxController {
 
       if (response.isSuccess) {
         debugPrint('✅ Post created successfully: ${response.message}');
-        
+
         // Get user info for the new post
         final postUserName = currentUserName;
-        final postUserAvatar = currentUserProfileImage.isNotEmpty 
-            ? currentUserProfileImage 
+        final postUserAvatar = currentUserProfileImage.isNotEmpty
+            ? currentUserProfileImage
             : 'https://i.pravatar.cc/150?img=1';
-        
+
         // Map the response to a Post object
         final createdPostData = response.data;
-        
+
         // Construct full image URL if post_image exists
         String postImageUrl = '';
-        if (createdPostData != null && 
-            createdPostData['post_image'] != null && 
+        if (createdPostData != null &&
+            createdPostData['post_image'] != null &&
             createdPostData['post_image'].toString().isNotEmpty) {
           final imagePath = createdPostData['post_image'].toString();
           if (imagePath.startsWith('http')) {
             postImageUrl = imagePath;
           } else {
-            postImageUrl = 'https://gravity.attoexasolutions.com/storage/$imagePath';
+            postImageUrl =
+                'https://gravity.attoexasolutions.com/storage/$imagePath';
           }
         }
 
         // Get post ID from response or generate a temporary one
         int postId = 0;
         if (createdPostData != null && createdPostData['id'] != null) {
-          postId = createdPostData['id'] is int 
-              ? createdPostData['id'] 
-              : int.tryParse(createdPostData['id'].toString()) ?? DateTime.now().millisecondsSinceEpoch;
+          postId = createdPostData['id'] is int
+              ? createdPostData['id']
+              : int.tryParse(createdPostData['id'].toString()) ??
+                    DateTime.now().millisecondsSinceEpoch;
         } else {
           postId = DateTime.now().millisecondsSinceEpoch;
         }
 
         final newPost = Post(
           id: postId,
-          user: User(
-            name: postUserName,
-            avatar: postUserAvatar,
-          ),
+          user: PostUser(name: postUserName, avatar: postUserAvatar),
           image: postImageUrl,
           text: createdPostData?['post_text']?.toString() ?? newPostText.value,
           timestamp: 'Just now',
@@ -2629,7 +2766,7 @@ class CommunityController extends GetxController {
 
         // Close dialog reliably
         closeCreatePostDialog();
-        
+
         // Show success message with safe context
         // Use a longer delay to ensure dialog is fully closed and context is ready
         Future.delayed(const Duration(milliseconds: 500), () {
@@ -2641,7 +2778,9 @@ class CommunityController extends GetxController {
                 Overlay.of(context);
                 Get.snackbar(
                   'Success',
-                  response.message.isNotEmpty ? response.message : 'Post created successfully',
+                  response.message.isNotEmpty
+                      ? response.message
+                      : 'Post created successfully',
                   snackPosition: SnackPosition.BOTTOM,
                   backgroundColor: const Color(0xFF00B8A9),
                   colorText: const Color(0xFFFFFFFF),
@@ -2649,13 +2788,17 @@ class CommunityController extends GetxController {
                 );
                 debugPrint('✅ Success snackbar shown');
               } catch (overlayError) {
-                debugPrint('⚠️ Overlay not available for snackbar: $overlayError');
+                debugPrint(
+                  '⚠️ Overlay not available for snackbar: $overlayError',
+                );
                 // Retry after a bit more delay
                 Future.delayed(const Duration(milliseconds: 300), () {
                   try {
                     Get.snackbar(
                       'Success',
-                      response.message.isNotEmpty ? response.message : 'Post created successfully',
+                      response.message.isNotEmpty
+                          ? response.message
+                          : 'Post created successfully',
                       snackPosition: SnackPosition.BOTTOM,
                       backgroundColor: const Color(0xFF00B8A9),
                       colorText: const Color(0xFFFFFFFF),
@@ -2677,26 +2820,27 @@ class CommunityController extends GetxController {
 
         return true;
       } else {
-        createPostError.value = response.message.isNotEmpty 
-            ? response.message 
+        createPostError.value = response.message.isNotEmpty
+            ? response.message
             : 'Failed to create post';
         debugPrint('❌ Failed to create post: ${response.message}');
-        
+
         // Handle invalid token error specifically
-        if (response.message.toLowerCase().contains('token') || 
+        if (response.message.toLowerCase().contains('token') ||
             response.message.toLowerCase().contains('invalid') ||
             response.message.toLowerCase().contains('unauthorized')) {
-          createPostError.value = 'Your session has expired. Please login again.';
-          
+          createPostError.value =
+              'Your session has expired. Please login again.';
+
           // Clear invalid token
           await PreferencesService.clearAuthToken();
-          
+
           // Navigate to login after a delay to allow dialog to close
           Future.delayed(const Duration(milliseconds: 500), () {
             Get.offAllNamed('/login');
           });
         }
-        
+
         // Show error message with safe context
         Future.delayed(const Duration(milliseconds: 300), () {
           if (Get.isDialogOpen == false) {
@@ -2710,13 +2854,13 @@ class CommunityController extends GetxController {
             );
           }
         });
-        
+
         return false;
       }
     } catch (e) {
       createPostError.value = 'An error occurred while creating post';
       debugPrint('❌ Error creating post: $e');
-      
+
       // Show error message with safe context
       Future.delayed(const Duration(milliseconds: 300), () {
         if (Get.isDialogOpen == false) {
@@ -2730,7 +2874,7 @@ class CommunityController extends GetxController {
           );
         }
       });
-      
+
       return false;
     } finally {
       isCreatingPost.value = false;
@@ -2761,7 +2905,7 @@ class CommunityController extends GetxController {
   Future<void> pickImageFromGalleryForEdit() async {
     try {
       isPickingImage.value = true;
-      
+
       final XFile? pickedFile = await _imagePicker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1024,
@@ -2797,7 +2941,7 @@ class CommunityController extends GetxController {
   Future<void> pickImageFromCameraForEdit() async {
     try {
       isPickingImage.value = true;
-      
+
       final XFile? pickedFile = await _imagePicker.pickImage(
         source: ImageSource.camera,
         maxWidth: 1024,
@@ -2925,7 +3069,9 @@ class CommunityController extends GetxController {
       }
 
       // Get current post to preserve reaction counts
-      final currentPost = posts.firstWhereOrNull((p) => p.id == editingPostId.value);
+      final currentPost = posts.firstWhereOrNull(
+        (p) => p.id == editingPostId.value,
+      );
 
       debugPrint('🔄 Updating post via API...');
       debugPrint('   - Post ID: ${editingPostId.value}');
@@ -2936,7 +3082,8 @@ class CommunityController extends GetxController {
       // Prepare image data if changed
       // API expects full data URL format: data:image/png;base64,...
       String? postImageBase64;
-      if (editPostImage.value.isNotEmpty && editPostImage.value.startsWith('data:image')) {
+      if (editPostImage.value.isNotEmpty &&
+          editPostImage.value.startsWith('data:image')) {
         postImageBase64 = editPostImage.value;
         debugPrint('   - Base64 image size: ${postImageBase64.length} chars');
       }
@@ -2955,39 +3102,49 @@ class CommunityController extends GetxController {
 
       if (response.isSuccess && response.data != null) {
         debugPrint('✅ Post updated successfully: ${response.message}');
-        
+
         // Map the response to update the post
         final updatedPostData = response.data!;
-        final userName = currentPost?.user.name ?? PreferencesService.getUserName() ?? 'You';
-        final userAvatar = currentPost?.user.avatar ?? 'https://i.pravatar.cc/150?img=1';
-        
+        final userName =
+            currentPost?.user.name ?? PreferencesService.getUserName() ?? 'You';
+        final userAvatar =
+            currentPost?.user.avatar ?? 'https://i.pravatar.cc/150?img=1';
+
         // Construct full image URL if post_image exists
         String postImageUrl = '';
-        if (updatedPostData['post_image'] != null && 
+        if (updatedPostData['post_image'] != null &&
             updatedPostData['post_image'].toString().isNotEmpty) {
           final imagePath = updatedPostData['post_image'].toString();
           if (imagePath.startsWith('http')) {
             postImageUrl = imagePath;
           } else {
-            postImageUrl = 'https://gravity.attoexasolutions.com/storage/$imagePath';
+            postImageUrl =
+                'https://gravity.attoexasolutions.com/storage/$imagePath';
           }
         }
 
         final updatedPost = Post(
-          id: updatedPostData['id'] is int 
-              ? updatedPostData['id'] 
-              : int.tryParse(updatedPostData['id'].toString()) ?? editingPostId.value,
-          user: User(
-            name: userName,
-            avatar: userAvatar,
-          ),
+          id: updatedPostData['id'] is int
+              ? updatedPostData['id']
+              : int.tryParse(updatedPostData['id'].toString()) ??
+                    editingPostId.value,
+          user: PostUser(name: userName, avatar: userAvatar),
           image: postImageUrl,
           text: updatedPostData['post_text']?.toString() ?? editPostText.value,
           timestamp: currentPost?.timestamp ?? 'Just now',
           reactions: Reactions(
-            heart: updatedPostData['like_count'] ?? currentPost?.reactions.heart ?? 0,
-            thumbsUp: updatedPostData['thumsup_count'] ?? currentPost?.reactions.thumbsUp ?? 0,
-            fire: updatedPostData['other_count'] ?? currentPost?.reactions.fire ?? 0,
+            heart:
+                updatedPostData['like_count'] ??
+                currentPost?.reactions.heart ??
+                0,
+            thumbsUp:
+                updatedPostData['thumsup_count'] ??
+                currentPost?.reactions.thumbsUp ??
+                0,
+            fire:
+                updatedPostData['other_count'] ??
+                currentPost?.reactions.fire ??
+                0,
           ),
           comments: currentPost?.comments ?? [],
         );
@@ -3005,7 +3162,9 @@ class CommunityController extends GetxController {
         // Show success message
         Get.snackbar(
           'Success',
-          response.message.isNotEmpty ? response.message : 'Post updated successfully',
+          response.message.isNotEmpty
+              ? response.message
+              : 'Post updated successfully',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: const Color(0xFF00B8A9),
           colorText: const Color(0xFFFFFFFF),
@@ -3014,11 +3173,11 @@ class CommunityController extends GetxController {
 
         return true;
       } else {
-        updatePostError.value = response.message.isNotEmpty 
-            ? response.message 
+        updatePostError.value = response.message.isNotEmpty
+            ? response.message
             : 'Failed to update post';
         debugPrint('❌ Failed to update post: ${response.message}');
-        
+
         // Show error message
         Get.snackbar(
           'Error',
@@ -3028,13 +3187,13 @@ class CommunityController extends GetxController {
           colorText: const Color(0xFFFFFFFF),
           duration: const Duration(seconds: 3),
         );
-        
+
         return false;
       }
     } catch (e) {
       updatePostError.value = 'An error occurred while updating post';
       debugPrint('❌ Error updating post: $e');
-      
+
       // Show error message
       Get.snackbar(
         'Error',
@@ -3044,7 +3203,7 @@ class CommunityController extends GetxController {
         colorText: const Color(0xFFFFFFFF),
         duration: const Duration(seconds: 3),
       );
-      
+
       return false;
     } finally {
       isUpdatingPost.value = false;
@@ -3061,13 +3220,11 @@ class CommunityController extends GetxController {
       debugPrint('🔄 Deleting post via API...');
       debugPrint('   - Post ID: $postId');
 
-      final response = await _communityRepository.deletePost(
-        postId: postId,
-      );
+      final response = await _communityRepository.deletePost(postId: postId);
 
       if (response.isSuccess) {
         debugPrint('✅ Post deleted successfully: ${response.message}');
-        
+
         // Remove the post from the local list
         posts.removeWhere((p) => p.id == postId);
         posts.refresh();
@@ -3075,7 +3232,9 @@ class CommunityController extends GetxController {
         // Show success message
         Get.snackbar(
           'Success',
-          response.message.isNotEmpty ? response.message : 'Post deleted successfully',
+          response.message.isNotEmpty
+              ? response.message
+              : 'Post deleted successfully',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: const Color(0xFF00B8A9),
           colorText: const Color(0xFFFFFFFF),
@@ -3084,11 +3243,11 @@ class CommunityController extends GetxController {
 
         return true;
       } else {
-        deletePostError.value = response.message.isNotEmpty 
-            ? response.message 
+        deletePostError.value = response.message.isNotEmpty
+            ? response.message
             : 'Failed to delete post';
         debugPrint('❌ Failed to delete post: ${response.message}');
-        
+
         // Show error message
         Get.snackbar(
           'Error',
@@ -3098,13 +3257,13 @@ class CommunityController extends GetxController {
           colorText: const Color(0xFFFFFFFF),
           duration: const Duration(seconds: 3),
         );
-        
+
         return false;
       }
     } catch (e) {
       deletePostError.value = 'An error occurred while deleting post';
       debugPrint('❌ Error deleting post: $e');
-      
+
       // Show error message
       Get.snackbar(
         'Error',
@@ -3114,7 +3273,7 @@ class CommunityController extends GetxController {
         colorText: const Color(0xFFFFFFFF),
         duration: const Duration(seconds: 3),
       );
-      
+
       return false;
     } finally {
       isDeletingPost.value = false;
@@ -3125,9 +3284,7 @@ class CommunityController extends GetxController {
   void confirmDeletePost(int postId) {
     Get.dialog(
       AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           'Delete Post',
           style: TextStyle(
@@ -3137,18 +3294,14 @@ class CommunityController extends GetxController {
         ),
         content: const Text(
           'Are you sure you want to delete this post? This action cannot be undone.',
-          style: TextStyle(
-            color: Color(0xFF0A2342),
-          ),
+          style: TextStyle(color: Color(0xFF0A2342)),
         ),
         actions: [
           TextButton(
             onPressed: () => Get.back(),
             child: const Text(
               'Cancel',
-              style: TextStyle(
-                color: Color(0xFF0A2342),
-              ),
+              style: TextStyle(color: Color(0xFF0A2342)),
             ),
           ),
           ElevatedButton(
@@ -3162,12 +3315,7 @@ class CommunityController extends GetxController {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: const Text(
-              'Delete',
-              style: TextStyle(
-                color: Colors.white,
-              ),
-            ),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -3215,140 +3363,10 @@ class CommunityController extends GetxController {
   Post? get selectedPost {
     if (selectedPostId.value == 0) return null;
     // Use single post from API if available, otherwise fallback to local posts list
-    if (singlePost.value != null && singlePost.value!.id == selectedPostId.value) {
+    if (singlePost.value != null &&
+        singlePost.value!.id == selectedPostId.value) {
       return singlePost.value;
     }
     return posts.firstWhereOrNull((p) => p.id == selectedPostId.value);
-  }
-}
-
-// Models
-class User {
-  final String name;
-  final String avatar;
-
-  User({required this.name, required this.avatar});
-}
-
-class Reactions {
-  late final int heart;
-  late final int thumbsUp;
-  late final int fire;
-
-  Reactions({required this.heart, required this.thumbsUp, required this.fire});
-
-  Reactions copyWith({int? heart, int? thumbsUp, int? fire}) {
-    return Reactions(
-      heart: heart ?? this.heart,
-      thumbsUp: thumbsUp ?? this.thumbsUp,
-      fire: fire ?? this.fire,
-    );
-  }
-}
-
-class Reply {
-  final int id;
-  final User user;
-  final String text;
-  final String timestamp;
-
-  Reply({
-    required this.id,
-    required this.user,
-    required this.text,
-    required this.timestamp,
-  });
-
-  Reply copyWith({int? id, User? user, String? text, String? timestamp}) {
-    return Reply(
-      id: id ?? this.id,
-      user: user ?? this.user,
-      text: text ?? this.text,
-      timestamp: timestamp ?? this.timestamp,
-    );
-  }
-}
-
-class Comment {
-  final int id;
-  final int commentBy; // User ID who created the comment
-  final User user;
-  final String text;
-  final String timestamp;
-  final List<Reply> replies;
-
-  Comment({
-    required this.id,
-    required this.commentBy,
-    required this.user,
-    required this.text,
-    required this.timestamp,
-    required this.replies,
-  });
-
-  Comment copyWith({
-    int? id,
-    int? commentBy,
-    User? user,
-    String? text,
-    String? timestamp,
-    List<Reply>? replies,
-  }) {
-    return Comment(
-      id: id ?? this.id,
-      commentBy: commentBy ?? this.commentBy,
-      user: user ?? this.user,
-      text: text ?? this.text,
-      timestamp: timestamp ?? this.timestamp,
-      replies: replies ?? this.replies,
-    );
-  }
-}
-
-class Post {
-  final int id;
-  final User user;
-  final String image;
-  final String text;
-  final String timestamp;
-  final Reactions reactions;
-  final List<Comment> comments;
-  final bool isPinned; // WhatsApp-style pinning: true if post is pinned
-  final int communityId; // Required for pinning API call
-
-  Post({
-    required this.id,
-    required this.user,
-    required this.image,
-    required this.text,
-    required this.timestamp,
-    required this.reactions,
-    required this.comments,
-    this.isPinned = false, // Default to false if not provided
-    this.communityId = 0, // Default to 0 if not provided
-  });
-
-  Post copyWith({
-    int? id,
-    User? user,
-    String? image,
-    String? text,
-    String? timestamp,
-    Reactions? reactions,
-    List<Comment>? comments,
-    bool? isPinned,
-    int? communityId,
-  }) {
-    return Post(
-      id: id ?? this.id,
-      user: user ?? this.user,
-      image: image ?? this.image,
-      text: text ?? this.text,
-      timestamp: timestamp ?? this.timestamp,
-      reactions: reactions ?? this.reactions,
-      comments: comments ?? this.comments,
-      isPinned: isPinned ?? this.isPinned,
-      communityId: communityId ?? this.communityId,
-    );
   }
 }

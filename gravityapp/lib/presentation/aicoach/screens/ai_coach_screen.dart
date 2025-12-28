@@ -13,7 +13,8 @@ class AiCoachScreen extends StatefulWidget {
   State<AiCoachScreen> createState() => _AiCoachScreenState();
 }
 
-class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserver {
+class _AiCoachScreenState extends State<AiCoachScreen>
+    with WidgetsBindingObserver {
   // Initialize controller
   late final AiCoachController controller;
 
@@ -22,10 +23,10 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
     super.initState();
     // Initialize controller
     controller = Get.put(AiCoachController());
-    
+
     // Observe keyboard visibility changes
     WidgetsBinding.instance.addObserver(this);
-    
+
     // Initial keyboard state check
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateKeyboardVisibility();
@@ -57,16 +58,46 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
   /// - Threshold of 50 pixels to avoid false positives from small insets
   void _updateKeyboardVisibility() {
     if (!mounted) return;
-    
+
     final viewInsets = MediaQuery.of(context).viewInsets;
     final keyboardHeight = viewInsets.bottom;
-    
+
     // Keyboard is considered visible if bottom inset is significant (> 50 pixels)
     // This threshold prevents false positives from small safe area insets
     final isKeyboardVisible = keyboardHeight > 50;
-    
+
     // Update controller state (triggers reactive updates)
     controller.isKeyboardVisible.value = isKeyboardVisible;
+  }
+
+  /// Safely navigate back, handling snackbar errors
+  /// Uses Navigator directly to avoid Get.back()'s internal snackbar closing logic
+  void _safeBack() {
+    // Don't try to close snackbars - Get.back() internally calls closeCurrentSnackbar()
+    // which causes LateInitializationError. Use Navigator directly instead.
+
+    try {
+      final context = Get.context;
+      if (context != null && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+        debugPrint('✅ Navigated back via Navigator.pop()');
+        return;
+      }
+    } catch (e) {
+      debugPrint('⚠️ Navigator.pop() failed: $e');
+    }
+
+    // Fallback: try Get.back() if Navigator fails (but this may still cause errors)
+    try {
+      if (Get.isDialogOpen == true) {
+        Get.back();
+        debugPrint('✅ Navigated back via Get.back()');
+      }
+    } catch (e) {
+      debugPrint(
+        '⚠️ Get.back() also failed: $e - Navigation may have already occurred',
+      );
+    }
   }
 
   @override
@@ -90,9 +121,7 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
             _buildAnimatedQuickActions(),
 
             // Messages List
-            Expanded(
-              child: _buildMessagesList(),
-            ),
+            Expanded(child: _buildMessagesList()),
 
             // Input Area
             _buildInputArea(),
@@ -104,10 +133,7 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
 
   Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: 20.w,
-        vertical: 16.h,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF6C63FF), Color(0xFF00B8A9)],
@@ -129,7 +155,7 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
               Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: () => Get.back(),
+                  onTap: () => _safeBack(),
                   borderRadius: BorderRadius.circular(20.r),
                   child: Container(
                     width: 40.w,
@@ -226,11 +252,7 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
                   color: Colors.white.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  Icons.psychology,
-                  color: Colors.white,
-                  size: 24.sp,
-                ),
+                child: Icon(Icons.psychology, color: Colors.white, size: 24.sp),
               ),
               SizedBox(width: 12.w),
               Expanded(
@@ -286,7 +308,7 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
   /// Animates Quick Actions based on keyboard visibility and TextField focus:
   /// - When keyboard opens AND TextField is focused → slide up and fade
   /// - When keyboard closes OR TextField loses focus → slide down and restore
-  /// 
+  ///
   /// Animation Strategy:
   /// 1. ClipRect: Prevents overflow during animation
   /// 2. AnimatedSize: Smoothly animates height changes (no layout jump)
@@ -294,7 +316,7 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
   ///    - Uses SizedBox with height 0 when hidden to collapse smoothly
   /// 3. AnimatedOpacity: Fades in/out for smooth visual transition
   /// 4. AnimatedSlide: Slides up/down on Y-axis for natural movement
-  /// 
+  ///
   /// Edge Cases Handled:
   /// - Fast keyboard open/close: Animation completes smoothly without lag
   /// - Screen rotation: Maintains correct state via didChangeMetrics
@@ -305,11 +327,13 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
     return Obx(() {
       // Single source of truth: Hide when keyboard is visible AND TextField is focused
       final shouldHide = controller.shouldHideQuickActions;
-      
+
       return ClipRect(
         // Clip overflow to prevent content from showing during animation
         child: AnimatedSize(
-          duration: const Duration(milliseconds: 300), // Smooth height animation
+          duration: const Duration(
+            milliseconds: 300,
+          ), // Smooth height animation
           curve: Curves.easeInOut,
           alignment: Alignment.topCenter, // Align from top for upward slide
           // AnimatedSize requires the child to be present in both states for proper measurement
@@ -320,7 +344,10 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
                   height: 0,
                   child: _buildQuickActionsWithAnimation(
                     opacity: 0.0,
-                    slideOffset: const Offset(0, -1), // Slide upward (off-screen)
+                    slideOffset: const Offset(
+                      0,
+                      -1,
+                    ), // Slide upward (off-screen)
                   ),
                 )
               : _buildQuickActionsWithAnimation(
@@ -359,7 +386,8 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
       });
 
       return ListView.builder(
-        controller: controller.messagesScrollController, // Add scroll controller
+        controller:
+            controller.messagesScrollController, // Add scroll controller
         reverse: false, // Normal order: oldest at top, newest at bottom
         padding: EdgeInsets.only(
           left: 20.w,
@@ -367,10 +395,12 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
           top: 20.h,
           bottom: 20.h,
         ),
-        itemCount: controller.messages.length + (controller.isTyping.value ? 1 : 0),
+        itemCount:
+            controller.messages.length + (controller.isTyping.value ? 1 : 0),
         itemBuilder: (context, index) {
           // Typing indicator
-          if (index == controller.messages.length && controller.isTyping.value) {
+          if (index == controller.messages.length &&
+              controller.isTyping.value) {
             return _buildTypingIndicator();
           }
 
@@ -387,8 +417,9 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
     return Padding(
       padding: EdgeInsets.only(bottom: 16.h),
       child: Row(
-        mainAxisAlignment:
-        isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // AI avatar
@@ -402,11 +433,7 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
                 ),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                Icons.psychology,
-                color: Colors.white,
-                size: 18.sp,
-              ),
+              child: Icon(Icons.psychology, color: Colors.white, size: 18.sp),
             ),
             SizedBox(width: 8.w),
           ],
@@ -414,8 +441,9 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
           // Message content
           Flexible(
             child: Column(
-              crossAxisAlignment:
-              isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: isUser
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
                 // Sender name (for AI only)
                 if (!isUser)
@@ -438,8 +466,8 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
                   decoration: BoxDecoration(
                     gradient: isUser
                         ? const LinearGradient(
-                      colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                    )
+                            colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+                          )
                         : null,
                     color: isUser ? null : Colors.white,
                     borderRadius: BorderRadius.only(
@@ -507,11 +535,7 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
               ),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              Icons.psychology,
-              color: Colors.white,
-              size: 18.sp,
-            ),
+            child: Icon(Icons.psychology, color: Colors.white, size: 18.sp),
           ),
           SizedBox(width: 8.w),
 
@@ -529,10 +553,7 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
                 ),
               ),
               Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: 20.w,
-                  vertical: 12.h,
-                ),
+                padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.only(
@@ -592,10 +613,7 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
 
   Widget _buildInputArea() {
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: 20.w,
-        vertical: 16.h,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(
@@ -632,41 +650,47 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
 
           // Input field
           Expanded(
-            child: Obx(() => TextField(
-              controller: controller.messageController,
-              focusNode: controller.messageFocusNode, // Connect FocusNode for focus detection
-              onChanged: (value) => controller.inputMessage.value = value,
-              onSubmitted: (_) {
-                if (controller.inputMessage.value.trim().isNotEmpty && !controller.isSending.value) {
-                  controller.sendMessage();
-                }
-              },
-              enabled: !controller.isSending.value,
-              maxLines: null,
-              decoration: InputDecoration(
-                hintText: 'Ask your AI coach',
-                hintStyle: ResponsiveTextStyles.textSm.copyWith(
-                  color: const Color(0xFF0A2342).withOpacity(0.4),
+            child: Obx(
+              () => TextField(
+                controller: controller.messageController,
+                focusNode: controller
+                    .messageFocusNode, // Connect FocusNode for focus detection
+                onChanged: (value) => controller.inputMessage.value = value,
+                onSubmitted: (_) {
+                  if (controller.inputMessage.value.trim().isNotEmpty &&
+                      !controller.isSending.value) {
+                    controller.sendMessage();
+                  }
+                },
+                enabled: !controller.isSending.value,
+                maxLines: null,
+                decoration: InputDecoration(
+                  hintText: 'Ask your AI coach',
+                  hintStyle: ResponsiveTextStyles.textSm.copyWith(
+                    color: const Color(0xFF0A2342).withOpacity(0.4),
+                  ),
+                  filled: true,
+                  fillColor: AppColors.inputBackground,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24.r),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 16.w,
+                    vertical: 12.h,
+                  ),
                 ),
-                filled: true,
-                fillColor: AppColors.inputBackground,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24.r),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 16.w,
-                  vertical: 12.h,
-                ),
+                style: ResponsiveTextStyles.textSm,
               ),
-              style: ResponsiveTextStyles.textSm,
-            )),
+            ),
           ),
           SizedBox(width: 8.w),
 
           // Send button
           Obx(() {
-            final canSend = controller.inputMessage.value.trim().isNotEmpty && !controller.isSending.value;
+            final canSend =
+                controller.inputMessage.value.trim().isNotEmpty &&
+                !controller.isSending.value;
             final isSending = controller.isSending.value;
             return InkWell(
               onTap: canSend ? controller.sendMessage : null,
@@ -677,10 +701,12 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
                 decoration: BoxDecoration(
                   gradient: (canSend || isSending)
                       ? const LinearGradient(
-                    colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                  )
+                          colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+                        )
                       : null,
-                  color: (canSend || isSending) ? null : const Color(0xFF0A2342).withOpacity(0.1),
+                  color: (canSend || isSending)
+                      ? null
+                      : const Color(0xFF0A2342).withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
                 child: isSending
@@ -694,7 +720,9 @@ class _AiCoachScreenState extends State<AiCoachScreen> with WidgetsBindingObserv
                       )
                     : Icon(
                         Icons.send,
-                        color: canSend ? Colors.white : const Color(0xFF0A2342).withOpacity(0.4),
+                        color: canSend
+                            ? Colors.white
+                            : const Color(0xFF0A2342).withOpacity(0.4),
                         size: 22.sp,
                       ),
               ),
