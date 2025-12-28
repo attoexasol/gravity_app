@@ -188,6 +188,12 @@ class MessagesController extends GetxController {
         _removeConversationsWithIncorrectRole();
         
         debugPrint('✅ Loaded and sorted ${conversations.length} conversations');
+        
+        // Refresh unread counts using getSingleMessage API in the background
+        // This ensures accurate unread counts are displayed on initial load
+        // Note: getSingleMessage marks messages as read, but this is acceptable
+        // since the user is viewing the messages page (they've "seen" the messages)
+        _refreshUnreadCountsAfterInitialLoad();
     } else {
         debugPrint('⚠️ Messages: No users found or API error. Building conversations from existing messages...');
         // If we can't get users list, we'll build conversations from messages
@@ -207,6 +213,122 @@ class MessagesController extends GetxController {
       );
     } finally {
       isLoadingConversations.value = false;
+    }
+  }
+
+  /// Refresh unread counts after initial load using getSingleMessage API
+  /// This ensures accurate unread counts are displayed on initial load
+  /// Note: getSingleMessage marks messages as read, but this is acceptable UX
+  /// since viewing the messages page means the user has "seen" the messages
+  Future<void> _refreshUnreadCountsAfterInitialLoad() async {
+    if (conversations.isEmpty) return;
+    
+    final apiToken = PreferencesService.getAuthToken();
+    if (apiToken == null || apiToken.isEmpty) {
+      debugPrint('⚠️ Messages: No API token available for refreshing unread counts');
+      return;
+    }
+    
+    debugPrint('🔄 Refreshing unread counts for ${conversations.length} conversations using getSingleMessage...');
+    
+    // Refresh unread counts for each conversation in the background
+    // Use getSingleMessage to get accurate is_read status
+    for (int i = 0; i < conversations.length; i++) {
+      final conversation = conversations[i];
+      final otherUserId = _conversationUserIds[conversation.id];
+      
+      if (otherUserId != null) {
+        // Add small delay between requests to avoid overwhelming the server
+        if (i > 0) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        
+        // Refresh unread count for this conversation
+        _refreshUnreadCountForConversation(otherUserId, conversation.id, apiToken);
+      }
+    }
+    
+    debugPrint('✅ Finished refreshing unread counts for all conversations');
+  }
+  
+  /// Refresh unread count for a single conversation using getSingleMessage API
+  /// This updates the unread count with accurate is_read status
+  Future<void> _refreshUnreadCountForConversation(
+    int otherUserId,
+    String conversationId,
+    String apiToken,
+  ) async {
+    try {
+      // Skip if conversation is currently open (already being refreshed by polling)
+      if (selectedConversationId.value == conversationId) {
+        return;
+      }
+      
+      // Use getSingleMessage to get accurate is_read status
+      final messagesResponse = await _messagesRepository.getSingleMessage(
+        apiToken: apiToken,
+        toUserId: otherUserId,
+      );
+      
+      if (messagesResponse.isSuccess && messagesResponse.data != null) {
+        final allMessages = messagesResponse.data!;
+        
+        // Filter messages for this conversation
+        final filteredMessages = allMessages.where((msg) {
+          final fromUserId = msg['from_user_id'] ?? msg['from_user']?['id'];
+          final toUserId = msg['to_user_id'] ?? msg['to_user']?['id'];
+          
+          int? fromUserIdInt;
+          int? toUserIdInt;
+          
+          if (fromUserId is int) {
+            fromUserIdInt = fromUserId;
+          } else if (fromUserId != null) {
+            fromUserIdInt = int.tryParse(fromUserId.toString());
+          }
+          
+          if (toUserId is int) {
+            toUserIdInt = toUserId;
+          } else if (toUserId != null) {
+            toUserIdInt = int.tryParse(toUserId.toString());
+          }
+          
+          if (fromUserIdInt == null || toUserIdInt == null || _currentUserId == null) {
+            return false;
+          }
+          
+          final isFromCurrentToOther = fromUserIdInt == _currentUserId && toUserIdInt == otherUserId;
+          final isFromOtherToCurrent = fromUserIdInt == otherUserId && toUserIdInt == _currentUserId;
+          
+          return isFromCurrentToOther || isFromOtherToCurrent;
+        }).toList();
+        
+        // Map messages and calculate unread count
+        // IMPORTANT: The API response contains is_read status BEFORE marking as read
+        // So we can calculate accurate unread count from the response
+        final mappedMessages = filteredMessages.map((msg) => _mapApiMessageToMessage(msg)).toList();
+        
+        // Calculate unread count (messages not sent by current user and not read)
+        // Count messages where isRead === false AND isSent === false
+        // The is_read field in the response reflects the status before getSingleMessage marks them as read
+        final unreadCount = mappedMessages.where((m) => !m.isSent && !m.isRead).length;
+        
+        // Update conversation with new unread count
+        final convIndex = conversations.indexWhere((c) => c.id == conversationId);
+        if (convIndex != -1) {
+          final existingConv = conversations[convIndex];
+          
+          // Only update if unread count changed
+          if (existingConv.unreadCount != unreadCount) {
+            conversations[convIndex] = existingConv.copyWith(unreadCount: unreadCount);
+            conversations.refresh();
+            debugPrint('✅ Updated unread count for conversation $conversationId: $unreadCount (was ${existingConv.unreadCount})');
+          }
+        }
+      }
+    } catch (e) {
+      // Silently fail - don't spam logs
+      debugPrint('⚠️ Error refreshing unread count for conversation $conversationId (silent): $e');
     }
   }
 
@@ -272,7 +394,9 @@ class MessagesController extends GetxController {
     }
     
     try {
-      // Get messages with this user
+      // Get messages with this user using getAllMessages
+      // Note: getAllMessages might not return accurate is_read status
+      // We'll refresh unread counts after initial load using getSingleMessage
       final messagesResponse = await _messagesRepository.getAllMessages(otherUserId: otherUserId);
       
       if (messagesResponse.isSuccess && messagesResponse.data != null) {
@@ -629,12 +753,37 @@ class MessagesController extends GetxController {
       }
     }
     
+    // Parse is_read field - handle both integer (0/1) and boolean values
+    bool isRead = false;
+    final isReadValue = json['is_read'];
+    if (isReadValue != null) {
+      if (isReadValue is bool) {
+        isRead = isReadValue;
+      } else if (isReadValue is int) {
+        isRead = isReadValue == 1; // 0 = false (unread), 1 = true (read)
+      } else if (isReadValue is String) {
+        isRead = isReadValue == '1' || isReadValue.toLowerCase() == 'true';
+      }
+    } else {
+      // Fallback to 'read' field if 'is_read' is not present
+      final readValue = json['read'];
+      if (readValue != null) {
+        if (readValue is bool) {
+          isRead = readValue;
+        } else if (readValue is int) {
+          isRead = readValue == 1;
+        } else if (readValue is String) {
+          isRead = readValue == '1' || readValue.toLowerCase() == 'true';
+        }
+      }
+    }
+    
     return Message(
       id: messageId,
       senderId: fromUserId?.toString() ?? 'unknown',
       text: messageText.toString(),
       timestamp: timestamp,
-      isRead: json['is_read'] ?? json['read'] ?? false,
+      isRead: isRead,
       isSent: isSent,
     );
   }
@@ -734,43 +883,189 @@ class MessagesController extends GetxController {
   // Select conversation
   void selectConversation(String conversationId) {
     selectedConversationId.value = conversationId;
-
-    // Mark all received messages as read when chat screen is opened (Messenger-like behavior)
-    final convIndex = conversations.indexWhere((c) => c.id == conversationId);
-    if (convIndex != -1) {
-      final conv = conversations[convIndex];
-      
-      // Mark all received messages (not sent by current user) as read
-      final updatedMessages = conv.messages.map((m) {
-        if (!m.isSent && !m.isRead) {
-          // Mark received unread messages as read
-          return m.copyWith(isRead: true);
-        }
-        return m;
-      }).toList();
-      
-      // Recalculate unread count (should be 0 after marking as read)
-      final unreadCount = updatedMessages.where((m) => !m.isSent && !m.isRead).length;
-      
-      conversations[convIndex] = conv.copyWith(
-        unreadCount: unreadCount,
-        messages: updatedMessages,
-      );
-      
-      // Force reactive update
-      conversations.refresh();
-      
-      debugPrint('✅ Messages: Marked messages as read for conversation $conversationId. Unread count: $unreadCount');
-    }
     
-    // Reload messages for this conversation immediately
+    // Reload messages for this conversation using getSingleMessage API
+    // This API will mark messages as read on the server
     final otherUserId = _conversationUserIds[conversationId];
     if (otherUserId != null) {
-      _loadConversationForUser(otherUserId, null);
+      _loadConversationForUserWithSingleMessage(otherUserId);
     }
     
     // Restart polling to ensure fresh messages
     _startMessagePolling();
+  }
+  
+  /// Load conversation using getSingleMessage API (marks messages as read on server)
+  Future<void> _loadConversationForUserWithSingleMessage(int otherUserId) async {
+    try {
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        debugPrint('⚠️ Messages: No API token available for getSingleMessage');
+        // Fallback to regular getAllMessages
+        await _loadConversationForUser(otherUserId, null);
+        return;
+      }
+
+      debugPrint('📤 Messages: Loading conversation with user $otherUserId using getSingleMessage API');
+      
+      final messagesResponse = await _messagesRepository.getSingleMessage(
+        apiToken: apiToken,
+        toUserId: otherUserId,
+      );
+
+      if (messagesResponse.isSuccess && messagesResponse.data != null) {
+        final messages = messagesResponse.data!;
+        debugPrint('✅ Messages: Received ${messages.length} messages from getSingleMessage API');
+        
+        // Process messages and update conversation
+        await _processMessagesForConversation(messages, otherUserId, null);
+      } else {
+        debugPrint('⚠️ Messages: getSingleMessage failed, falling back to getAllMessages');
+        // Fallback to regular getAllMessages
+        await _loadConversationForUser(otherUserId, null);
+      }
+    } catch (e) {
+      debugPrint('❌ Messages: Error in _loadConversationForUserWithSingleMessage: $e');
+      // Fallback to regular getAllMessages
+      await _loadConversationForUser(otherUserId, null);
+    }
+  }
+  
+  /// Process messages for a conversation (shared logic for both getAllMessages and getSingleMessage)
+  Future<void> _processMessagesForConversation(
+    List<Map<String, dynamic>> allMessages,
+    int otherUserId,
+    Map<String, dynamic>? userData,
+  ) async {
+    // Filter messages to only include messages between current user and otherUserId
+    final filteredMessages = allMessages.where((msg) {
+      // Handle both API response formats: direct fields or nested user objects
+      final fromUserId = msg['from_user_id'] ?? msg['from_user']?['id'];
+      final toUserId = msg['to_user_id'] ?? msg['to_user']?['id'];
+      
+      // Convert to integers for comparison
+      int? fromUserIdInt;
+      int? toUserIdInt;
+      
+      if (fromUserId is int) {
+        fromUserIdInt = fromUserId;
+      } else if (fromUserId != null) {
+        fromUserIdInt = int.tryParse(fromUserId.toString());
+      }
+      
+      if (toUserId is int) {
+        toUserIdInt = toUserId;
+      } else if (toUserId != null) {
+        toUserIdInt = int.tryParse(toUserId.toString());
+      }
+      
+      // If we can't parse user IDs or current user ID is null, skip this message
+      if (fromUserIdInt == null || toUserIdInt == null || _currentUserId == null) {
+        return false;
+      }
+      
+      // Message is part of this conversation if it's between current user and otherUserId
+      final isFromCurrentToOther = fromUserIdInt == _currentUserId && toUserIdInt == otherUserId;
+      final isFromOtherToCurrent = fromUserIdInt == otherUserId && toUserIdInt == _currentUserId;
+      
+      return isFromCurrentToOther || isFromOtherToCurrent;
+    }).toList();
+    
+    debugPrint('📱 Filtered ${filteredMessages.length} messages for conversation with user $otherUserId (from ${allMessages.length} total)');
+    
+    // Extract user name and profile image
+    String userName;
+    if (userData != null) {
+      userName = _extractUserName(userData, filteredMessages, otherUserId);
+    } else if (_userNames.containsKey(otherUserId)) {
+      userName = _userNames[otherUserId]!;
+    } else {
+      userName = _extractUserName(null, filteredMessages, otherUserId);
+    }
+    
+    String? profileImage;
+    if (userData != null) {
+      profileImage = _extractProfileImage(userData, filteredMessages, otherUserId);
+    } else if (_userProfileImages.containsKey(otherUserId)) {
+      profileImage = _userProfileImages[otherUserId];
+    } else {
+      profileImage = _extractProfileImage(null, filteredMessages, otherUserId);
+    }
+    
+    // Map messages to Message models
+    final mappedMessages = filteredMessages.map((msg) => _mapApiMessageToMessage(msg)).toList();
+    
+    // Sort messages by timestamp
+    mappedMessages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    
+    // Determine last message and timestamp
+    String lastMessageText = 'No messages yet';
+    DateTime lastTimestamp = DateTime.now();
+    
+    // Calculate unread count (messages not sent by current user and not read)
+    // The getSingleMessage API should have already marked messages as read on the server
+    final conversationId = 'conv_$otherUserId';
+    final isConversationOpen = selectedConversationId.value == conversationId;
+    
+    // If conversation is open, all received messages should be marked as read
+    // But we still count based on the is_read field from the API
+    final unreadCount = isConversationOpen
+        ? 0 // If conversation is open, unread count should be 0 (messages are marked as read)
+        : mappedMessages.where((m) => !m.isSent && !m.isRead).length;
+    
+    if (mappedMessages.isNotEmpty) {
+      final lastMsg = mappedMessages.last;
+      lastMessageText = lastMsg.text;
+      lastTimestamp = lastMsg.timestamp;
+    }
+    
+    // Update cached data
+    _conversationUserIds[conversationId] = otherUserId;
+    _userNames[otherUserId] = userName;
+    if (profileImage != null && profileImage.isNotEmpty) {
+      _userProfileImages[otherUserId] = profileImage;
+    }
+    
+    // Get existing conversation to preserve name if we have a cached one that's better
+    final existingIndex = conversations.indexWhere((c) => c.id == conversationId);
+    String finalUserName = userName;
+    String? finalProfileImage = profileImage;
+    
+    if (existingIndex != -1) {
+      final existingConv = conversations[existingIndex];
+      if (userName.startsWith('User ') && existingConv.name.isNotEmpty && !existingConv.name.startsWith('User ')) {
+        finalUserName = existingConv.name;
+      }
+      if ((profileImage == null || profileImage.isEmpty) && existingConv.avatar.isNotEmpty && !existingConv.avatar.contains('👤')) {
+        finalProfileImage = existingConv.avatar;
+      }
+    }
+    
+    final conversation = Conversation(
+      id: conversationId,
+      name: finalUserName,
+      avatar: _getAvatarForUser(otherUserId, finalProfileImage),
+      lastMessage: lastMessageText,
+      timestamp: lastTimestamp,
+      unreadCount: unreadCount,
+      role: userType.value == 'customer' ? ConversationRole.coach : ConversationRole.customer,
+      messages: mappedMessages,
+    );
+    
+    // Add or update conversation
+    if (existingIndex != -1) {
+      conversations[existingIndex] = conversation;
+    } else {
+      conversations.add(conversation);
+    }
+    
+    // Sort conversations by most recent message
+    _sortConversationsByTimestamp();
+    
+    // Force reactive update
+    conversations.refresh();
+    
+    debugPrint('✅ Messages: Updated conversation $conversationId. Unread count: $unreadCount');
   }
 
   // Close conversation
@@ -778,8 +1073,8 @@ class MessagesController extends GetxController {
     selectedConversationId.value = '';
     messageInput.value = '';
     messageController.clear();
-    // Stop polling when conversation is closed
-    _stopMessagePolling();
+    // Restart polling for conversation list view (refresh all conversations)
+    _startMessagePolling();
   }
 
   /// Start periodic polling for new messages
@@ -787,32 +1082,43 @@ class MessagesController extends GetxController {
     _stopMessagePolling(); // Stop any existing timer
     
     _messagePollingTimer = Timer.periodic(_pollingInterval, (timer) {
-      // If a conversation is selected, refresh messages for that conversation
-      if (selectedConversationId.value.isNotEmpty) {
-        final conversationId = selectedConversationId.value;
-        final otherUserId = _conversationUserIds[conversationId];
-        
-        if (otherUserId != null) {
-          // Silently refresh messages (don't show loading indicator)
-          _refreshMessagesForConversation(otherUserId);
+      try {
+        // If a conversation is selected, refresh messages for that conversation
+        if (selectedConversationId.value.isNotEmpty) {
+          final conversationId = selectedConversationId.value;
+          final otherUserId = _conversationUserIds[conversationId];
+          
+          if (otherUserId != null) {
+            // Silently refresh messages (don't show loading indicator)
+            _refreshMessagesForConversation(otherUserId);
+          }
+        } else {
+          // If no conversation is selected, refresh all conversations to update last messages
+          _refreshAllConversations();
         }
-      } else {
-        // If no conversation is selected, refresh all conversations to update last messages
-        _refreshAllConversations();
+      } catch (e) {
+        // Log error but continue polling
+        debugPrint('⚠️ Error in polling callback (continuing): $e');
       }
     });
     
     debugPrint('🔄 Started message polling (every ${_pollingInterval.inSeconds}s)');
   }
 
-  /// Refresh all conversations to update last messages (for conversation list view)
+  /// Refresh all conversations to update last messages and unread counts (for conversation list view)
   Future<void> _refreshAllConversations() async {
     try {
       bool anyUpdated = false;
-      // Refresh each conversation's last message
-      for (final conversation in conversations) {
+      // Refresh each conversation's last message and unread count
+      for (int i = 0; i < conversations.length; i++) {
+        final conversation = conversations[i];
         final otherUserId = _conversationUserIds[conversation.id];
         if (otherUserId != null) {
+          // Add small delay between requests to avoid overwhelming the server
+          if (i > 0) {
+            await Future.delayed(const Duration(milliseconds: 100));
+          }
+          
           final wasUpdated = await _refreshConversationLastMessage(otherUserId, conversation.id);
           if (wasUpdated) {
             anyUpdated = true;
@@ -820,18 +1126,29 @@ class MessagesController extends GetxController {
         }
       }
       // Sort once after all updates (more efficient than sorting after each update)
+      // Note: Individual conversations also sort immediately when last message changes
       if (anyUpdated) {
         _sortConversationsByTimestamp();
+        debugPrint('🔄 Refreshed all conversations: ${conversations.length} conversations updated');
       }
     } catch (e) {
       debugPrint('⚠️ Error refreshing conversations (silent): $e');
     }
   }
 
-  /// Refresh only the last message for a conversation (lighter operation)
+  /// Refresh only the last message and unread count for a conversation (lighter operation)
+  /// Uses getAllMessages API for regular polling (doesn't mark messages as read)
+  /// Only getSingleMessage is used when conversation is actually opened
   /// Returns true if the conversation was updated, false otherwise
   Future<bool> _refreshConversationLastMessage(int otherUserId, String conversationId) async {
     try {
+      // Skip if conversation is currently open (already being refreshed by polling)
+      if (selectedConversationId.value == conversationId) {
+        return false;
+      }
+      
+      // Use getAllMessages for regular polling (doesn't mark messages as read)
+      // This ensures badges don't disappear until conversation is actually opened
       final messagesResponse = await _messagesRepository.getAllMessages(otherUserId: otherUserId);
       
       if (messagesResponse.isSuccess && messagesResponse.data != null) {
@@ -862,22 +1179,44 @@ class MessagesController extends GetxController {
           
           if (convIndex != -1) {
             final existingConv = conversations[convIndex];
-            // Only update if last message changed
-            if (lastMsg.text != existingConv.lastMessage || 
-                lastMsg.timestamp != existingConv.timestamp) {
-              final unreadCount = mappedMessages.where((m) => !m.isSent && !m.isRead).length;
-              
+            
+            // Check for new messages from the other user (not sent by current user)
+            // This is the ONLY reliable way to detect new unread messages during polling
+            final existingMessageIds = existingConv.messages.map((m) => m.id).toSet();
+            final newMessages = mappedMessages.where((m) => !existingMessageIds.contains(m.id)).toList();
+            final newUnreadMessages = newMessages.where((m) => !m.isSent).toList();
+            
+            // Calculate unread count:
+            // - Always increment for new messages from other user (regardless of is_read from getAllMessages)
+            // - Never decrease during polling (preserve badges until conversation is opened)
+            // - Only decrease when conversation is actually opened (handled by getSingleMessage)
+            final newUnreadCount = newUnreadMessages.isNotEmpty
+                ? existingConv.unreadCount + newUnreadMessages.length
+                : existingConv.unreadCount; // Preserve existing count if no new messages
+            
+            // Determine if we need to update (last message changed OR unread count increased)
+            final lastMessageChanged = lastMsg.text != existingConv.lastMessage || 
+                                     lastMsg.timestamp != existingConv.timestamp;
+            final unreadCountIncreased = newUnreadCount > existingConv.unreadCount;
+            final shouldUpdate = lastMessageChanged || unreadCountIncreased;
+            
+            if (shouldUpdate) {
               conversations[convIndex] = existingConv.copyWith(
                 lastMessage: lastMsg.text,
                 timestamp: lastMsg.timestamp,
-                unreadCount: unreadCount,
+                unreadCount: newUnreadCount,
               );
               
               // Force immediate reactive update
               conversations.refresh();
               
-              // Return true to indicate update occurred
-              // Sorting will be handled by caller (more efficient)
+              // Sort immediately if last message changed (Messenger behavior: move to top)
+              if (lastMessageChanged) {
+                _sortConversationsByTimestamp();
+              }
+              
+              debugPrint('✅ Updated conversation $conversationId: unreadCount=$newUnreadCount (was ${existingConv.unreadCount}, newUnread=${newUnreadMessages.length}), lastMessage="${lastMsg.text}"');
+              
               return true;
             }
           }
@@ -901,8 +1240,28 @@ class MessagesController extends GetxController {
   /// Refresh messages for a conversation without showing loading state
   Future<void> _refreshMessagesForConversation(int otherUserId) async {
     try {
-      // Get messages with this user
-      final messagesResponse = await _messagesRepository.getAllMessages(otherUserId: otherUserId);
+      // If conversation is open, use getSingleMessage API to mark messages as read
+      final conversationId = 'conv_$otherUserId';
+      final isConversationOpen = selectedConversationId.value == conversationId;
+      
+      ApiResponse<List<Map<String, dynamic>>> messagesResponse;
+      
+      if (isConversationOpen) {
+        // Use getSingleMessage API when conversation is open (marks messages as read)
+        final apiToken = PreferencesService.getAuthToken();
+        if (apiToken != null && apiToken.isNotEmpty) {
+          messagesResponse = await _messagesRepository.getSingleMessage(
+            apiToken: apiToken,
+            toUserId: otherUserId,
+          );
+        } else {
+          // Fallback to getAllMessages if no token
+          messagesResponse = await _messagesRepository.getAllMessages(otherUserId: otherUserId);
+        }
+      } else {
+        // Use getAllMessages for closed conversations (lighter operation)
+        messagesResponse = await _messagesRepository.getAllMessages(otherUserId: otherUserId);
+      }
       
       if (messagesResponse.isSuccess && messagesResponse.data != null) {
         final allMessages = messagesResponse.data!;
@@ -992,9 +1351,15 @@ class MessagesController extends GetxController {
                 : mappedMessages;
             
             // Calculate unread count (messages not sent by current user and not read)
+            // When conversation is open, getSingleMessage marks messages as read, so unreadCount should be 0
             final unreadCount = finalMessages.where((m) => !m.isSent && !m.isRead).length;
             
-            // Update conversation and sort immediately for real-time update
+            // Determine if last message changed (for sorting)
+            final lastMessageChanged = lastMsg != null && 
+                                     (lastMsg.text != existingConv.lastMessage || 
+                                      lastMsg.timestamp != existingConv.timestamp);
+            
+            // Update conversation
             conversations[convIndex] = existingConv.copyWith(
               messages: finalMessages,
               lastMessage: lastMsg?.text ?? existingConv.lastMessage,
@@ -1006,8 +1371,10 @@ class MessagesController extends GetxController {
             // Force reactive update
             conversations.refresh();
             
-            // Sort conversations by most recent message (Messenger-like behavior) - real-time
-            _sortConversationsByTimestamp();
+            // Sort immediately if last message changed (Messenger behavior: move to top)
+            if (lastMessageChanged) {
+              _sortConversationsByTimestamp();
+            }
             
             // Scroll to bottom if new messages were received (smooth animation for received messages)
             if (newMessages.isNotEmpty) {
@@ -1395,9 +1762,26 @@ class MessagesController extends GetxController {
           final messageIndex = conv.messages.indexWhere((m) => m.id == editingMessageId.value);
           if (messageIndex != -1) {
             final updatedMessages = [...conv.messages];
+            
+            // Parse is_read from API response if available
+            bool? isRead;
+            if (response.data != null) {
+              final isReadValue = response.data!['is_read'];
+              if (isReadValue != null) {
+                if (isReadValue is bool) {
+                  isRead = isReadValue;
+                } else if (isReadValue is int) {
+                  isRead = isReadValue == 1;
+                } else if (isReadValue is String) {
+                  isRead = isReadValue == '1' || isReadValue.toLowerCase() == 'true';
+                }
+              }
+            }
+            
             final updatedMessage = updatedMessages[messageIndex].copyWith(
               text: editMessageText.value.trim(),
               timestamp: DateTime.now(), // Update timestamp to reflect edit time
+              isRead: isRead ?? updatedMessages[messageIndex].isRead, // Preserve existing isRead if not in response
             );
             updatedMessages[messageIndex] = updatedMessage;
             

@@ -6,6 +6,57 @@ import '../model/api_response.dart';
 class MessagesRepository {
   final ApiService _apiService = ApiService();
 
+  /// Get single message conversation with a specific user
+  /// API: POST /single_message
+  Future<ApiResponse<List<Map<String, dynamic>>>> getSingleMessage({
+    required String apiToken,
+    required int toUserId,
+  }) async {
+    try {
+      debugPrint('📤 GET Single Message Request: To User ID=$toUserId');
+
+      final body = {
+        'api_token': apiToken,
+        'to_user_id': toUserId,
+      };
+
+      final response = await _apiService.post(
+        '/single_message',
+        body: body,
+      );
+
+      debugPrint('📥 GET Single Message Response Status: ${response['status']}');
+      debugPrint('📥 GET Single Message Updated Count: ${response['updated'] ?? 0}');
+
+      List<Map<String, dynamic>> messages = [];
+      if (response['data'] != null && response['data'] is List) {
+        messages = (response['data'] as List)
+            .map((item) => item as Map<String, dynamic>)
+            .toList();
+      }
+
+      return ApiResponse<List<Map<String, dynamic>>>(
+        status: response['status'] ?? false,
+        message: response['message'] ?? '',
+        data: messages,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ GetSingleMessage API Error: ${e.message}');
+      return ApiResponse<List<Map<String, dynamic>>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ GetSingleMessage Unknown Error: $e');
+      return ApiResponse<List<Map<String, dynamic>>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
   /// Get all messages with a specific user
   /// API: GET /all_messages?id={user_id}
   Future<ApiResponse<List<Map<String, dynamic>>>> getAllMessages({
