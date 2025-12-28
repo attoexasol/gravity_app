@@ -180,28 +180,6 @@ class MessagesPage extends GetView<MessagesController> {
                   ],
                 ),
               ),
-
-              // Unread badge
-              if (conversation.unreadCount > 0) ...[
-                SizedBox(width: 8.w),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 8.w,
-                    vertical: 4.h,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00B8A9),
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  child: Text(
-                    conversation.unreadCount.toString(),
-                    style: ResponsiveTextStyles.textXs.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -828,6 +806,8 @@ class MessagesPage extends GetView<MessagesController> {
     required String imageUrl,
     required double size,
   }) {
+    Widget avatarWidget;
+    
     // Check if imageUrl is a valid URL (starts with http:// or https://)
     final bool isNetworkUrl = imageUrl.isNotEmpty &&
         (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'));
@@ -838,7 +818,7 @@ class MessagesPage extends GetView<MessagesController> {
 
     if (isNetworkUrl) {
       // Network image
-      return ClipOval(
+      avatarWidget = ClipOval(
         child: CachedNetworkImage(
           imageUrl: imageUrl,
           width: size,
@@ -868,7 +848,7 @@ class MessagesPage extends GetView<MessagesController> {
       try {
         final file = File(imageUrl.replaceFirst('file://', ''));
         if (file.existsSync()) {
-          return ClipOval(
+          avatarWidget = ClipOval(
             child: Image.file(
               file,
               width: size,
@@ -877,14 +857,19 @@ class MessagesPage extends GetView<MessagesController> {
               errorBuilder: (context, error, stackTrace) => _buildDefaultAvatar(size: size),
             ),
           );
+        } else {
+          avatarWidget = _buildDefaultAvatar(size: size, emoji: imageUrl.isNotEmpty ? imageUrl : null);
         }
       } catch (e) {
         // Fall through to default avatar
+        avatarWidget = _buildDefaultAvatar(size: size, emoji: imageUrl.isNotEmpty ? imageUrl : null);
       }
+    } else {
+      // Default avatar (emoji or icon)
+      avatarWidget = _buildDefaultAvatar(size: size, emoji: imageUrl.isNotEmpty ? imageUrl : null);
     }
-
-    // Default avatar (emoji or icon)
-    return _buildDefaultAvatar(size: size, emoji: imageUrl.isNotEmpty ? imageUrl : null);
+    
+    return avatarWidget;
   }
 
   /// Build default avatar widget
