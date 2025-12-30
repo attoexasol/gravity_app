@@ -3,6 +3,9 @@ import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:gravityapp/data/model/notification_log.dart';
+import 'package:gravityapp/data/model/sync_log.dart';
+import 'package:gravityapp/data/model/user_account_info.dart';
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
@@ -16,78 +19,6 @@ import '../../../data/model/notification_preferences.dart';
 import '../../../data/repositories/goals_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../core/services/api_service.dart';
-
-/// Sync Log Entry
-class SyncLog {
-  final String status;
-  final DateTime timestamp;
-  final String? error;
-  final Map<String, dynamic>? metrics;
-
-  SyncLog({
-    required this.status,
-    required this.timestamp,
-    this.error,
-    this.metrics,
-  });
-}
-
-/// Notification Log Entry
-class NotificationLog {
-  final String title;
-  final String body;
-  final String status;
-  final DateTime timestamp;
-  final String? error;
-
-  NotificationLog({
-    required this.title,
-    required this.body,
-    required this.status,
-    required this.timestamp,
-    this.error,
-  });
-}
-
-/// User Account Info
-class UserAccountInfo {
-  final String name;
-  final String email;
-  final String initials;
-  final String? profileImagePath;
-
-  UserAccountInfo({
-    required this.name,
-    required this.email,
-    required this.initials,
-    this.profileImagePath,
-  });
-
-  /// Generate initials from name
-  static String generateInitials(String name) {
-    if (name.isEmpty) return 'U';
-    final parts = name.trim().split(' ');
-    if (parts.length == 1) {
-      return parts[0][0].toUpperCase();
-    } else {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-  }
-
-  UserAccountInfo copyWith({
-    String? name,
-    String? email,
-    String? initials,
-    String? profileImagePath,
-  }) {
-    return UserAccountInfo(
-      name: name ?? this.name,
-      email: email ?? this.email,
-      initials: initials ?? this.initials,
-      profileImagePath: profileImagePath ?? this.profileImagePath,
-    );
-  }
-}
 
 class SettingsController extends GetxController {
   // Services

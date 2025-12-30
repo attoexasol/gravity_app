@@ -12,6 +12,7 @@ import '../../../data/model/reply.dart';
 import '../controllers/community_controller.dart';
 import 'sections/create_post_modal.dart';
 import 'sections/pinned_posts_bar.dart';
+import 'sections/post_card.dart';
 
 class CommunityPage extends StatefulWidget {
   const CommunityPage({super.key});
@@ -40,109 +41,117 @@ class _CommunityPageState extends State<CommunityPage> {
 
   // Scroll to a specific post - positions it just below the sticky pinned posts bar
   void _scrollToPost(int postId) {
-    // Wait for next frame to ensure keys are attached
+    // Try immediate scroll first if key is ready
+    final key = _postKeys[postId];
+    if (key != null && key.currentContext != null) {
+      _performScrollToPost(key.currentContext!, postId);
+      return;
+    }
+
+    // If key not ready, wait for next frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final key = _postKeys[postId];
       if (key != null && key.currentContext != null) {
-        try {
-          // Get the RenderBox of the post to calculate its position
-          final RenderBox? renderBox =
-              key.currentContext!.findRenderObject() as RenderBox?;
-
-          if (renderBox != null && _scrollController.hasClients) {
-            // Get the position of the post relative to the scrollable viewport
-            final position = renderBox.localToGlobal(Offset.zero);
-
-            // Get the scrollable's RenderBox to find its position
-            final scrollableContext =
-                _scrollController.position.context.storageContext;
-            final scrollableBox =
-                scrollableContext.findRenderObject() as RenderBox?;
-
-            if (scrollableBox != null) {
-              final scrollablePosition = scrollableBox.localToGlobal(
-                Offset.zero,
-              );
-
-              // Calculate the sticky bar height
-              // Bar: margin vertical (8*2 = 16) + padding vertical (12*2 = 24) + content height (~40) ≈ 80
-              const double stickyBarHeight = 80.0;
-
-              // Calculate where the post currently is relative to the scrollable area
-              final postRelativeY = position.dy - scrollablePosition.dy;
-
-              // Calculate the target scroll position
-              // We want the post to appear just below the sticky bar
-              // The ListView has top padding of 80.h which accounts for the sticky bar
-              // So we scroll so the post's top aligns with the top of the ListView content area
-              final currentScrollOffset = _scrollController.offset;
-              final targetOffset =
-                  currentScrollOffset + postRelativeY - stickyBarHeight;
-
-              _scrollController.animateTo(
-                targetOffset.clamp(
-                  0.0,
-                  _scrollController.position.maxScrollExtent,
-                ),
-                duration: const Duration(milliseconds: 500),
-                curve: Curves.easeInOut,
-              );
-            } else {
-              // Fallback: Use ensureVisible with alignment 0.0
-              Scrollable.ensureVisible(
-                key.currentContext!,
-                duration: const Duration(milliseconds: 500),
-                curve: Curves.easeInOut,
-                alignment: 0.0, // Position at top of scrollable area
-                alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-              );
-            }
-          } else {
-            // Fallback: Use ensureVisible with alignment 0.0
-            Scrollable.ensureVisible(
-              key.currentContext!,
-              duration: const Duration(milliseconds: 500),
-              curve: Curves.easeInOut,
-              alignment: 0.0, // Position at top of scrollable area
-              alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-            );
-          }
-        } catch (e) {
-          debugPrint('⚠️ Error scrolling to post: $e');
-          // Fallback: Try to find post index and scroll using controller
-          final postIndex = controller.posts.indexWhere((p) => p.id == postId);
-          if (postIndex != -1 && _scrollController.hasClients) {
-            // Estimate position accounting for sticky bar (80.h top padding)
-            const double stickyBarHeight = 80.0;
-            final estimatedPosition = (postIndex * 400.0) - stickyBarHeight;
-            _scrollController.animateTo(
-              estimatedPosition.clamp(
-                0.0,
-                _scrollController.position.maxScrollExtent,
-              ),
-              duration: const Duration(milliseconds: 500),
-              curve: Curves.easeInOut,
-            );
-          }
-        }
+        // Add small delay to ensure widget is fully rendered
+        Future.delayed(const Duration(milliseconds: 100), () {
+          _performScrollToPost(key.currentContext!, postId);
+        });
       } else {
         // Fallback: Try to find post index and scroll using controller
-        final postIndex = controller.posts.indexWhere((p) => p.id == postId);
-        if (postIndex != -1 && _scrollController.hasClients) {
-          // Estimate position accounting for sticky bar (80.h top padding)
-          const double stickyBarHeight = 80.0;
-          final estimatedPosition = (postIndex * 400.0) - stickyBarHeight;
-          _scrollController.animateTo(
-            estimatedPosition.clamp(
-              0.0,
-              _scrollController.position.maxScrollExtent,
-            ),
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeInOut,
-          );
-        }
+        _scrollToPostByIndex(postId);
       }
     });
+  }
+
+  // Perform the actual scroll operation
+  void _performScrollToPost(BuildContext context, int postId) {
+    try {
+      if (!_scrollController.hasClients) {
+        _scrollToPostByIndex(postId);
+        return;
+      }
+
+      final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+      if (renderBox == null || !renderBox.hasSize) {
+        _scrollToPostByIndex(postId);
+        return;
+      }
+
+      // Get the actual sticky bar height
+      // Bar: margin vertical (8*2 = 16) + padding vertical (12*2 = 24) + content height (~40) ≈ 80
+      const double stickyBarHeight = 80.0;
+      const double gap = 8.0; // Small gap for visual spacing
+      final double targetOffsetFromTop = stickyBarHeight + gap;
+
+      // Get the post's position relative to the viewport
+      final postPosition = renderBox.localToGlobal(Offset.zero);
+      
+      // Get the scrollable's position
+      final scrollableContext = _scrollController.position.context.storageContext;
+      final scrollableBox = scrollableContext.findRenderObject() as RenderBox?;
+      
+      if (scrollableBox != null) {
+        final scrollablePosition = scrollableBox.localToGlobal(Offset.zero);
+        
+        // Calculate where the post currently is relative to the scrollable viewport
+        final postRelativeY = postPosition.dy - scrollablePosition.dy;
+        
+        // Calculate the current scroll offset
+        final currentScrollOffset = _scrollController.offset;
+        
+        // Calculate target scroll offset: 
+        // We want the post's top to be at (stickyBarHeight + gap) from the top of the viewport
+        // The post's position in the scrollable is: currentScrollOffset + postRelativeY
+        // So we need to scroll to: (currentScrollOffset + postRelativeY) - targetOffsetFromTop
+        final double targetScrollOffset = currentScrollOffset + postRelativeY - targetOffsetFromTop;
+
+        _scrollController.animateTo(
+          targetScrollOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      } else {
+        // Fallback: Use ensureVisible with calculated alignment
+        final screenHeight = MediaQuery.of(context).size.height;
+        final double alignment = (targetOffsetFromTop / screenHeight).clamp(0.0, 0.15);
+
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+          alignment: alignment,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+        );
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error scrolling to post: $e');
+      _scrollToPostByIndex(postId);
+    }
+  }
+
+  // Fallback method: Scroll to post by calculating index position
+  void _scrollToPostByIndex(int postId) {
+    final postIndex = controller.posts.indexWhere((p) => p.id == postId);
+    if (postIndex != -1 && _scrollController.hasClients) {
+      // Calculate scroll position to place post just below sticky bar
+      // Sticky bar height + small gap for visual spacing
+      const double stickyBarHeight = 80.0;
+      const double gap = 8.0;
+      const double targetOffsetFromTop = stickyBarHeight + gap;
+      
+      // Estimate post position (average post height ~400px including margins)
+      const double estimatedPostHeight = 400.0;
+      final double estimatedPostTop = postIndex * estimatedPostHeight;
+      
+      // Calculate scroll offset: post top position - target offset from top
+      final double targetScrollOffset = estimatedPostTop - targetOffsetFromTop;
+      
+      _scrollController.animateTo(
+        targetScrollOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   @override
@@ -295,7 +304,13 @@ class _CommunityPageState extends State<CommunityPage> {
                 if (!_postKeys.containsKey(post.id)) {
                   _postKeys[post.id] = GlobalKey();
                 }
-                return _buildPostCard(post, index, _postKeys[post.id]!);
+                return PostCard(
+                  post: post,
+                  index: index,
+                  postKey: _postKeys[post.id]!,
+                  controller: controller,
+                  onShowComments: () => _showCommentsModal(post.id),
+                );
               },
             );
           }),
@@ -348,392 +363,6 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  Widget _buildPostCard(Post post, int index, GlobalKey postKey) {
-    return GestureDetector(
-          // Long-press to pin/unpin post (WhatsApp-style interaction)
-          onLongPress: () {
-            if (post.communityId > 0) {
-              controller.pinPost(post.id, post.communityId);
-            } else {
-              Get.snackbar(
-                'Error',
-                'Community ID not available',
-                snackPosition: SnackPosition.BOTTOM,
-                backgroundColor: const Color(0xFFE53935),
-                colorText: Colors.white,
-                duration: const Duration(seconds: 2),
-              );
-            }
-          },
-          child: Container(
-            key: postKey,
-            margin: EdgeInsets.only(
-              bottom: 16.h,
-            ), // space-y-4 = 16px spacing between posts
-            decoration: BoxDecoration(
-              color: Colors.white, // bg-white
-              borderRadius: BorderRadius.circular(28.r), // rounded-[28px]
-              // Removed green border for pinned posts
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1), // shadow-md
-                  blurRadius: 10.r,
-                  offset: Offset(0, 2.h),
-                ),
-              ],
-            ),
-            clipBehavior: Clip.hardEdge, // overflow-hidden
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // User Header - Match React: p-5 flex items-center gap-3
-                Padding(
-                  padding: EdgeInsets.all(20.r), // p-5 = 20px
-                  child: Row(
-                    children: [
-                      // Avatar - Match React: w-12 h-12 rounded-full overflow-hidden bg-gray-200
-                      ClipOval(
-                        child: Container(
-                          width: 48.w, // w-12 = 48px
-                          height: 48.h, // h-12 = 48px
-                          color: Colors.grey[200], // bg-gray-200
-                          child: post.user.avatar.isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: post.user.avatar,
-                                  width: 48.w,
-                                  height: 48.h,
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) => Container(
-                                    width: 48.w,
-                                    height: 48.h,
-                                    color: Colors.grey[200],
-                                    child: const Center(
-                                      child: CircularProgressIndicator(
-                                        color: Color(0xFF00B8A9),
-                                        strokeWidth: 2,
-                                      ),
-                                    ),
-                                  ),
-                                  errorWidget: (context, url, error) =>
-                                      Container(
-                                        width: 48.w,
-                                        height: 48.h,
-                                        color: Colors.grey[200],
-                                        child: Icon(
-                                          Icons.person,
-                                          size: 24.sp,
-                                          color: const Color(
-                                            0xFF0A2342,
-                                          ).withOpacity(0.5),
-                                        ),
-                                      ),
-                                )
-                              : Icon(
-                                  Icons.person,
-                                  size: 24.sp,
-                                  color: const Color(
-                                    0xFF0A2342,
-                                  ).withOpacity(0.5),
-                                ),
-                        ),
-                      ),
-                      SizedBox(width: 12.w), // gap-3 = 12px
-                      // User Info - Match React: flex-1
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Name - Match React: text-[#0A2342]
-                            Text(
-                              post.user.name,
-                              style: ResponsiveTextStyles.textBase.copyWith(
-                                color: const Color(0xFF0A2342),
-                              ),
-                            ),
-                            // Timestamp - Match React: text-[#0A2342]/50 text-xs
-                            Text(
-                              post.timestamp,
-                              style: ResponsiveTextStyles.textXs.copyWith(
-                                color: const Color(
-                                  0xFF0A2342,
-                                ).withOpacity(0.5), // text-[#0A2342]/50
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Removed pin icon from post header (now shown in sticky bar)
-                      // 3-dot menu button
-                      PopupMenuButton<String>(
-                        icon: Icon(
-                          Icons.more_vert,
-                          size: 20.sp,
-                          color: const Color(0xFF0A2342).withOpacity(0.6),
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12.r),
-                        ),
-                        itemBuilder: (BuildContext context) => [
-                          PopupMenuItem<String>(
-                            value: post.isPinned ? 'unpin' : 'pin',
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.push_pin,
-                                  size: 18.sp,
-                                  color: const Color(
-                                    0xFF0A2342,
-                                  ).withOpacity(0.8),
-                                ),
-                                SizedBox(width: 12.w),
-                                Text(
-                                  post.isPinned
-                                      ? 'Unpin The Post'
-                                      : 'Pin The Post',
-                                  style: ResponsiveTextStyles.textSm.copyWith(
-                                    color: const Color(0xFF0A2342),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        onSelected: (String value) {
-                          if (value == 'pin' || value == 'unpin') {
-                            if (post.communityId > 0) {
-                              controller.pinPost(post.id, post.communityId);
-                            } else {
-                              Get.snackbar(
-                                'Error',
-                                'Community ID not available',
-                                snackPosition: SnackPosition.BOTTOM,
-                                backgroundColor: const Color(0xFFE53935),
-                                colorText: Colors.white,
-                                duration: const Duration(seconds: 2),
-                              );
-                            }
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Post Image - Match React: relative h-64 bg-gray-100 (only if post.image exists)
-                if (post.image.isNotEmpty)
-                  Container(
-                    height: 256.h, // h-64 = 256px
-                    width: double.infinity,
-                    color: Colors.grey[100], // bg-gray-100
-                    child: CachedNetworkImage(
-                      imageUrl: post.image,
-                      width: double.infinity,
-                      height: 256.h,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        height: 256.h,
-                        color: Colors.grey[100],
-                        child: const Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFF00B8A9),
-                          ),
-                        ),
-                      ),
-                      errorWidget: (context, url, error) => Container(
-                        height: 256.h,
-                        color: Colors.grey[100],
-                        child: Icon(Icons.image_not_supported, size: 48.sp),
-                      ),
-                    ),
-                  ),
-
-                // Post Text + Reactions - Match React: p-5
-                Padding(
-                  padding: EdgeInsets.all(20.r), // p-5 = 20px
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Post Text - Match React: text-[#0A2342]/80 mb-4
-                      Padding(
-                        padding: EdgeInsets.only(bottom: 16.h), // mb-4 = 16px
-                        child: Text(
-                          post.text,
-                          style: ResponsiveTextStyles.textBase.copyWith(
-                            color: const Color(
-                              0xFF0A2342,
-                            ).withOpacity(0.8), // text-[#0A2342]/80
-                          ),
-                        ),
-                      ),
-
-                      // Reactions Bar - Match React: flex items-center justify-between pt-4 border-t border-[#0A2342]/10
-                      Container(
-                        padding: EdgeInsets.only(top: 16.h), // pt-4 = 16px
-                        decoration: BoxDecoration(
-                          border: Border(
-                            top: BorderSide(
-                              color: const Color(
-                                0xFF0A2342,
-                              ).withOpacity(0.1), // border-[#0A2342]/10
-                              width: 1,
-                            ),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment:
-                              MainAxisAlignment.spaceBetween, // justify-between
-                          crossAxisAlignment:
-                              CrossAxisAlignment.center, // items-center
-                          children: [
-                            // Left side: Reaction buttons - Match React: flex items-center gap-4
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                _buildReactionButton(
-                                  post.id,
-                                  'heart',
-                                  Icons.favorite,
-                                  post.reactions.heart,
-                                  Colors.red,
-                                ),
-                                SizedBox(width: 16.w), // gap-4 = 16px
-                                _buildReactionButton(
-                                  post.id,
-                                  'thumbsUp',
-                                  Icons.thumb_up,
-                                  post.reactions.thumbsUp,
-                                  Colors.blue,
-                                ),
-                                SizedBox(width: 16.w), // gap-4 = 16px
-                                _buildReactionButton(
-                                  post.id,
-                                  'fire',
-                                  Icons.local_fire_department,
-                                  post.reactions.fire,
-                                  Colors.orange,
-                                ),
-                              ],
-                            ),
-                            // Right side: Comment button - Match React: flex items-center gap-2 text-[#0A2342]/60
-                            _buildCommentButton(
-                              post.id,
-                              _getTotalCommentCount(post),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        )
-        // Match React AnimatePresence animation: initial={{ opacity: 0, y: 20 }}, animate={{ opacity: 1, y: 0 }}, delay: index * 0.1
-        .animate()
-        .fadeIn(duration: 300.ms, delay: (index * 100).ms)
-        .moveY(
-          begin: 20.h, // y: 20 (20 pixels)
-          end: 0,
-          duration: 300.ms,
-          delay: (index * 100).ms,
-          curve: Curves.easeOut,
-        );
-  }
-
-  Widget _buildReactionButton(
-    int postId,
-    String reaction,
-    IconData icon,
-    int count,
-    Color activeColor,
-  ) {
-    return Obx(() {
-      final isActive =
-          controller.activeReactions[postId]?.contains(reaction) ?? false;
-
-      // Match React: motion.button with whileTap={{ scale: 0.9 }}
-      return _AnimatedTapWidget(
-        onTap: () => controller.toggleReaction(postId, reaction),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 20.sp, // w-5 h-5 = 20px (match React)
-              color: isActive
-                  ? activeColor
-                  : const Color(
-                      0xFF0A2342,
-                    ).withOpacity(0.6), // text-[#0A2342]/60
-            ),
-            SizedBox(width: 8.w), // gap-2 = 8px (match React)
-            Text(
-              '$count',
-              style: ResponsiveTextStyles.textSm.copyWith(
-                color: isActive
-                    ? activeColor
-                    : const Color(
-                        0xFF0A2342,
-                      ).withOpacity(0.6), // text-[#0A2342]/60
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
-      );
-    });
-  }
-
-  /// Calculate total comment count including replies
-  int _getTotalCommentCount(Post post) {
-    // Count top-level comments
-    int totalCount = post.comments.length;
-
-    // Add count of replies for each comment
-    for (final comment in post.comments) {
-      totalCount += comment.replies.length;
-    }
-
-    return totalCount;
-  }
-
-  // Comment button - Match React: motion.button with MessageCircle icon
-  // className="flex items-center gap-2 text-[#0A2342]/60 hover:text-[#00B8A9] transition-colors"
-  // whileTap={{ scale: 0.9 }}
-  Widget _buildCommentButton(int postId, int commentCount) {
-    return _AnimatedTapWidget(
-      onTap: () => _showCommentsModal(postId), // Opens bottom sheet modal
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(
-            Icons
-                .mode_comment_outlined, // MessageCircle equivalent - matches React <MessageCircle className="w-5 h-5" />
-            size: 20.sp, // w-5 h-5 = 20px (match React)
-            color: const Color(
-              0xFF0A2342,
-            ).withOpacity(0.6), // text-[#0A2342]/60
-          ),
-          SizedBox(width: 8.w), // gap-2 = 8px (match React)
-          Text(
-            '$commentCount',
-            style: ResponsiveTextStyles.textSm.copyWith(
-              // text-sm
-              color: const Color(
-                0xFF0A2342,
-              ).withOpacity(0.6), // text-[#0A2342]/60
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   // Show Create Post Modal - Full screen mode
   // Root cause: State must be reset BEFORE opening dialog to ensure fresh state every time

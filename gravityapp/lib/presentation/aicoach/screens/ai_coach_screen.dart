@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:gravityapp/data/model/ai_coach.dart';
 import 'package:gravityapp/presentation/aicoach/screens/sections/quick_actions.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
 import '../controllers/ai_coach_controller.dart';
+import '../../main_layout/controllers/main_layout_controller.dart';
 
 class AiCoachScreen extends StatefulWidget {
   const AiCoachScreen({super.key});
@@ -14,9 +16,14 @@ class AiCoachScreen extends StatefulWidget {
 }
 
 class _AiCoachScreenState extends State<AiCoachScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   // Initialize controller
   late final AiCoachController controller;
+  
+  // Animation controllers for typing indicator dots
+  late final AnimationController _dot1Controller;
+  late final AnimationController _dot2Controller;
+  late final AnimationController _dot3Controller;
 
   @override
   void initState() {
@@ -24,17 +31,109 @@ class _AiCoachScreenState extends State<AiCoachScreen>
     // Initialize controller
     controller = Get.put(AiCoachController());
 
+    // Initialize animation controllers for typing dots
+    _dot1Controller = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _dot2Controller = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _dot3Controller = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    // Listen to typing state changes to control animations
+    ever(controller.isTyping, (isTyping) {
+      if (isTyping) {
+        // Start animations with staggered delays
+        Future.delayed(const Duration(milliseconds: 0), () {
+          if (mounted && controller.isTyping.value) {
+            _dot1Controller.repeat(reverse: true);
+          }
+        });
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted && controller.isTyping.value) {
+            _dot2Controller.repeat(reverse: true);
+          }
+        });
+        Future.delayed(const Duration(milliseconds: 400), () {
+          if (mounted && controller.isTyping.value) {
+            _dot3Controller.repeat(reverse: true);
+          }
+        });
+      } else {
+        // Stop all animations when typing stops
+        _dot1Controller.stop();
+        _dot1Controller.reset();
+        _dot2Controller.stop();
+        _dot2Controller.reset();
+        _dot3Controller.stop();
+        _dot3Controller.reset();
+      }
+    });
+
+    // Listen to keyboard visibility changes to scroll to bottom when keyboard opens
+    ever(controller.isKeyboardVisible, (isKeyboardVisible) {
+      if (isKeyboardVisible && controller.messageFocusNode.hasFocus) {
+        // Scroll to bottom when keyboard opens and text field is focused
+        // Delay to allow keyboard animation to complete
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            _scrollToBottom();
+          }
+        });
+      }
+    });
+
+    // Listen to text field focus changes to scroll when user taps on input
+    controller.messageFocusNode.addListener(() {
+      if (controller.messageFocusNode.hasFocus) {
+        // Scroll to bottom when text field gets focus
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            _scrollToBottom();
+          }
+        });
+      }
+    });
+
     // Observe keyboard visibility changes
     WidgetsBinding.instance.addObserver(this);
 
     // Initial keyboard state check
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateKeyboardVisibility();
+      // Jump to bottom immediately when screen first opens (no animation)
+      _jumpToBottomOnInit();
     });
+  }
+
+  /// Jump to bottom immediately when screen first opens (no animation)
+  void _jumpToBottomOnInit() {
+    if (!controller.messagesScrollController.hasClients) {
+      // Wait for ListView to be built
+      Future.delayed(const Duration(milliseconds: 50), () {
+        if (mounted && controller.messagesScrollController.hasClients) {
+          final position = controller.messagesScrollController.position;
+          controller.messagesScrollController.jumpTo(position.maxScrollExtent);
+        }
+      });
+      return;
+    }
+    
+    final position = controller.messagesScrollController.position;
+    controller.messagesScrollController.jumpTo(position.maxScrollExtent);
   }
 
   @override
   void dispose() {
+    // Dispose animation controllers
+    _dot1Controller.dispose();
+    _dot2Controller.dispose();
+    _dot3Controller.dispose();
     // Remove observer
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -70,33 +169,48 @@ class _AiCoachScreenState extends State<AiCoachScreen>
     controller.isKeyboardVisible.value = isKeyboardVisible;
   }
 
-  /// Safely navigate back, handling snackbar errors
-  /// Uses Navigator directly to avoid Get.back()'s internal snackbar closing logic
-  void _safeBack() {
-    // Don't try to close snackbars - Get.back() internally calls closeCurrentSnackbar()
-    // which causes LateInitializationError. Use Navigator directly instead.
-
-    try {
-      final context = Get.context;
-      if (context != null && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-        debugPrint('✅ Navigated back via Navigator.pop()');
-        return;
-      }
-    } catch (e) {
-      debugPrint('⚠️ Navigator.pop() failed: $e');
-    }
-
-    // Fallback: try Get.back() if Navigator fails (but this may still cause errors)
-    try {
-      if (Get.isDialogOpen == true) {
-        Get.back();
-        debugPrint('✅ Navigated back via Get.back()');
-      }
-    } catch (e) {
-      debugPrint(
-        '⚠️ Get.back() also failed: $e - Navigation may have already occurred',
+  /// Scroll to bottom of messages list
+  void _scrollToBottom() {
+    if (!controller.messagesScrollController.hasClients) return;
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!controller.messagesScrollController.hasClients) return;
+      
+      final position = controller.messagesScrollController.position;
+      final maxScroll = position.maxScrollExtent;
+      
+      // Scroll to bottom to show most recent messages
+      controller.messagesScrollController.animateTo(
+        maxScroll,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
       );
+    });
+  }
+
+  /// Navigate back to Home/Dashboard
+  /// Resets the navigation index to 0 (Home) and navigates to the home route
+  void _safeBack() {
+    try {
+      // Reset the main layout controller's current index to 0 (Home/Dashboard)
+      if (Get.isRegistered<MainLayoutController>()) {
+        final mainLayoutController = Get.find<MainLayoutController>();
+        mainLayoutController.currentIndex.value = 0;
+      }
+
+      // Navigate to home route, replacing the current route
+      Get.offNamed('/home');
+      debugPrint('✅ Navigated back to Home/Dashboard');
+    } catch (e) {
+      debugPrint('⚠️ Navigation to Home failed: $e');
+      // Fallback: try regular pop if navigation fails
+      try {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      } catch (popError) {
+        debugPrint('⚠️ Navigator.pop() also failed: $popError');
+      }
     }
   }
 
@@ -379,10 +493,17 @@ class _AiCoachScreenState extends State<AiCoachScreen>
 
   Widget _buildMessagesList() {
     return Obx(() {
-      // Auto-scroll to bottom when new messages arrive
+      // Set initial scroll position to bottom immediately (no animation)
+      // This ensures the latest message is visible when screen opens
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Scroll will happen automatically with reverse: true or we can use a key-based approach
-        // For now, we'll rely on ListView's natural scrolling behavior
+        if (controller.messages.isNotEmpty && 
+            controller.messagesScrollController.hasClients) {
+          final position = controller.messagesScrollController.position;
+          if (position.pixels != position.maxScrollExtent) {
+            // Only jump if not already at bottom (to avoid unnecessary jumps)
+            controller.messagesScrollController.jumpTo(position.maxScrollExtent);
+          }
+        }
       });
 
       return ListView.builder(
@@ -570,16 +691,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                     ),
                   ],
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildDot(0),
-                    SizedBox(width: 4.w),
-                    _buildDot(200),
-                    SizedBox(width: 4.w),
-                    _buildDot(400),
-                  ],
-                ),
+                child: _buildTypingDots(),
               ),
             ],
           ),
@@ -588,13 +700,31 @@ class _AiCoachScreenState extends State<AiCoachScreen>
     );
   }
 
-  Widget _buildDot(int delay) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 600),
-      builder: (context, value, child) {
+  /// Build typing indicator dots with continuous looping animation
+  Widget _buildTypingDots() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildAnimatedDot(_dot1Controller),
+        SizedBox(width: 4.w),
+        _buildAnimatedDot(_dot2Controller),
+        SizedBox(width: 4.w),
+        _buildAnimatedDot(_dot3Controller),
+      ],
+    );
+  }
+
+  /// Build a single animated dot with bouncing animation
+  Widget _buildAnimatedDot(AnimationController dotController) {
+    return AnimatedBuilder(
+      animation: dotController,
+      builder: (context, child) {
+        // Create a bouncing effect: goes from 0 to 1 and back
+        final value = dotController.value;
+        final offset = -5 * (value < 0.5 ? value * 2 : (1 - value) * 2);
+        
         return Transform.translate(
-          offset: Offset(0, -5 * (value < 0.5 ? value * 2 : (1 - value) * 2)),
+          offset: Offset(0, offset),
           child: Container(
             width: 8.w,
             height: 8.w,
@@ -604,9 +734,6 @@ class _AiCoachScreenState extends State<AiCoachScreen>
             ),
           ),
         );
-      },
-      onEnd: () {
-        // Loop animation
       },
     );
   }

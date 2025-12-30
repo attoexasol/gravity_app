@@ -3,6 +3,8 @@ import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:gravityapp/data/model/conversation.dart';
+import 'package:gravityapp/data/model/message.dart';
 import '../../../data/repositories/messages_repository.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../data/model/api_response.dart';
@@ -2041,85 +2043,3 @@ class MessagesController extends GetxController {
   }
 }
 
-// Models
-enum ConversationRole { customer, coach }
-
-class Conversation {
-  final String id;
-  final String name;
-  final String avatar;
-  final String lastMessage;
-  final DateTime timestamp;
-  final int unreadCount;
-  final ConversationRole role;
-  final List<Message> messages;
-
-  Conversation({
-    required this.id,
-    required this.name,
-    required this.avatar,
-    required this.lastMessage,
-    required this.timestamp,
-    required this.unreadCount,
-    required this.role,
-    required this.messages,
-  });
-
-  Conversation copyWith({
-    String? id,
-    String? name,
-    String? avatar,
-    String? lastMessage,
-    DateTime? timestamp,
-    int? unreadCount,
-    ConversationRole? role,
-    List<Message>? messages,
-  }) {
-    return Conversation(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      avatar: avatar ?? this.avatar,
-      lastMessage: lastMessage ?? this.lastMessage,
-      timestamp: timestamp ?? this.timestamp,
-      unreadCount: unreadCount ?? this.unreadCount,
-      role: role ?? this.role,
-      messages: messages ?? this.messages,
-    );
-  }
-}
-
-class Message {
-  final String id;
-  final String senderId;
-  final String text;
-  final DateTime timestamp;
-  final bool isRead;
-  final bool isSent;
-
-  Message({
-    required this.id,
-    required this.senderId,
-    required this.text,
-    required this.timestamp,
-    required this.isRead,
-    required this.isSent,
-  });
-
-  Message copyWith({
-    String? id,
-    String? senderId,
-    String? text,
-    DateTime? timestamp,
-    bool? isRead,
-    bool? isSent,
-  }) {
-    return Message(
-      id: id ?? this.id,
-      senderId: senderId ?? this.senderId,
-      text: text ?? this.text,
-      timestamp: timestamp ?? this.timestamp,
-      isRead: isRead ?? this.isRead,
-      isSent: isSent ?? this.isSent,
-    );
-  }
-}

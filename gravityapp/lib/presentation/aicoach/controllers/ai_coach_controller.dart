@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:gravityapp/data/model/ai_coach.dart';
 import 'dart:convert';
 import '../../../data/repositories/ai_coach_repository.dart';
 import '../../../core/services/preferences_service.dart';
@@ -66,9 +67,10 @@ class AiCoachController extends GetxController {
     if (messages.isEmpty) {
       _loadInitialMessage();
     }
-    // Scroll to bottom after messages are loaded to show most recent chat
+    // Jump to bottom immediately after messages are loaded (no animation)
+    // This prevents visible scrolling when screen first opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottom();
+      _jumpToBottom();
     });
   }
 
@@ -299,7 +301,22 @@ class AiCoachController extends GetxController {
     }
   }
 
-  /// Scroll to bottom of messages list to show most recent chat
+  /// Jump to bottom immediately (no animation) - used when screen first opens
+  void _jumpToBottom() {
+    if (!messagesScrollController.hasClients) return;
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!messagesScrollController.hasClients) return;
+      
+      final position = messagesScrollController.position;
+      final maxScroll = position.maxScrollExtent;
+      
+      // Jump to bottom immediately without animation
+      messagesScrollController.jumpTo(maxScroll);
+    });
+  }
+
+  /// Scroll to bottom of messages list to show most recent chat (with animation)
   void _scrollToBottom() {
     if (!messagesScrollController.hasClients) return;
     
@@ -365,31 +382,3 @@ class AiCoachController extends GetxController {
   }
 }
 
-// Models
-enum MessageSender { user, ai }
-
-class ChatMessage {
-  final String id;
-  final String text;
-  final MessageSender sender;
-  final DateTime timestamp;
-
-  ChatMessage({
-    required this.id,
-    required this.text,
-    required this.sender,
-    required this.timestamp,
-  });
-}
-
-class QuickAction {
-  final IconData icon;
-  final String label;
-  final List<Color> gradient;
-
-  QuickAction({
-    required this.icon,
-    required this.label,
-    required this.gradient,
-  });
-}

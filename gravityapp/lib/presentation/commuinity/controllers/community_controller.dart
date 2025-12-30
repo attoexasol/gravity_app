@@ -1082,6 +1082,7 @@ class CommunityController extends GetxController {
 
     // Optimistic update: Toggle pin state immediately
     // Keep all other pinned posts as they are (support multiple pinned posts)
+    // Posts stay in their original position - no sorting
     final updatedPosts = posts.map((p) {
       if (p.id == postId) {
         // Toggle pin state for the selected post
@@ -1091,7 +1092,7 @@ class CommunityController extends GetxController {
       return p;
     }).toList();
 
-    // Don't sort - keep posts in original order
+    // Keep posts in original order - don't move pinned posts to top
     posts.value = updatedPosts;
 
     try {
@@ -1107,6 +1108,8 @@ class CommunityController extends GetxController {
 
         if (response.isSuccess) {
           // API success - state already updated optimistically
+          // Posts stay in original position - no sorting needed
+          
           // Refresh pinned posts to ensure consistency
           loadUserPinnedPosts();
 
@@ -1154,6 +1157,8 @@ class CommunityController extends GetxController {
 
         if (response.isSuccess) {
           // API success - state already updated optimistically
+          // Posts stay in original position - no sorting needed
+          
           // Refresh pinned posts to ensure consistency
           loadUserPinnedPosts();
 

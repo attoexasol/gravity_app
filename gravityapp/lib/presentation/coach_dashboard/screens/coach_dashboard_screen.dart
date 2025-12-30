@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:gravityapp/data/model/client_user.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../controllers/coach_dashboard_controller.dart';
 

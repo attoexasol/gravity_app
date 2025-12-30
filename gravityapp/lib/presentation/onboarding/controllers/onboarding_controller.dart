@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
+import 'package:gravityapp/data/model/onboarding_slide_model.dart';
 
 class OnboardingController extends GetxController {
   // Observable for current slide index
@@ -86,21 +87,4 @@ class OnboardingController extends GetxController {
   bool get isLastSlide {
     return currentSlide.value == slides.length - 1;
   }
-}
-
-/// Model for onboarding slide data
-class OnboardingSlideModel {
-  final String title;
-  final String subtitle;
-  final String description;
-  final String? tagline;
-  final List<Color> gradientColors;
-
-  OnboardingSlideModel({
-    required this.title,
-    required this.subtitle,
-    required this.description,
-    this.tagline,
-    required this.gradientColors,
-  });
 }

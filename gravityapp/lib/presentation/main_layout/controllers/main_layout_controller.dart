@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:gravityapp/data/model/navigation_item.dart';
 import '../../../core/services/preferences_service.dart';
 
 class MainLayoutController extends GetxController {
@@ -172,19 +173,4 @@ class MainLayoutController extends GetxController {
   NavigationItem get currentNavigationItem {
     return navigationItems[currentIndex.value];
   }
-}
-
-/// Navigation Item Model
-class NavigationItem {
-  final int index;
-  final String label;
-  final String icon;
-  final String route;
-
-  NavigationItem({
-    required this.index,
-    required this.label,
-    required this.icon,
-    required this.route,
-  });
 }

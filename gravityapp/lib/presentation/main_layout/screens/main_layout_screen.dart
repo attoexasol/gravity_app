@@ -5,7 +5,6 @@ import '../../dashboard/screens/dashboard_view.dart';
 import '../../dashboard/screens/sections/sync_status_section.dart';
 import '../../dashboard/controller/dashboard_controller.dart';
 import '../../messages/screens/messages_page.dart';
-import '../../profile/screens/profile_page.dart';
 import '../../coach_dashboard/screens/coach_dashboard_screen.dart';
 import '../../widgets/main_app_bar.dart';
 import '../../widgets/main_bottom_nav.dart';
@@ -72,7 +71,9 @@ class MainLayoutScreen extends GetView<MainLayoutController> {
       case 1:
         return const CommunityPage();
       case 2:
-        return const ProfilePage();
+        // AI Coach navigates to a separate route, so show Dashboard as fallback
+        // This won't be visible since navigation happens immediately
+        return const DashboardView();
       case 3:
         return const MessagesPage();
       case 4:
