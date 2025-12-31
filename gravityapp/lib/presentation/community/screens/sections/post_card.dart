@@ -138,7 +138,16 @@ class PostCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // Removed pin icon from post header (now shown in sticky bar)
+                  // Pin icon (only if pinned)
+                  if (post.isPinned)
+                    Padding(
+                      padding: EdgeInsets.only(right: 5.w),
+                      child: Icon(
+                        Icons.push_pin,
+                        size: 18.sp,
+                        color: const Color(0xFF00B8A9),
+                      ),
+                    ),
                   // 3-dot menu button
                   PopupMenuButton<String>(
                     icon: Icon(

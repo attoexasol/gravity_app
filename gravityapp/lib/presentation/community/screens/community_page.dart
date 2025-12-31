@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../data/model/post.dart';
@@ -22,12 +23,10 @@ class CommunityPage extends StatefulWidget {
 }
 
 class _CommunityPageState extends State<CommunityPage> {
-  final ScrollController _scrollController = ScrollController();
-  final Map<int, GlobalKey> _postKeys = {};
+  final ItemScrollController _itemScrollController = ItemScrollController();
 
   @override
   void dispose() {
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -41,117 +40,15 @@ class _CommunityPageState extends State<CommunityPage> {
 
   // Scroll to a specific post - positions it just below the sticky pinned posts bar
   void _scrollToPost(int postId) {
-    // Try immediate scroll first if key is ready
-    final key = _postKeys[postId];
-    if (key != null && key.currentContext != null) {
-      _performScrollToPost(key.currentContext!, postId);
-      return;
-    }
+    final index = controller.posts.indexWhere((p) => p.id == postId);
+    if (index == -1) return;
 
-    // If key not ready, wait for next frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final key = _postKeys[postId];
-      if (key != null && key.currentContext != null) {
-        // Add small delay to ensure widget is fully rendered
-        Future.delayed(const Duration(milliseconds: 100), () {
-          _performScrollToPost(key.currentContext!, postId);
-        });
-      } else {
-        // Fallback: Try to find post index and scroll using controller
-        _scrollToPostByIndex(postId);
-      }
-    });
-  }
-
-  // Perform the actual scroll operation
-  void _performScrollToPost(BuildContext context, int postId) {
-    try {
-      if (!_scrollController.hasClients) {
-        _scrollToPostByIndex(postId);
-        return;
-      }
-
-      final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-      if (renderBox == null || !renderBox.hasSize) {
-        _scrollToPostByIndex(postId);
-        return;
-      }
-
-      // Get the actual sticky bar height
-      // Bar: margin vertical (8*2 = 16) + padding vertical (12*2 = 24) + content height (~40) ≈ 80
-      const double stickyBarHeight = 80.0;
-      const double gap = 8.0; // Small gap for visual spacing
-      final double targetOffsetFromTop = stickyBarHeight + gap;
-
-      // Get the post's position relative to the viewport
-      final postPosition = renderBox.localToGlobal(Offset.zero);
-      
-      // Get the scrollable's position
-      final scrollableContext = _scrollController.position.context.storageContext;
-      final scrollableBox = scrollableContext.findRenderObject() as RenderBox?;
-      
-      if (scrollableBox != null) {
-        final scrollablePosition = scrollableBox.localToGlobal(Offset.zero);
-        
-        // Calculate where the post currently is relative to the scrollable viewport
-        final postRelativeY = postPosition.dy - scrollablePosition.dy;
-        
-        // Calculate the current scroll offset
-        final currentScrollOffset = _scrollController.offset;
-        
-        // Calculate target scroll offset: 
-        // We want the post's top to be at (stickyBarHeight + gap) from the top of the viewport
-        // The post's position in the scrollable is: currentScrollOffset + postRelativeY
-        // So we need to scroll to: (currentScrollOffset + postRelativeY) - targetOffsetFromTop
-        final double targetScrollOffset = currentScrollOffset + postRelativeY - targetOffsetFromTop;
-
-        _scrollController.animateTo(
-          targetScrollOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-        );
-      } else {
-        // Fallback: Use ensureVisible with calculated alignment
-        final screenHeight = MediaQuery.of(context).size.height;
-        final double alignment = (targetOffsetFromTop / screenHeight).clamp(0.0, 0.15);
-
-        Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-          alignment: alignment,
-          alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-        );
-      }
-    } catch (e) {
-      debugPrint('⚠️ Error scrolling to post: $e');
-      _scrollToPostByIndex(postId);
-    }
-  }
-
-  // Fallback method: Scroll to post by calculating index position
-  void _scrollToPostByIndex(int postId) {
-    final postIndex = controller.posts.indexWhere((p) => p.id == postId);
-    if (postIndex != -1 && _scrollController.hasClients) {
-      // Calculate scroll position to place post just below sticky bar
-      // Sticky bar height + small gap for visual spacing
-      const double stickyBarHeight = 80.0;
-      const double gap = 8.0;
-      const double targetOffsetFromTop = stickyBarHeight + gap;
-      
-      // Estimate post position (average post height ~400px including margins)
-      const double estimatedPostHeight = 400.0;
-      final double estimatedPostTop = postIndex * estimatedPostHeight;
-      
-      // Calculate scroll offset: post top position - target offset from top
-      final double targetScrollOffset = estimatedPostTop - targetOffsetFromTop;
-      
-      _scrollController.animateTo(
-        targetScrollOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-      );
-    }
+    _itemScrollController.scrollTo(
+      index: index,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+      alignment: 0.1, // space for pinned bar
+    );
   }
 
   @override
@@ -289,8 +186,8 @@ class _CommunityPageState extends State<CommunityPage> {
             }
 
             // Show posts list
-            return ListView.builder(
-              controller: _scrollController,
+            return ScrollablePositionedList.builder(
+              itemScrollController: _itemScrollController,
               padding: EdgeInsets.only(
                 left: 24.w, // px-6 = 24px
                 right: 24.w, // px-6 = 24px
@@ -300,14 +197,10 @@ class _CommunityPageState extends State<CommunityPage> {
               itemCount: controller.posts.length,
               itemBuilder: (context, index) {
                 final post = controller.posts[index];
-                // Create key for each post if not exists
-                if (!_postKeys.containsKey(post.id)) {
-                  _postKeys[post.id] = GlobalKey();
-                }
                 return PostCard(
                   post: post,
                   index: index,
-                  postKey: _postKeys[post.id]!,
+                  postKey: GlobalKey(),
                   controller: controller,
                   onShowComments: () => _showCommentsModal(post.id),
                 );

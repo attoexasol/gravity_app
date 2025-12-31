@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../../commuinity/screens/community_page.dart';
+import '../../community/screens/community_page.dart';
 import '../../dashboard/screens/dashboard_view.dart';
 import '../../dashboard/screens/sections/sync_status_section.dart';
 import '../../dashboard/controller/dashboard_controller.dart';

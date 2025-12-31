@@ -39,32 +39,35 @@ class PinnedPostsBar extends StatelessWidget {
         children: [
           /// LEFT SIDE – clickable area ONLY
           Expanded(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12.r),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: onScrollToPost,
-              child: Row(
-                children: [
-                  Icon(Icons.push_pin, size: 18.sp, color: Colors.white),
-                  SizedBox(width: 12.w),
-                  Text(
-                    'Pinned Posts',
-                    style: ResponsiveTextStyles.textSm.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(width: 12.w),
-                  Expanded(
-                    child: Text(
-                      pinnedPost.text,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: ResponsiveTextStyles.textXs.copyWith(
-                        color: Colors.white.withOpacity(0.9),
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 8.h, horizontal: 8.w),
+                child: Row(
+                  children: [
+                    Icon(Icons.push_pin, size: 18.sp, color: Colors.white),
+                    SizedBox(width: 12.w),
+                    Text(
+                      'Pinned Posts',
+                      style: ResponsiveTextStyles.textSm.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                ],
+                    SizedBox(width: 12.w),
+                    Expanded(
+                      child: Text(
+                        pinnedPost.text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ResponsiveTextStyles.textXs.copyWith(
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
