@@ -267,11 +267,15 @@ class AuthRepository {
   /// Sends Firebase ID token to backend
   Future<Map<String, dynamic>> googleSignIn({
     required String firebaseToken,
+    required String role,
   }) async {
     try {
       final response = await _apiService.post(
         '/auth/google', // ✅ backend endpoint
-        body: {'firebase_token': firebaseToken},
+        body: {
+          'firebase_token': firebaseToken,
+          'role': role,
+        },
       );
 
       final token = response['token'] as String?;

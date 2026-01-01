@@ -8,6 +8,7 @@ import 'package:gravityapp/data/model/message.dart';
 import '../../../data/repositories/messages_repository.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../data/model/api_response.dart';
+import '../utils/message_utils.dart';
 
 class MessagesController extends GetxController {
   // Repository
@@ -17,7 +18,7 @@ class MessagesController extends GetxController {
   final RxString selectedConversationId = ''.obs;
   final RxString searchQuery = ''.obs;
   final RxString messageInput = ''.obs;
-  final RxBool isTyping = false.obs;
+  final RxnInt typingUserId = RxnInt(); // ID of user who is typing (null if no one is typing)
   final RxBool isLoadingConversations = false.obs;
   final RxBool isLoadingMessages = false.obs;
 
@@ -31,6 +32,14 @@ class MessagesController extends GetxController {
   
   // Scroll controller for messages list
   final ScrollController messagesScrollController = ScrollController();
+  
+  // WhatsApp-like scroll behavior state
+  final RxBool isNearBottom = true.obs; // User is within 80px of bottom
+  final RxBool hasNewIncomingMessage = false.obs; // New message arrived while scrolled up
+  static const double _nearBottomThreshold = 80.0; // 80px threshold like WhatsApp
+  
+  // Track last received message ID for highlight animation
+  final RxString lastReceivedMessageId = ''.obs;
 
   // Edit message state
   final RxString editingMessageId = ''.obs;
@@ -49,6 +58,9 @@ class MessagesController extends GetxController {
   final RxString userType = 'customer'.obs;
   int? _currentUserId;
   
+  // Getter for current user ID (for UI access)
+  int? get currentUserId => _currentUserId;
+  
   // Map to store conversation partner user IDs
   final Map<String, int> _conversationUserIds = {};
   
@@ -61,6 +73,16 @@ class MessagesController extends GetxController {
   // Timer for periodic message polling
   Timer? _messagePollingTimer;
   static const Duration _pollingInterval = Duration(seconds: 3); // Poll every 3 seconds
+  
+  // Prevent overlapping polling calls
+  bool _isPollingInProgress = false;
+  
+  // Typing indicator debounce timer
+  Timer? _typingDebounceTimer;
+  static const Duration _typingDebounceDelay = Duration(milliseconds: 500);
+  
+  // App lifecycle observer for background/foreground handling
+  late AppLifecycleObserver _lifecycleObserver;
 
   @override
   void onInit() {
@@ -68,12 +90,75 @@ class MessagesController extends GetxController {
     _loadUserType();
     _loadCurrentUserId();
     _loadConversations();
+    _setupLifecycleObserver();
+    _setupScrollListener();
     _startMessagePolling();
+  }
+  
+  /// Setup scroll listener to track if user is near bottom
+  void _setupScrollListener() {
+    messagesScrollController.addListener(_onScroll);
+    
+    // Listen to keyboard visibility changes to adjust scroll
+    messageFocusNode.addListener(_onKeyboardToggle);
+  }
+  
+  /// Handle keyboard show/hide to adjust scroll position
+  void _onKeyboardToggle() {
+    if (messageFocusNode.hasFocus) {
+      // Keyboard is opening - scroll to bottom after a short delay
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          scrollToBottom(smooth: true, force: true);
+        });
+      });
+    }
+  }
+  
+  /// Handle scroll position changes to track if user is near bottom
+  void _onScroll() {
+    if (!messagesScrollController.hasClients) return;
+    
+    final position = messagesScrollController.position;
+    final maxScroll = position.maxScrollExtent;
+    final currentScroll = position.pixels;
+    final distanceFromBottom = maxScroll - currentScroll;
+    
+    // Update isNearBottom state (within 80px threshold)
+    final wasNearBottom = isNearBottom.value;
+    final nowNearBottom = distanceFromBottom <= _nearBottomThreshold;
+    
+    if (wasNearBottom != nowNearBottom) {
+      isNearBottom.value = nowNearBottom;
+      
+      // If user scrolled back to bottom, clear new message flag
+      if (nowNearBottom && hasNewIncomingMessage.value) {
+        hasNewIncomingMessage.value = false;
+      }
+    }
+  }
+  
+  /// Setup app lifecycle observer to handle background/foreground
+  void _setupLifecycleObserver() {
+    _lifecycleObserver = AppLifecycleObserver(
+      onPaused: () {
+        debugPrint('📱 Messages: App paused - stopping polling');
+        _stopMessagePolling();
+      },
+      onResumed: () {
+        debugPrint('📱 Messages: App resumed - restarting polling');
+        _startMessagePolling();
+      },
+    );
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
   }
 
   @override
   void onClose() {
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
     _stopMessagePolling();
+    _stopTypingDebounce();
+    messagesScrollController.removeListener(_onScroll);
     messageController.dispose();
     searchController.dispose();
     editMessageController.dispose();
@@ -81,9 +166,45 @@ class MessagesController extends GetxController {
     messagesScrollController.dispose();
     super.onClose();
   }
+  
+  /// Handle typing input changes
+  /// IMPORTANT: Does NOT set typingUserId when current user types
+  /// typingUserId should ONLY be set when OTHER user is typing (from backend/sockets)
+  /// Current user NEVER sees their own typing indicator
+  void handleTyping(String value) {
+    // Update message input value
+    messageInput.value = value;
+    
+    // If input is empty, clear any existing typing state
+    if (value.trim().isEmpty) {
+      _stopTypingDebounce();
+      // Only clear typingUserId if it was set for current user (shouldn't happen, but safety check)
+      // In normal flow, typingUserId should only be set by backend when other user types
+      typingUserId.value = null;
+      return;
+    }
+    
+    // DO NOT set typingUserId when current user types
+    // typingUserId should only be set when we receive typing signal from OTHER user (backend/sockets)
+    // This ensures current user NEVER sees their own typing indicator
+  }
+  
+  /// Stop typing debounce timer
+  void _stopTypingDebounce() {
+    _typingDebounceTimer?.cancel();
+    _typingDebounceTimer = null;
+  }
+  
+  /// Stop typing indicator (called when message is sent or conversation is closed)
+  void stopTyping() {
+    _stopTypingDebounce();
+    typingUserId.value = null;
+  }
 
-  /// Scroll to bottom of messages list (Messenger-like behavior)
-  void scrollToBottom({bool smooth = true}) {
+  /// Scroll to bottom of messages list (WhatsApp-like behavior)
+  /// Only auto-scrolls if user is near bottom (within 80px)
+  /// If user is scrolled up, sets hasNewIncomingMessage flag instead
+  void scrollToBottom({bool smooth = true, bool force = false}) {
     if (!messagesScrollController.hasClients) return;
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -92,10 +213,27 @@ class MessagesController extends GetxController {
       final position = messagesScrollController.position;
       final maxScroll = position.maxScrollExtent;
       final currentScroll = position.pixels;
+      final distanceFromBottom = maxScroll - currentScroll;
       
-      // Only scroll if we're not already at the bottom (within 50 pixels)
-      // This prevents unnecessary scrolling when user is already at the bottom
-      if ((maxScroll - currentScroll) > 50) {
+      // If forced (user clicked scroll button), always scroll
+      if (force) {
+        if (smooth) {
+          messagesScrollController.animateTo(
+            maxScroll,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        } else {
+          messagesScrollController.jumpTo(maxScroll);
+        }
+        // Clear new message flag when user manually scrolls
+        hasNewIncomingMessage.value = false;
+        isNearBottom.value = true;
+        return;
+      }
+      
+      // Auto-scroll ONLY if user is near bottom (within 80px threshold)
+      if (distanceFromBottom <= _nearBottomThreshold) {
         if (smooth) {
           messagesScrollController.animateTo(
             maxScroll,
@@ -106,13 +244,19 @@ class MessagesController extends GetxController {
           // Use jumpTo for instant scroll when user is already near bottom
           messagesScrollController.jumpTo(maxScroll);
         }
+        // Clear new message flag since we're auto-scrolling
+        hasNewIncomingMessage.value = false;
       } else {
-        // Already at bottom, just ensure we're exactly at the end
-        if (currentScroll < maxScroll) {
-          messagesScrollController.jumpTo(maxScroll);
-        }
+        // User is scrolled up - don't auto-scroll
+        // The caller should set hasNewIncomingMessage if there are new messages
+        debugPrint('📱 Messages: User scrolled up (${distanceFromBottom.toStringAsFixed(0)}px from bottom), not auto-scrolling');
       }
     });
+  }
+  
+  /// Manually scroll to bottom (called when user clicks scroll button)
+  void scrollToBottomManually() {
+    scrollToBottom(smooth: true, force: true);
   }
 
   void _loadUserType() {
@@ -275,45 +419,32 @@ class MessagesController extends GetxController {
       if (messagesResponse.isSuccess && messagesResponse.data != null) {
         final allMessages = messagesResponse.data!;
         
-        // Filter messages for this conversation
-        final filteredMessages = allMessages.where((msg) {
-          final fromUserId = msg['from_user_id'] ?? msg['from_user']?['id'];
-          final toUserId = msg['to_user_id'] ?? msg['to_user']?['id'];
-          
-          int? fromUserIdInt;
-          int? toUserIdInt;
-          
-          if (fromUserId is int) {
-            fromUserIdInt = fromUserId;
-          } else if (fromUserId != null) {
-            fromUserIdInt = int.tryParse(fromUserId.toString());
-          }
-          
-          if (toUserId is int) {
-            toUserIdInt = toUserId;
-          } else if (toUserId != null) {
-            toUserIdInt = int.tryParse(toUserId.toString());
-          }
-          
-          if (fromUserIdInt == null || toUserIdInt == null || _currentUserId == null) {
-            return false;
-          }
-          
-          final isFromCurrentToOther = fromUserIdInt == _currentUserId && toUserIdInt == otherUserId;
-          final isFromOtherToCurrent = fromUserIdInt == otherUserId && toUserIdInt == _currentUserId;
-          
-          return isFromCurrentToOther || isFromOtherToCurrent;
-        }).toList();
+        // Safety guard
+        if (_currentUserId == null) {
+          debugPrint('⚠️ Messages: Current user ID is null, cannot refresh unread count');
+          return;
+        }
         
-        // Map messages and calculate unread count
+        // Filter messages using MessageUtils
+        final filteredMessages = MessageUtils.filterConversationMessages(
+          allMessages,
+          _currentUserId!,
+          otherUserId,
+        );
+        
+        // Map messages and calculate unread count using MessageUtils
         // IMPORTANT: The API response contains is_read status BEFORE marking as read
         // So we can calculate accurate unread count from the response
-        final mappedMessages = filteredMessages.map((msg) => _mapApiMessageToMessage(msg)).toList();
+        final mappedMessages = filteredMessages
+            .map((msg) => MessageUtils.mapApiMessage(msg, _currentUserId))
+            .toList();
         
-        // Calculate unread count (messages not sent by current user and not read)
-        // Count messages where isRead === false AND isSent === false
+        // Remove duplicates before calculating unread count
+        final uniqueMessages = MessageUtils.removeDuplicateMessages(mappedMessages);
+        
+        // Calculate unread count using MessageUtils
         // The is_read field in the response reflects the status before getSingleMessage marks them as read
-        final unreadCount = mappedMessages.where((m) => !m.isSent && !m.isRead).length;
+        final unreadCount = MessageUtils.calculateUnreadCount(uniqueMessages);
         
         // Update conversation with new unread count
         final convIndex = conversations.indexWhere((c) => c.id == conversationId);
@@ -323,6 +454,7 @@ class MessagesController extends GetxController {
           // Only update if unread count changed
           if (existingConv.unreadCount != unreadCount) {
             conversations[convIndex] = existingConv.copyWith(unreadCount: unreadCount);
+            // Only refresh if count actually changed
             conversations.refresh();
             debugPrint('✅ Updated unread count for conversation $conversationId: $unreadCount (was ${existingConv.unreadCount})');
           }
@@ -404,107 +536,78 @@ class MessagesController extends GetxController {
       if (messagesResponse.isSuccess && messagesResponse.data != null) {
         final allMessages = messagesResponse.data!;
         
-        // Filter messages to only include messages between current user and otherUserId
-        // A message belongs to this conversation if:
-        // - from_user_id is current user AND to_user_id is otherUserId, OR
-        // - from_user_id is otherUserId AND to_user_id is current user
-        final filteredMessages = allMessages.where((msg) {
-          // Handle both API response formats: direct fields or nested user objects
-          final fromUserId = msg['from_user_id'] ?? msg['from_user']?['id'];
-          final toUserId = msg['to_user_id'] ?? msg['to_user']?['id'];
-          
-          // Convert to integers for comparison
-          int? fromUserIdInt;
-          int? toUserIdInt;
-          
-          if (fromUserId is int) {
-            fromUserIdInt = fromUserId;
-          } else if (fromUserId != null) {
-            fromUserIdInt = int.tryParse(fromUserId.toString());
-          }
-          
-          if (toUserId is int) {
-            toUserIdInt = toUserId;
-          } else if (toUserId != null) {
-            toUserIdInt = int.tryParse(toUserId.toString());
-          }
-          
-          // If we can't parse user IDs or current user ID is null, skip this message
-          if (fromUserIdInt == null || toUserIdInt == null || _currentUserId == null) {
-            return false;
-          }
-          
-          // Message is part of this conversation if it's between current user and otherUserId
-          final isFromCurrentToOther = fromUserIdInt == _currentUserId && toUserIdInt == otherUserId;
-          final isFromOtherToCurrent = fromUserIdInt == otherUserId && toUserIdInt == _currentUserId;
-          
-          if (!isFromCurrentToOther && !isFromOtherToCurrent) {
-            return false;
-          }
-          
-          // CRITICAL: Verify role from message data (if available)
-          // Extract role from the other user in the message
-          final targetRole = userType.value == 'customer' ? 'coach' : 'customer';
-          String? otherUserRole;
+        // Filter messages using MessageUtils (handles all user ID parsing)
+        final filteredMessages = MessageUtils.filterConversationMessages(
+          allMessages,
+          _currentUserId!,
+          otherUserId,
+        );
+        
+        // Additional role verification (if role data is available in messages)
+        final targetRole = userType.value == 'customer' ? 'coach' : 'customer';
+        final roleVerifiedMessages = filteredMessages.where((msg) {
+          // Try to extract role from message if available
+          final fromUserId = MessageUtils.extractFromUserId(msg);
+          final isFromOtherToCurrent = fromUserId == otherUserId;
           
           if (isFromOtherToCurrent) {
-            // Other user is the sender, check from_user role
             final fromUser = msg['from_user'];
             if (fromUser is Map<String, dynamic>) {
-              otherUserRole = _extractUserRole(fromUser);
+              final otherUserRole = _extractUserRole(fromUser);
+              if (otherUserRole.isNotEmpty && !_isValidRoleForUser(otherUserRole, targetRole)) {
+                debugPrint('⏭️ Messages: Skipping message - Role mismatch. User role: $otherUserRole, Expected: $targetRole');
+                return false;
+              }
             }
-          } else if (isFromCurrentToOther) {
-            // Other user is the recipient, check to_user role
+          } else {
             final toUser = msg['to_user'];
             if (toUser is Map<String, dynamic>) {
-              otherUserRole = _extractUserRole(toUser);
+              final otherUserRole = _extractUserRole(toUser);
+              if (otherUserRole.isNotEmpty && !_isValidRoleForUser(otherUserRole, targetRole)) {
+                debugPrint('⏭️ Messages: Skipping message - Role mismatch. User role: $otherUserRole, Expected: $targetRole');
+                return false;
+              }
             }
           }
-          
-          // If we can extract role from message, verify it matches target role
-          if (otherUserRole != null && otherUserRole.isNotEmpty) {
-            if (!_isValidRoleForUser(otherUserRole, targetRole)) {
-              debugPrint('⏭️ Messages: Skipping message - Role mismatch. User role: $otherUserRole, Expected: $targetRole');
-              return false;
-            }
-          }
-          
           return true;
         }).toList();
         
-        debugPrint('📱 Filtered ${filteredMessages.length} messages for conversation with user $otherUserId (from ${allMessages.length} total)');
+        debugPrint('📱 Filtered ${roleVerifiedMessages.length} messages for conversation with user $otherUserId (from ${allMessages.length} total)');
         
         // Extract user name from userData, cached name, or messages
         String userName;
         if (userData != null) {
-          userName = _extractUserName(userData, filteredMessages, otherUserId);
+          userName = _extractUserName(userData, roleVerifiedMessages, otherUserId);
         } else if (_userNames.containsKey(otherUserId)) {
           // Use cached name if available
           userName = _userNames[otherUserId]!;
           debugPrint('👤 Messages: Using cached user name for user $otherUserId: $userName');
         } else {
           // Try to extract from messages
-          userName = _extractUserName(null, filteredMessages, otherUserId);
+          userName = _extractUserName(null, roleVerifiedMessages, otherUserId);
         }
         
         // Extract profile image from userData, cached image, or messages
         String? profileImage;
         if (userData != null) {
-          profileImage = _extractProfileImage(userData, filteredMessages, otherUserId);
+          profileImage = _extractProfileImage(userData, roleVerifiedMessages, otherUserId);
         } else if (_userProfileImages.containsKey(otherUserId)) {
           // Use cached profile image if available
           profileImage = _userProfileImages[otherUserId];
           debugPrint('📸 Messages: Using cached profile image for user $otherUserId');
         } else {
           // Try to extract from messages
-          profileImage = _extractProfileImage(null, filteredMessages, otherUserId);
+          profileImage = _extractProfileImage(null, roleVerifiedMessages, otherUserId);
         }
         
-        // Map messages to Message models
-        final mappedMessages = filteredMessages.map((msg) => _mapApiMessageToMessage(msg)).toList();
+        // Map messages to Message models using MessageUtils
+        final mappedMessages = roleVerifiedMessages
+            .map((msg) => MessageUtils.mapApiMessage(msg, _currentUserId))
+            .toList();
         
-        // Sort messages by timestamp
-        mappedMessages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        // Remove duplicates and sort messages by timestamp
+        final uniqueMessages = MessageUtils.removeDuplicateMessages(mappedMessages);
+        final sortedMessages = MessageUtils.sortMessagesByTimestamp(uniqueMessages);
         
         // Determine last message and timestamp
         String lastMessageText = 'No messages yet';
@@ -514,14 +617,14 @@ class MessagesController extends GetxController {
         final conversationId = 'conv_$otherUserId';
         final isConversationOpen = selectedConversationId.value == conversationId;
         final finalMessages = isConversationOpen
-            ? mappedMessages.map((m) {
+            ? sortedMessages.map((m) {
                 // Mark received messages as read when conversation is open
                 if (!m.isSent && !m.isRead) {
                   return m.copyWith(isRead: true);
                 }
                 return m;
               }).toList()
-            : mappedMessages;
+            : sortedMessages;
         
         int unreadCount = 0;
         
@@ -530,9 +633,8 @@ class MessagesController extends GetxController {
           lastMessageText = lastMsg.text;
           lastTimestamp = lastMsg.timestamp;
           
-          // Count unread messages (messages not sent by current user and not read)
-          // Only count messages where isRead === false AND isSent === false
-          unreadCount = finalMessages.where((m) => !m.isSent && !m.isRead).length;
+          // Calculate unread count using MessageUtils
+          unreadCount = MessageUtils.calculateUnreadCount(finalMessages);
         }
         
         // Create conversation (conversationId already declared above)
@@ -732,62 +834,9 @@ class MessagesController extends GetxController {
     return null;
   }
 
+  /// Map API message to Message model using MessageUtils
   Message _mapApiMessageToMessage(Map<String, dynamic> json) {
-    final messageId = json['id']?.toString() ?? json['message_id']?.toString() ?? '';
-    final fromUserId = json['from_user_id'] ?? json['from_user']?['id'] ?? json['from_user_id'];
-    final messageText = json['message'] ?? json['message_content'] ?? json['text'] ?? '';
-    
-    // Determine if message is sent by current user
-    final isSent = fromUserId == _currentUserId;
-    
-    // Parse timestamp - prefer updated_at if available (indicates message was edited)
-    // Otherwise use created_at
-    DateTime timestamp = DateTime.now();
-    String? timestampStr = json['updated_at']?.toString() ?? json['created_at']?.toString();
-    if (timestampStr != null) {
-      try {
-        final parsedTime = DateTime.parse(timestampStr);
-        // Convert UTC to local time if the timestamp is in UTC
-        timestamp = parsedTime.isUtc ? parsedTime.toLocal() : parsedTime;
-      } catch (e) {
-        debugPrint('⚠️ Messages: Error parsing timestamp: $e');
-        timestamp = DateTime.now(); // Fallback to current time
-      }
-    }
-    
-    // Parse is_read field - handle both integer (0/1) and boolean values
-    bool isRead = false;
-    final isReadValue = json['is_read'];
-    if (isReadValue != null) {
-      if (isReadValue is bool) {
-        isRead = isReadValue;
-      } else if (isReadValue is int) {
-        isRead = isReadValue == 1; // 0 = false (unread), 1 = true (read)
-      } else if (isReadValue is String) {
-        isRead = isReadValue == '1' || isReadValue.toLowerCase() == 'true';
-      }
-    } else {
-      // Fallback to 'read' field if 'is_read' is not present
-      final readValue = json['read'];
-      if (readValue != null) {
-        if (readValue is bool) {
-          isRead = readValue;
-        } else if (readValue is int) {
-          isRead = readValue == 1;
-        } else if (readValue is String) {
-          isRead = readValue == '1' || readValue.toLowerCase() == 'true';
-        }
-      }
-    }
-    
-    return Message(
-      id: messageId,
-      senderId: fromUserId?.toString() ?? 'unknown',
-      text: messageText.toString(),
-      timestamp: timestamp,
-      isRead: isRead,
-      isSent: isSent,
-    );
+    return MessageUtils.mapApiMessage(json, _currentUserId);
   }
 
   String _getAvatarForUser(int userId, String? profileImage) {
@@ -886,6 +935,13 @@ class MessagesController extends GetxController {
   void selectConversation(String conversationId) {
     selectedConversationId.value = conversationId;
     
+    // Reset scroll state when opening new conversation
+    hasNewIncomingMessage.value = false;
+    isNearBottom.value = true; // Assume at bottom when opening conversation
+    
+    // Clear any previous highlight animation
+    lastReceivedMessageId.value = '';
+    
     // Reload messages for this conversation using getSingleMessage API
     // This API will mark messages as read on the server
     final otherUserId = _conversationUserIds[conversationId];
@@ -895,6 +951,13 @@ class MessagesController extends GetxController {
     
     // Restart polling to ensure fresh messages
     _startMessagePolling();
+    
+    // Scroll to bottom after conversation loads (with delay to ensure ListView is built)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        scrollToBottom(smooth: false, force: true);
+      });
+    });
   }
   
   /// Load conversation using getSingleMessage API (marks messages as read on server)
@@ -934,44 +997,29 @@ class MessagesController extends GetxController {
   }
   
   /// Process messages for a conversation (shared logic for both getAllMessages and getSingleMessage)
+  /// Uses MessageUtils for all filtering, mapping, and unread count calculations
   Future<void> _processMessagesForConversation(
     List<Map<String, dynamic>> allMessages,
     int otherUserId,
     Map<String, dynamic>? userData,
   ) async {
-    // Filter messages to only include messages between current user and otherUserId
-    final filteredMessages = allMessages.where((msg) {
-      // Handle both API response formats: direct fields or nested user objects
-      final fromUserId = msg['from_user_id'] ?? msg['from_user']?['id'];
-      final toUserId = msg['to_user_id'] ?? msg['to_user']?['id'];
-      
-      // Convert to integers for comparison
-      int? fromUserIdInt;
-      int? toUserIdInt;
-      
-      if (fromUserId is int) {
-        fromUserIdInt = fromUserId;
-      } else if (fromUserId != null) {
-        fromUserIdInt = int.tryParse(fromUserId.toString());
-      }
-      
-      if (toUserId is int) {
-        toUserIdInt = toUserId;
-      } else if (toUserId != null) {
-        toUserIdInt = int.tryParse(toUserId.toString());
-      }
-      
-      // If we can't parse user IDs or current user ID is null, skip this message
-      if (fromUserIdInt == null || toUserIdInt == null || _currentUserId == null) {
-        return false;
-      }
-      
-      // Message is part of this conversation if it's between current user and otherUserId
-      final isFromCurrentToOther = fromUserIdInt == _currentUserId && toUserIdInt == otherUserId;
-      final isFromOtherToCurrent = fromUserIdInt == otherUserId && toUserIdInt == _currentUserId;
-      
-      return isFromCurrentToOther || isFromOtherToCurrent;
-    }).toList();
+    // Safety guard: prevent processing messages for self
+    if (_currentUserId == null) {
+      debugPrint('❌ Messages: Current user ID is null, cannot process messages');
+      return;
+    }
+    
+    if (otherUserId == _currentUserId) {
+      debugPrint('⏭️ Messages: Skipping message processing for self (ID: $otherUserId)');
+      return;
+    }
+    
+    // Filter messages using MessageUtils
+    final filteredMessages = MessageUtils.filterConversationMessages(
+      allMessages,
+      _currentUserId!,
+      otherUserId,
+    );
     
     debugPrint('📱 Filtered ${filteredMessages.length} messages for conversation with user $otherUserId (from ${allMessages.length} total)');
     
@@ -994,17 +1042,20 @@ class MessagesController extends GetxController {
       profileImage = _extractProfileImage(null, filteredMessages, otherUserId);
     }
     
-    // Map messages to Message models
-    final mappedMessages = filteredMessages.map((msg) => _mapApiMessageToMessage(msg)).toList();
+    // Map messages to Message models using MessageUtils
+    final mappedMessages = filteredMessages
+        .map((msg) => MessageUtils.mapApiMessage(msg, _currentUserId))
+        .toList();
     
-    // Sort messages by timestamp
-    mappedMessages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    // Remove duplicates and sort messages by timestamp
+    final uniqueMessages = MessageUtils.removeDuplicateMessages(mappedMessages);
+    final sortedMessages = MessageUtils.sortMessagesByTimestamp(uniqueMessages);
     
     // Determine last message and timestamp
     String lastMessageText = 'No messages yet';
     DateTime lastTimestamp = DateTime.now();
     
-    // Calculate unread count (messages not sent by current user and not read)
+    // Calculate unread count using MessageUtils
     // The getSingleMessage API should have already marked messages as read on the server
     final conversationId = 'conv_$otherUserId';
     final isConversationOpen = selectedConversationId.value == conversationId;
@@ -1013,10 +1064,10 @@ class MessagesController extends GetxController {
     // But we still count based on the is_read field from the API
     final unreadCount = isConversationOpen
         ? 0 // If conversation is open, unread count should be 0 (messages are marked as read)
-        : mappedMessages.where((m) => !m.isSent && !m.isRead).length;
+        : MessageUtils.calculateUnreadCount(sortedMessages);
     
-    if (mappedMessages.isNotEmpty) {
-      final lastMsg = mappedMessages.last;
+    if (sortedMessages.isNotEmpty) {
+      final lastMsg = sortedMessages.last;
       lastMessageText = lastMsg.text;
       lastTimestamp = lastMsg.timestamp;
     }
@@ -1051,21 +1102,22 @@ class MessagesController extends GetxController {
       timestamp: lastTimestamp,
       unreadCount: unreadCount,
       role: userType.value == 'customer' ? ConversationRole.coach : ConversationRole.customer,
-      messages: mappedMessages,
+      messages: sortedMessages,
     );
     
     // Add or update conversation
     if (existingIndex != -1) {
       conversations[existingIndex] = conversation;
+      // Only refresh if conversation actually changed
+      conversations.refresh();
     } else {
       conversations.add(conversation);
+      // New conversation added, refresh needed
+      conversations.refresh();
     }
     
     // Sort conversations by most recent message
     _sortConversationsByTimestamp();
-    
-    // Force reactive update
-    conversations.refresh();
     
     debugPrint('✅ Messages: Updated conversation $conversationId. Unread count: $unreadCount');
   }
@@ -1075,16 +1127,26 @@ class MessagesController extends GetxController {
     selectedConversationId.value = '';
     messageInput.value = '';
     messageController.clear();
+    stopTyping(); // Stop typing indicator when closing conversation
     // Restart polling for conversation list view (refresh all conversations)
     _startMessagePolling();
   }
 
   /// Start periodic polling for new messages
+  /// Ensures only ONE timer exists and prevents overlapping calls
   void _startMessagePolling() {
     _stopMessagePolling(); // Stop any existing timer
     
-    _messagePollingTimer = Timer.periodic(_pollingInterval, (timer) {
+    _messagePollingTimer = Timer.periodic(_pollingInterval, (timer) async {
+      // Prevent overlapping polling calls
+      if (_isPollingInProgress) {
+        debugPrint('⏭️ Messages: Skipping polling - previous call still in progress');
+        return;
+      }
+      
       try {
+        _isPollingInProgress = true;
+        
         // If a conversation is selected, refresh messages for that conversation
         if (selectedConversationId.value.isNotEmpty) {
           final conversationId = selectedConversationId.value;
@@ -1092,15 +1154,17 @@ class MessagesController extends GetxController {
           
           if (otherUserId != null) {
             // Silently refresh messages (don't show loading indicator)
-            _refreshMessagesForConversation(otherUserId);
+            await _refreshMessagesForConversation(otherUserId);
           }
         } else {
           // If no conversation is selected, refresh all conversations to update last messages
-          _refreshAllConversations();
+          await _refreshAllConversations();
         }
       } catch (e) {
         // Log error but continue polling
         debugPrint('⚠️ Error in polling callback (continuing): $e');
+      } finally {
+        _isPollingInProgress = false;
       }
     });
     
@@ -1156,27 +1220,28 @@ class MessagesController extends GetxController {
       if (messagesResponse.isSuccess && messagesResponse.data != null) {
         final allMessages = messagesResponse.data!;
         
-        // Filter messages
-        final filteredMessages = allMessages.where((msg) {
-          final fromUserId = msg['from_user_id'] ?? msg['from_user']?['id'];
-          final toUserId = msg['to_user_id'] ?? msg['to_user']?['id'];
-          
-          int? fromUserIdInt = fromUserId is int ? fromUserId : (fromUserId != null ? int.tryParse(fromUserId.toString()) : null);
-          int? toUserIdInt = toUserId is int ? toUserId : (toUserId != null ? int.tryParse(toUserId.toString()) : null);
-          
-          if (fromUserIdInt == null || toUserIdInt == null || _currentUserId == null) {
-            return false;
-          }
-          
-          return (fromUserIdInt == _currentUserId && toUserIdInt == otherUserId) ||
-                 (fromUserIdInt == otherUserId && toUserIdInt == _currentUserId);
-        }).toList();
+        // Safety guard
+        if (_currentUserId == null) {
+          debugPrint('⚠️ Messages: Current user ID is null, cannot refresh conversation');
+          return false;
+        }
+        
+        // Filter messages using MessageUtils
+        final filteredMessages = MessageUtils.filterConversationMessages(
+          allMessages,
+          _currentUserId!,
+          otherUserId,
+        );
         
         if (filteredMessages.isNotEmpty) {
-          final mappedMessages = filteredMessages.map((msg) => _mapApiMessageToMessage(msg)).toList();
-          mappedMessages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+          // Map and sort messages using MessageUtils
+          final mappedMessages = filteredMessages
+              .map((msg) => MessageUtils.mapApiMessage(msg, _currentUserId))
+              .toList();
+          final uniqueMessages = MessageUtils.removeDuplicateMessages(mappedMessages);
+          final sortedMessages = MessageUtils.sortMessagesByTimestamp(uniqueMessages);
           
-          final lastMsg = mappedMessages.last;
+          final lastMsg = sortedMessages.last;
           final convIndex = conversations.indexWhere((c) => c.id == conversationId);
           
           if (convIndex != -1) {
@@ -1185,7 +1250,7 @@ class MessagesController extends GetxController {
             // Check for new messages from the other user (not sent by current user)
             // This is the ONLY reliable way to detect new unread messages during polling
             final existingMessageIds = existingConv.messages.map((m) => m.id).toSet();
-            final newMessages = mappedMessages.where((m) => !existingMessageIds.contains(m.id)).toList();
+            final newMessages = sortedMessages.where((m) => !existingMessageIds.contains(m.id)).toList();
             final newUnreadMessages = newMessages.where((m) => !m.isSent).toList();
             
             // Calculate unread count:
@@ -1209,7 +1274,7 @@ class MessagesController extends GetxController {
                 unreadCount: newUnreadCount,
               );
               
-              // Force immediate reactive update
+              // Only refresh if conversation actually changed
               conversations.refresh();
               
               // Sort immediately if last message changed (Messenger behavior: move to top)
@@ -1240,69 +1305,41 @@ class MessagesController extends GetxController {
   }
 
   /// Refresh messages for a conversation without showing loading state
+  /// IMPORTANT: This method is called from polling and should ONLY use getAllMessages
+  /// getSingleMessage is ONLY used when conversation is explicitly opened (selectConversation)
   Future<void> _refreshMessagesForConversation(int otherUserId) async {
     try {
-      // If conversation is open, use getSingleMessage API to mark messages as read
-      final conversationId = 'conv_$otherUserId';
-      final isConversationOpen = selectedConversationId.value == conversationId;
-      
-      ApiResponse<List<Map<String, dynamic>>> messagesResponse;
-      
-      if (isConversationOpen) {
-        // Use getSingleMessage API when conversation is open (marks messages as read)
-        final apiToken = PreferencesService.getAuthToken();
-        if (apiToken != null && apiToken.isNotEmpty) {
-          messagesResponse = await _messagesRepository.getSingleMessage(
-            apiToken: apiToken,
-            toUserId: otherUserId,
-          );
-        } else {
-          // Fallback to getAllMessages if no token
-          messagesResponse = await _messagesRepository.getAllMessages(otherUserId: otherUserId);
-        }
-      } else {
-        // Use getAllMessages for closed conversations (lighter operation)
-        messagesResponse = await _messagesRepository.getAllMessages(otherUserId: otherUserId);
+      // Safety guard
+      if (_currentUserId == null) {
+        debugPrint('⚠️ Messages: Current user ID is null, cannot refresh messages');
+        return;
       }
+      
+      if (otherUserId == _currentUserId) {
+        debugPrint('⏭️ Messages: Skipping refresh for self (ID: $otherUserId)');
+        return;
+      }
+      
+      // ALWAYS use getAllMessages during polling (never use getSingleMessage here)
+      // getSingleMessage is only used when conversation is explicitly opened
+      final messagesResponse = await _messagesRepository.getAllMessages(otherUserId: otherUserId);
       
       if (messagesResponse.isSuccess && messagesResponse.data != null) {
         final allMessages = messagesResponse.data!;
         
-        // Filter messages to only include messages between current user and otherUserId
-        final filteredMessages = allMessages.where((msg) {
-          final fromUserId = msg['from_user_id'] ?? msg['from_user']?['id'];
-          final toUserId = msg['to_user_id'] ?? msg['to_user']?['id'];
-          
-          int? fromUserIdInt;
-          int? toUserIdInt;
-          
-          if (fromUserId is int) {
-            fromUserIdInt = fromUserId;
-          } else if (fromUserId != null) {
-            fromUserIdInt = int.tryParse(fromUserId.toString());
-          }
-          
-          if (toUserId is int) {
-            toUserIdInt = toUserId;
-          } else if (toUserId != null) {
-            toUserIdInt = int.tryParse(toUserId.toString());
-          }
-          
-          if (fromUserIdInt == null || toUserIdInt == null || _currentUserId == null) {
-            return false;
-          }
-          
-          final isFromCurrentToOther = fromUserIdInt == _currentUserId && toUserIdInt == otherUserId;
-          final isFromOtherToCurrent = fromUserIdInt == otherUserId && toUserIdInt == _currentUserId;
-          
-          return isFromCurrentToOther || isFromOtherToCurrent;
-        }).toList();
+        // Filter messages using MessageUtils
+        final filteredMessages = MessageUtils.filterConversationMessages(
+          allMessages,
+          _currentUserId!,
+          otherUserId,
+        );
         
-        // Map messages to Message models
-        final mappedMessages = filteredMessages.map((msg) => _mapApiMessageToMessage(msg)).toList();
-        
-        // Sort messages by timestamp
-        mappedMessages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        // Map, remove duplicates, and sort messages using MessageUtils
+        final mappedMessages = filteredMessages
+            .map((msg) => MessageUtils.mapApiMessage(msg, _currentUserId))
+            .toList();
+        final uniqueMessages = MessageUtils.removeDuplicateMessages(mappedMessages);
+        final sortedMessages = MessageUtils.sortMessagesByTimestamp(uniqueMessages);
         
         // Get conversation ID
         final conversationId = 'conv_$otherUserId';
@@ -1311,9 +1348,9 @@ class MessagesController extends GetxController {
         if (convIndex != -1) {
           final existingConv = conversations[convIndex];
           
-          // Check for new messages (by ID)
+          // Check for new messages (by ID) - prevent duplicates
           final existingMessageIds = existingConv.messages.map((m) => m.id).toSet();
-          final newMessages = mappedMessages.where((m) => !existingMessageIds.contains(m.id)).toList();
+          final newMessages = sortedMessages.where((m) => !existingMessageIds.contains(m.id)).toList();
           
           // Check for updated messages (same ID but different content or timestamp)
           final updatedMessages = <Message>[];
@@ -1322,7 +1359,7 @@ class MessagesController extends GetxController {
             existingMessagesMap[msg.id] = msg;
           }
           
-          for (final newMsg in mappedMessages) {
+          for (final newMsg in sortedMessages) {
             if (existingMessagesMap.containsKey(newMsg.id)) {
               final existingMsg = existingMessagesMap[newMsg.id]!;
               // Check if message content or timestamp changed (indicates edit)
@@ -1336,25 +1373,24 @@ class MessagesController extends GetxController {
           // Update if we have new messages, updated messages, or count changed
           if (newMessages.isNotEmpty || 
               updatedMessages.isNotEmpty || 
-              mappedMessages.length != existingConv.messages.length) {
+              sortedMessages.length != existingConv.messages.length) {
             // Update conversation with refreshed messages
-            final lastMsg = mappedMessages.isNotEmpty ? mappedMessages.last : null;
+            final lastMsg = sortedMessages.isNotEmpty ? sortedMessages.last : null;
             
             // If conversation is currently open, mark new received messages as read immediately
             final isConversationOpen = selectedConversationId.value == conversationId;
             final finalMessages = isConversationOpen
-                ? mappedMessages.map((m) {
+                ? sortedMessages.map((m) {
                     // Mark new received messages as read when conversation is open
                     if (!m.isSent && newMessages.any((nm) => nm.id == m.id)) {
                       return m.copyWith(isRead: true);
                     }
                     return m;
                   }).toList()
-                : mappedMessages;
+                : sortedMessages;
             
-            // Calculate unread count (messages not sent by current user and not read)
-            // When conversation is open, getSingleMessage marks messages as read, so unreadCount should be 0
-            final unreadCount = finalMessages.where((m) => !m.isSent && !m.isRead).length;
+            // Calculate unread count using MessageUtils
+            final unreadCount = MessageUtils.calculateUnreadCount(finalMessages);
             
             // Determine if last message changed (for sorting)
             final lastMessageChanged = lastMsg != null && 
@@ -1370,7 +1406,7 @@ class MessagesController extends GetxController {
               // Preserve name and avatar
             );
             
-            // Force reactive update
+            // Only refresh if conversation actually changed
             conversations.refresh();
             
             // Sort immediately if last message changed (Messenger behavior: move to top)
@@ -1378,12 +1414,41 @@ class MessagesController extends GetxController {
               _sortConversationsByTimestamp();
             }
             
-            // Scroll to bottom if new messages were received (smooth animation for received messages)
+            // Handle new incoming messages (WhatsApp-like behavior)
             if (newMessages.isNotEmpty) {
+              final incomingMessages = newMessages.where((m) => !m.isSent).toList();
+              
               if (isConversationOpen) {
-                debugPrint('✅ Messages: Marked ${newMessages.where((m) => !m.isSent).length} new received messages as read (conversation is open)');
+                debugPrint('✅ Messages: Marked ${incomingMessages.length} new received messages as read (conversation is open)');
               }
-              scrollToBottom(smooth: true);
+              
+              // If there are incoming messages, check if we should auto-scroll or show flag
+              if (incomingMessages.isNotEmpty) {
+                // Track last received message ID for highlight animation
+                // Use the most recent incoming message
+                final mostRecentIncoming = incomingMessages.last;
+                lastReceivedMessageId.value = mostRecentIncoming.id;
+                
+                // Clear highlight after animation duration (800ms)
+                Future.delayed(const Duration(milliseconds: 800), () {
+                  if (lastReceivedMessageId.value == mostRecentIncoming.id) {
+                    lastReceivedMessageId.value = '';
+                  }
+                });
+                
+                // Check if user is near bottom - if not, set flag instead of scrolling
+                if (!isNearBottom.value) {
+                  hasNewIncomingMessage.value = true;
+                  debugPrint('📱 Messages: New incoming message(s) arrived, user is scrolled up - showing scroll indicator');
+                } else {
+                  // User is near bottom, auto-scroll
+                  scrollToBottom(smooth: true);
+                }
+              } else {
+                // Only sent messages (user's own), always scroll
+                scrollToBottom(smooth: true);
+              }
+              
               debugPrint('🔄 Refreshed messages: Found ${newMessages.length} new message(s), ${updatedMessages.length} updated message(s)');
             } else if (updatedMessages.isNotEmpty) {
               debugPrint('🔄 Refreshed messages: Found ${newMessages.length} new message(s), ${updatedMessages.length} updated message(s)');
@@ -1399,7 +1464,21 @@ class MessagesController extends GetxController {
 
   // Send message
   Future<void> sendMessage() async {
+    // Safety guards
     if (messageInput.value.trim().isEmpty || selectedConversationId.value.isEmpty) {
+      return;
+    }
+    
+    if (_currentUserId == null) {
+      debugPrint('❌ Messages: Current user ID is null, cannot send message');
+      Get.snackbar(
+        'Error',
+        'User session invalid. Please login again.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Get.theme.colorScheme.error,
+        colorText: Get.theme.colorScheme.onError,
+        duration: const Duration(seconds: 2),
+      );
       return;
     }
 
@@ -1462,10 +1541,16 @@ class MessagesController extends GetxController {
 
     // Update UI optimistically
     final conv = conversations[convIndex];
+    // Prevent duplicate message IDs
+    final existingMessageIds = conv.messages.map((m) => m.id).toSet();
+    if (existingMessageIds.contains(tempMessageId)) {
+      debugPrint('⚠️ Messages: Duplicate message ID detected, skipping optimistic update');
+      return;
+    }
     final updatedMessages = [...conv.messages, optimisticMessage];
     
-    // Recalculate unread count (sent messages don't count as unread)
-    final unreadCount = updatedMessages.where((m) => !m.isSent && !m.isRead).length;
+    // Recalculate unread count using MessageUtils (sent messages don't count as unread)
+    final unreadCount = MessageUtils.calculateUnreadCount(updatedMessages);
     
     final updatedConv = conv.copyWith(
       messages: updatedMessages,
@@ -1481,14 +1566,15 @@ class MessagesController extends GetxController {
     // Sort conversations by most recent message (Messenger-like behavior) - real-time
     _sortConversationsByTimestamp();
     
-    // Scroll to bottom to show the new message (instant, no animation when user is typing)
-    scrollToBottom(smooth: false);
+    // Always scroll for sent messages (user's own messages) - force scroll
+    scrollToBottom(smooth: false, force: true);
     
     debugPrint('📤 Optimistic message added. Total messages: ${updatedConv.messages.length}');
 
-    // Clear input immediately
+    // Clear input immediately and stop typing indicator
     messageInput.value = '';
     messageController.clear();
+    stopTyping();
 
     try {
       // Send to API
@@ -1501,18 +1587,32 @@ class MessagesController extends GetxController {
 
       if (response.isSuccess && response.data != null) {
         // Replace optimistic message with real message from API
-        final apiMessage = _mapApiMessageToMessage(response.data!);
+        final apiMessage = MessageUtils.mapApiMessage(response.data!, _currentUserId);
         final currentConv = conversations[convIndex];
+        
+        // Check for duplicate message ID (shouldn't happen, but safety guard)
+        final existingMessageIds = currentConv.messages.map((m) => m.id).toSet();
+        if (existingMessageIds.contains(apiMessage.id) && apiMessage.id != tempMessageId) {
+          debugPrint('⚠️ Messages: Duplicate message ID from API, removing optimistic message only');
+          final updatedMessages = currentConv.messages.where((m) => m.id != tempMessageId).toList();
+          conversations[convIndex] = currentConv.copyWith(messages: updatedMessages);
+          conversations.refresh();
+          return;
+        }
+        
         final updatedMessages = currentConv.messages.map((m) {
           return m.id == tempMessageId ? apiMessage : m;
         }).toList();
+        
+        // Remove duplicates (safety guard)
+        final uniqueMessages = MessageUtils.removeDuplicateMessages(updatedMessages);
 
-        // Recalculate unread count (sent messages don't count as unread)
-        final unreadCount = updatedMessages.where((m) => !m.isSent && !m.isRead).length;
+        // Recalculate unread count using MessageUtils (sent messages don't count as unread)
+        final unreadCount = MessageUtils.calculateUnreadCount(uniqueMessages);
         
         // Preserve conversation name and avatar when updating
         final finalConv = currentConv.copyWith(
-          messages: updatedMessages,
+          messages: uniqueMessages,
           lastMessage: apiMessage.text,
           timestamp: apiMessage.timestamp,
           unreadCount: unreadCount,
@@ -1525,8 +1625,8 @@ class MessagesController extends GetxController {
         // Sort conversations by most recent message (Messenger-like behavior) - real-time
         _sortConversationsByTimestamp();
         
-        // Scroll to bottom to show the new message (instant, no animation)
-        scrollToBottom(smooth: false);
+        // Always scroll for sent messages (user's own messages) - force scroll
+        scrollToBottom(smooth: false, force: true);
 
         debugPrint('✅ Message sent successfully. Total messages: ${finalConv.messages.length}');
         debugPrint('   - Conversation name preserved: ${finalConv.name}');
@@ -2039,6 +2139,34 @@ class MessagesController extends GetxController {
       return false;
     } finally {
       isDeletingMessage.value = false;
+    }
+  }
+}
+
+/// App lifecycle observer to handle background/foreground transitions
+class AppLifecycleObserver extends WidgetsBindingObserver {
+  final VoidCallback onPaused;
+  final VoidCallback onResumed;
+
+  AppLifecycleObserver({
+    required this.onPaused,
+    required this.onResumed,
+  });
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        onPaused();
+        break;
+      case AppLifecycleState.resumed:
+        onResumed();
+        break;
+      case AppLifecycleState.hidden:
+        // Do nothing for hidden state
+        break;
     }
   }
 }

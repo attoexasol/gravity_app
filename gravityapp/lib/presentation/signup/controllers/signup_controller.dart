@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/consent_repository.dart';
+import '../../../data/repositories/goals_repository.dart';
 import '../../../app/routes/app_routes.dart';
+import '../../../core/services/google_auth_service.dart';
 
 enum UserType { customer, coach }
 
 class SignupController extends GetxController {
   // Repository
   final AuthRepository _authRepository = AuthRepository();
+  final ConsentRepository _consentRepository = ConsentRepository();
+  final GoalsRepository _goalsRepository = GoalsRepository();
+  final GoogleAuthService _googleAuthService = GoogleAuthService();
 
   // Observable for selected user role
   final Rx<UserType> selectedRole = UserType.customer.obs;
@@ -225,29 +231,83 @@ class SignupController extends GetxController {
 
   /// Handle Google signup
   Future<void> handleGoogleSignup() async {
+    if (isClosed) return;
+
     try {
       isLoading.value = true;
 
-      // TODO: Implement Google Sign-Up when available
-      await Future.delayed(const Duration(seconds: 1));
+      final roleString = selectedRole.value == UserType.coach ? 'coach' : 'customer';
 
-      Get.snackbar(
-        'Coming Soon',
-        'Google Sign-Up will be available soon',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF00B8A9),
-        colorText: Colors.white,
-      );
+      final result = await _googleAuthService.signInWithGoogle(role: roleString);
+
+      if (isClosed) return;
+
+      if (result['success'] == true) {
+        final token = result['token'] as String;
+        await _checkUserDataAndNavigate(token);
+      } else {
+        final error = result['error'] as String;
+        throw Exception(error);
+      }
     } catch (e) {
-      Get.snackbar(
-        'Google Signup Failed',
-        e.toString(),
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-      );
+      debugPrint('❌ Google Signup Error: $e');
+      if (!isClosed) {
+        Get.snackbar(
+          'Google Signup Failed',
+          e.toString().contains('Server error')
+              ? 'Server error. Please try again later.'
+              : e.toString().contains('cancelled')
+                  ? 'Sign-up was cancelled'
+                  : 'Please try again',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Get.theme.colorScheme.error,
+          colorText: Get.theme.colorScheme.onError,
+        );
+      }
     } finally {
-      isLoading.value = false;
+      if (!isClosed) isLoading.value = false;
+    }
+  }
+
+  /// Check consent and goals data availability and navigate accordingly
+  Future<void> _checkUserDataAndNavigate(String token) async {
+    try {
+      if (isClosed) return;
+
+      final consentResponse = await _consentRepository.getSingleConsent(
+        token: token,
+      );
+      final goalsResponse = await _goalsRepository.getSingleGoal(token: token);
+
+      if (isClosed) return;
+
+      final hasConsent =
+          consentResponse.isSuccess && consentResponse.data != null;
+      final hasGoals = goalsResponse.isSuccess && goalsResponse.data != null;
+
+      debugPrint('📊 Consent available: $hasConsent');
+      debugPrint('📊 Goals available: $hasGoals');
+
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      if (hasConsent && hasGoals) {
+        debugPrint('✅ Both consent and goals found → Navigating to Dashboard');
+        Get.offAllNamed(AppRoutes.home);
+      } else if (hasConsent && !hasGoals) {
+        debugPrint('✅ Only consent found → Navigating to Goal Settings');
+        Get.offAllNamed(AppRoutes.goalSettings);
+      } else if (!hasConsent && hasGoals) {
+        debugPrint('✅ Only goals found → Navigating to Consent');
+        Get.offAllNamed(AppRoutes.consent);
+      } else {
+        debugPrint('✅ Neither found → Navigating to Consent');
+        Get.offAllNamed(AppRoutes.consent);
+      }
+    } catch (e) {
+      debugPrint('❌ Error checking user data: $e');
+      if (!isClosed) {
+        Get.offAllNamed(AppRoutes.consent);
+      }
     }
   }
 

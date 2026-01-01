@@ -1,14 +1,13 @@
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:gravityapp/data/model/api_response.dart';
+import 'package:gravityapp/data/model/user_model.dart';
 
 import '../../../app/routes/app_routes.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/consent_repository.dart';
 import '../../../data/repositories/goals_repository.dart';
-import '../../../data/model/api_response.dart';
-import '../../../data/model/user_model.dart';
+import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/preferences_service.dart';
 
 enum UserType { customer, coach }
@@ -18,6 +17,7 @@ class LoginController extends GetxController {
   final AuthRepository _authRepository = AuthRepository();
   final ConsentRepository _consentRepository = ConsentRepository();
   final GoalsRepository _goalsRepository = GoalsRepository();
+  final GoogleAuthService _googleAuthService = GoogleAuthService();
 
   // Google Sign-In instance
 
@@ -264,80 +264,19 @@ class LoginController extends GetxController {
 
     try {
       isLoading.value = true;
-      debugPrint('🔄 Starting Google Sign-In via Firebase...');
 
-      // 0️⃣ Sign out from Google Sign-In first to force account selection
-      final googleSignIn = GoogleSignIn();
-      try {
-        await googleSignIn.signOut();
-        debugPrint('✅ Signed out from Google Sign-In to show account picker');
-      } catch (e) {
-        debugPrint(
-          '⚠️ Error signing out from Google Sign-In (may not be signed in): $e',
-        );
-        // Continue anyway - this is not critical
-      }
+      final roleString = selectedRole.value == UserType.coach ? 'coach' : 'customer';
 
-      // 1️⃣ Trigger Google Sign-In (will show account picker)
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      final result = await _googleAuthService.signInWithGoogle(role: roleString);
 
-      if (googleUser == null) {
-        debugPrint('⚠️ Google Sign-In cancelled');
-        return;
-      }
+      if (isClosed) return;
 
-      // 2️⃣ Get Google auth details
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
-      // 3️⃣ Create Firebase credential
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      // 4️⃣ SIGN IN TO FIREBASE (THIS WAS MISSING ❗)
-      final UserCredential firebaseUser = await FirebaseAuth.instance
-          .signInWithCredential(credential);
-
-      final user = firebaseUser.user;
-      if (user == null) {
-        throw Exception('Firebase user is null');
-      }
-
-      // 5️⃣ Get Firebase ID Token
-      final firebaseIdToken = await user.getIdToken();
-
-      debugPrint('✅ Firebase sign-in successful');
-      debugPrint('   UID: ${user.uid}');
-      debugPrint('   Email: ${user.email}');
-
-      // 6️⃣ Send ONLY Firebase token to Laravel
-      final result = await _authRepository.googleSignIn(
-        firebaseToken: firebaseIdToken ?? '',
-      );
-
-      final response = result['response'] as ApiResponse<UserModel>;
-      final token = result['token'] as String?;
-
-      if (response.isSuccess && token != null) {
-        await PreferencesService.saveAuthToken(token);
-        await PreferencesService.saveUserEmail(user.email ?? '');
-        await PreferencesService.saveUserName(user.displayName ?? '');
-        await PreferencesService.saveUserType(
-          selectedRole.value == UserType.coach ? 'coach' : 'customer',
-        );
-
-        if (user.photoURL != null) {
-          PreferencesService.getStorage().write(
-            'user_profile_image_url',
-            user.photoURL,
-          );
-        }
-
+      if (result['success'] == true) {
+        final token = result['token'] as String;
         await _checkUserDataAndNavigate(token);
       } else {
-        throw Exception(response.message);
+        final error = result['error'] as String;
+        throw Exception(error);
       }
     } catch (e) {
       debugPrint('❌ Google Login Error: $e');
@@ -346,7 +285,9 @@ class LoginController extends GetxController {
           title: 'Google Login Failed',
           message: e.toString().contains('Server error')
               ? 'Server error. Please try again later.'
-              : 'Please try again',
+              : e.toString().contains('cancelled')
+                  ? 'Sign-in was cancelled'
+                  : 'Please try again',
           backgroundColor: Get.theme.colorScheme.error,
           colorText: Get.theme.colorScheme.onError,
         );

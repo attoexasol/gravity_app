@@ -10,6 +10,65 @@ import '../../../app/theme/app_colors.dart';
 
 import '../controllers/messages_controllers.dart';
 
+/// Message status enum
+enum MessageStatus {
+  sent,      // Single checkmark, gray
+  delivered, // Double checkmark, gray
+  read,      // Double checkmark, colored
+}
+
+/// Message group information for UI styling
+class MessageGroupInfo {
+  final bool showAvatar;
+  final bool isFirstInGroup;
+  final bool isLastInGroup;
+  final bool isMiddleInGroup;
+
+  MessageGroupInfo({
+    required this.showAvatar,
+    required this.isFirstInGroup,
+    required this.isLastInGroup,
+    required this.isMiddleInGroup,
+  });
+}
+
+/// Item type for ListView (message, date separator, or typing indicator)
+class _ListViewItem {
+  final Message? message;
+  final int? messageIndex;
+  final DateTime? date;
+  final bool isDateSeparator;
+  final bool isTypingIndicator;
+
+  _ListViewItem({
+    this.message,
+    this.messageIndex,
+    this.date,
+    this.isDateSeparator = false,
+    this.isTypingIndicator = false,
+  });
+
+  factory _ListViewItem.message(Message message, int index) {
+    return _ListViewItem(
+      message: message,
+      messageIndex: index,
+    );
+  }
+
+  factory _ListViewItem.dateSeparator(DateTime date) {
+    return _ListViewItem(
+      date: date,
+      isDateSeparator: true,
+    );
+  }
+
+  factory _ListViewItem.typingIndicator() {
+    return _ListViewItem(
+      isTypingIndicator: true,
+    );
+  }
+}
+
 class MessagesPage extends GetView<MessagesController> {
   const MessagesPage({super.key});
 
@@ -234,101 +293,128 @@ class MessagesPage extends GetView<MessagesController> {
   }
 
   Widget _buildChatView() {
-    return Obx(() {
-      // Watch conversations list to trigger rebuild when messages are added
-      final conversationsList = controller.conversations;
-      final selectedId = controller.selectedConversationId.value;
-      
-      if (selectedId.isEmpty) {
-        return const Center(child: CircularProgressIndicator());
-      }
+    // No Obx wrapper - structure is static, only child widgets are reactive
+    return Column(
+      children: [
+        // Chat header - reactive to currentConversation and typingUserId
+        Obx(() {
+          final conversation = controller.currentConversation;
+          final typingUserId = controller.typingUserId.value;
+          final currentUserId = controller.currentUserId;
+          
+          // Show typing only if someone else is typing (not current user)
+          final isOtherUserTyping = typingUserId != null && 
+              typingUserId != currentUserId &&
+              conversation != null &&
+              controller.selectedConversationId.value.isNotEmpty;
+          
+          if (conversation == null) {
+            return const SizedBox.shrink();
+          }
+          return _buildChatHeader(conversation, isTyping: isOtherUserTyping);
+        }),
 
-      // Find conversation from the reactive list
-      Conversation? conversation;
-      try {
-        conversation = conversationsList.firstWhere((c) => c.id == selectedId);
-      } catch (e) {
-        conversation = null;
-      }
-      
-      if (conversation == null) {
-        return const Center(child: CircularProgressIndicator());
-      }
+        // Messages list - reactive to messages list only
+        Expanded(
+          child: Stack(
+            children: [
+              // Messages list - wrapped in Obx to watch messages
+              Obx(() {
+                final conversation = controller.currentConversation;
+                if (conversation == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-      return Column(
-        children: [
-          // Chat header
-          _buildChatHeader(conversation),
-
-          // Messages list
-          Expanded(
-            child: Obx(() {
-              // Watch conversations again to get fresh messages
-              final freshConversations = controller.conversations;
-              Conversation? freshConv;
-              try {
-                freshConv = freshConversations.firstWhere((c) => c.id == selectedId);
-              } catch (e) {
-                freshConv = null;
-              }
-              
-              if (freshConv == null) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              final messages = freshConv.messages;
-              final isTyping = controller.isTyping.value;
-
-              debugPrint('📱 Messages: Displaying ${messages.length} messages for conversation ${freshConv.id}');
-
-              if (messages.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No messages yet. Start the conversation!',
-                    style: ResponsiveTextStyles.textSm.copyWith(
-                      color: const Color(0xFF0A2342).withOpacity(0.6),
+                final messages = conversation.messages;
+                
+                if (messages.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No messages yet. Start the conversation!',
+                      style: ResponsiveTextStyles.textSm.copyWith(
+                        color: const Color(0xFF0A2342).withOpacity(0.6),
+                      ),
                     ),
+                  );
+                }
+
+                // Get reactive values for this build
+                final typingUserId = controller.typingUserId.value;
+                final currentUserId = controller.currentUserId;
+                final lastReceivedMessageId = controller.lastReceivedMessageId.value;
+                final editingMessageId = controller.editingMessageId.value;
+
+                // Show typing indicator only if OTHER user is typing (not current user)
+                final isOtherUserTyping = typingUserId != null && 
+                    typingUserId != currentUserId &&
+                    controller.selectedConversationId.value.isNotEmpty;
+
+                // Calculate total items including date separators and typing indicator
+                final totalItems = _calculateTotalItems(messages, includeTypingIndicator: isOtherUserTyping);
+                
+                // Use a stable key based on conversation ID to preserve scroll position
+                return ListView.builder(
+                  key: ValueKey('messages_${conversation.id}'),
+                  controller: controller.messagesScrollController,
+                  padding: EdgeInsets.only(
+                    left: 20.w,
+                    right: 20.w,
+                    top: 20.h,
+                    bottom: 20.h,
                   ),
+                  itemCount: totalItems,
+                  itemBuilder: (context, index) {
+                    // Get the actual item (message or date separator) at this index
+                    final item = _getItemAtIndex(messages, index, includeTypingIndicator: isOtherUserTyping);
+                    
+                    // Typing indicator (last item)
+                    if (item.isTypingIndicator) {
+                      // Typing indicator is already reactive via isTyping check above
+                      return _buildTypingIndicator();
+                    }
+                    
+                    // Date separator
+                    if (item.isDateSeparator) {
+                      return _buildDateSeparator(item.date!);
+                    }
+                    
+                    // Message bubble - check if this message should be highlighted
+                    final shouldHighlight = !item.message!.isSent && 
+                        lastReceivedMessageId == item.message!.id;
+                    
+                    return _buildMessageBubble(
+                      item.message!,
+                      conversation,
+                      messages,
+                      item.messageIndex!,
+                      shouldHighlight: shouldHighlight,
+                    );
+                  },
                 );
-              }
-
-              // Ensure freshConv is not null before using it
-              if (freshConv == null) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              // Use a stable key based on conversation ID to preserve scroll position
-              return ListView.builder(
-                key: ValueKey('messages_${freshConv.id}'),
-                controller: controller.messagesScrollController,
-                padding: EdgeInsets.only(
-                  left: 20.w,
-                  right: 20.w,
-                  top: 20.h,
-                  bottom: 20.h,
-                ),
-                itemCount: messages.length + (isTyping ? 1 : 0),
-                itemBuilder: (context, index) {
-                  // Typing indicator
-                  if (index == messages.length && isTyping) {
-                    return _buildTypingIndicator();
-                  }
-
-                  final message = messages[index];
-                  return _buildMessageBubble(message, freshConv!);
-                },
-              );
-            }),
+              }),
+              
+              // WhatsApp-like "New Messages" button - reactive to hasNewIncomingMessage and isNearBottom
+              Obx(() {
+                if (controller.hasNewIncomingMessage.value && !controller.isNearBottom.value) {
+                  return Positioned(
+                    bottom: 100.h, // Position above input area
+                    right: 20.w,
+                    child: _buildNewMessagesButton(),
+                  );
+                }
+                return const SizedBox.shrink();
+              }),
+            ],
           ),
+        ),
 
-          // Input area
-          _buildInputArea(),
-        ],
-      );
-    });
+        // Input area - has its own Obx for send button
+        _buildInputArea(),
+      ],
+    );
   }
 
-  Widget _buildChatHeader(Conversation conversation) {
+  Widget _buildChatHeader(Conversation conversation, {bool isTyping = false}) {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: 20.w,
@@ -387,7 +473,7 @@ class MessagesPage extends GetView<MessagesController> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  controller.isTyping.value ? 'typing...' : 'Active now',
+                  isTyping ? 'typing...' : 'Active now',
                   style: ResponsiveTextStyles.textXs.copyWith(
                     color: const Color(0xFF0A2342).withOpacity(0.6),
                   ),
@@ -419,82 +505,104 @@ class MessagesPage extends GetView<MessagesController> {
     );
   }
 
-  Widget _buildMessageBubble(Message message, Conversation conversation) {
-    return Obx(() {
-      final isEditing = controller.editingMessageId.value == message.id;
-      final conversationId = conversation.id;
+  Widget _buildMessageBubble(
+    Message message,
+    Conversation conversation,
+    List<Message> allMessages,
+    int currentIndex, {
+    bool shouldHighlight = false,
+  }) {
+    // Get editing state directly (not reactive inside itemBuilder)
+    final isEditing = controller.editingMessageId.value == message.id;
+    final conversationId = conversation.id;
 
-      return Padding(
-        padding: EdgeInsets.only(bottom: 16.h),
-        child: Row(
-          mainAxisAlignment:
-          message.isSent ? MainAxisAlignment.end : MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Other person's avatar (left side)
-            if (!message.isSent) ...[
-              _buildUserAvatar(
-                imageUrl: conversation.avatar,
-                size: 32.w,
-              ),
-              SizedBox(width: 8.w),
-            ],
+    // Check if this message is part of a group with previous/next messages
+    final messageGroupInfo = _getMessageGroupInfo(
+      allMessages,
+      currentIndex,
+      message,
+    );
 
-            // Message content
-            Flexible(
-              child: Column(
-                crossAxisAlignment: message.isSent
-                    ? CrossAxisAlignment.end
-                    : CrossAxisAlignment.start,
-                children: [
-                  // Edit mode or message bubble
-                  if (isEditing && message.isSent)
-                    _buildEditMessageField(conversationId, message)
-                  else
-                    GestureDetector(
-                      onLongPress: message.isSent
-                          ? () => controller.showMessageActions(conversationId, message)
-                          : null,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 16.w,
-                          vertical: 12.h,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: message.isSent
-                              ? const LinearGradient(
-                            colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                          )
-                              : null,
-                          color: message.isSent ? null : Colors.white,
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(20.r),
-                            topRight: Radius.circular(20.r),
-                            bottomLeft: Radius.circular(message.isSent ? 20.r : 4.r),
-                            bottomRight: Radius.circular(message.isSent ? 4.r : 20.r),
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: messageGroupInfo.isLastInGroup ? 16.h : 4.h,
+      ),
+      child: Row(
+        mainAxisAlignment:
+        message.isSent ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Other person's avatar (left side) - only show if first in group or not grouped
+          if (!message.isSent && messageGroupInfo.showAvatar) ...[
+            _buildUserAvatar(
+              imageUrl: conversation.avatar,
+              size: 32.w,
+            ),
+            SizedBox(width: 8.w),
+          ] else if (!message.isSent && !messageGroupInfo.showAvatar) ...[
+            // Spacer to align messages when avatar is hidden
+            SizedBox(width: 40.w), // 32.w avatar + 8.w spacing
+          ],
+
+          // Message content
+          Flexible(
+            child: Column(
+              crossAxisAlignment: message.isSent
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
+              children: [
+                // Edit mode or message bubble
+                if (isEditing && message.isSent)
+                  _buildEditMessageField(conversationId, message)
+                else
+                  GestureDetector(
+                    onLongPress: message.isSent
+                        ? () => controller.showMessageActions(conversationId, message)
+                        : null,
+                    child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 800),
+                          curve: Curves.easeOut,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16.w,
+                            vertical: 12.h,
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 10.r,
-                              offset: Offset(0, 2.h),
+                          decoration: BoxDecoration(
+                            gradient: message.isSent
+                                ? const LinearGradient(
+                              colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+                            )
+                                : null,
+                            color: message.isSent 
+                                ? null 
+                                : (shouldHighlight 
+                                    ? const Color(0xFF00B8A9).withOpacity(0.15) // Highlight color
+                                    : Colors.white),
+                            borderRadius: _getMessageBorderRadius(
+                              message.isSent,
+                              messageGroupInfo,
                             ),
-                          ],
-                        ),
-                        child: Text(
-                          message.text,
-                          style: ResponsiveTextStyles.textSm.copyWith(
-                            color: message.isSent
-                                ? Colors.white
-                                : const Color(0xFF0A2342).withOpacity(0.8),
-                            height: 1.4,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 10.r,
+                                offset: Offset(0, 2.h),
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            message.text,
+                            style: ResponsiveTextStyles.textSm.copyWith(
+                              color: message.isSent
+                                  ? Colors.white
+                                  : const Color(0xFF0A2342).withOpacity(0.8),
+                              height: 1.4,
+                            ),
                           ),
                         ),
-                      ),
                     ),
 
-                  // Timestamp & read status (only show when not editing)
-                  if (!isEditing)
+                  // Timestamp & read status (only show when not editing and last in group)
+                  if (!isEditing && messageGroupInfo.isLastInGroup)
                     Padding(
                       padding: EdgeInsets.only(
                         left: message.isSent ? 0 : 4.w,
@@ -513,11 +621,7 @@ class MessagesPage extends GetView<MessagesController> {
                           ),
                           if (message.isSent) ...[
                             SizedBox(width: 4.w),
-                            Icon(
-                              message.isRead ? Icons.done_all : Icons.done,
-                              size: 12.sp,
-                              color: const Color(0xFF00B8A9),
-                            ),
+                            _buildMessageStatusIndicator(message),
                           ],
                         ],
                       ),
@@ -528,7 +632,84 @@ class MessagesPage extends GetView<MessagesController> {
           ],
         ),
       );
-    });
+  }
+
+  /// Determine if message is part of a group and get grouping info
+  MessageGroupInfo _getMessageGroupInfo(
+    List<Message> allMessages,
+    int currentIndex,
+    Message currentMessage,
+  ) {
+    const groupTimeThreshold = Duration(minutes: 3);
+    
+    final hasPrevious = currentIndex > 0;
+    final hasNext = currentIndex < allMessages.length - 1;
+    
+    Message? previousMessage;
+    Message? nextMessage;
+    
+    if (hasPrevious) {
+      previousMessage = allMessages[currentIndex - 1];
+    }
+    if (hasNext) {
+      nextMessage = allMessages[currentIndex + 1];
+    }
+
+    // Check if grouped with previous message
+    final isGroupedWithPrevious = hasPrevious &&
+        previousMessage != null &&
+        previousMessage.senderId == currentMessage.senderId &&
+        (currentMessage.timestamp.difference(previousMessage.timestamp).abs() < groupTimeThreshold);
+
+    // Check if grouped with next message
+    final isGroupedWithNext = hasNext &&
+        nextMessage != null &&
+        nextMessage.senderId == currentMessage.senderId &&
+        (nextMessage.timestamp.difference(currentMessage.timestamp).abs() < groupTimeThreshold);
+
+    final isFirstInGroup = !isGroupedWithPrevious;
+    final isLastInGroup = !isGroupedWithNext;
+    final isMiddleInGroup = isGroupedWithPrevious && isGroupedWithNext;
+
+    // Show avatar only if first in group (or not grouped at all)
+    final showAvatar = isFirstInGroup && !currentMessage.isSent;
+
+    return MessageGroupInfo(
+      showAvatar: showAvatar,
+      isFirstInGroup: isFirstInGroup,
+      isLastInGroup: isLastInGroup,
+      isMiddleInGroup: isMiddleInGroup,
+    );
+  }
+
+  /// Get border radius based on message grouping (WhatsApp-like)
+  /// Maintains original sent/received corner pattern while grouping
+  BorderRadius _getMessageBorderRadius(
+    bool isSent,
+    MessageGroupInfo groupInfo,
+  ) {
+    // If last in group, fully rounded (original pattern)
+    if (groupInfo.isLastInGroup) {
+      return BorderRadius.only(
+        topLeft: Radius.circular(20.r),
+        topRight: Radius.circular(20.r),
+        bottomLeft: Radius.circular(isSent ? 20.r : 4.r),
+        bottomRight: Radius.circular(isSent ? 4.r : 20.r),
+      );
+    }
+
+    // If first in group, round top corners, flat bottom
+    if (groupInfo.isFirstInGroup) {
+      return BorderRadius.only(
+        topLeft: Radius.circular(20.r),
+        topRight: Radius.circular(20.r),
+        bottomLeft: Radius.circular(4.r),
+        bottomRight: Radius.circular(4.r),
+      );
+    }
+
+    // If middle in group, minimal rounding on all corners (connected look)
+    return BorderRadius.all(Radius.circular(4.r));
   }
 
   Widget _buildEditMessageField(String conversationId, Message message) {
@@ -698,29 +879,39 @@ class MessagesPage extends GetView<MessagesController> {
   }
 
   Widget _buildInputArea() {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: 20.w,
-        vertical: 16.h,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(
-            color: const Color(0xFF0A2342).withOpacity(0.1),
-            width: 1,
+    return Builder(
+      builder: (context) {
+        // Get keyboard height directly from MediaQuery (not reactive)
+        final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+        
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(
+            left: 20.w,
+            right: 20.w,
+            top: 16.h,
+            bottom: 16.h + keyboardHeight,
           ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border(
+            top: BorderSide(
+              color: const Color(0xFF0A2342).withOpacity(0.1),
+              width: 1,
+            ),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10.r,
+              offset: Offset(0, -2.h),
+            ),
+          ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10.r,
-            offset: Offset(0, -2.h),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
           // Avatar
           Container(
             width: 40.w,
@@ -737,18 +928,20 @@ class MessagesPage extends GetView<MessagesController> {
           ),
           SizedBox(width: 12.w),
 
-          // Input field
+          // Input field with smooth multiline expansion
           Expanded(
             child: TextField(
               controller: controller.messageController,
               focusNode: controller.messageFocusNode,
-              onChanged: (value) => controller.messageInput.value = value,
+              onChanged: (value) => controller.handleTyping(value),
               onSubmitted: (_) {
                 if (controller.messageInput.value.trim().isNotEmpty) {
                   controller.sendMessage();
                 }
               },
-              maxLines: null,
+              minLines: 1,
+              maxLines: 5, // Limit to 5 lines to prevent excessive expansion
+              textInputAction: TextInputAction.newline,
               decoration: InputDecoration(
                 hintText: 'Type a message...',
                 hintStyle: ResponsiveTextStyles.textSm.copyWith(
@@ -770,36 +963,43 @@ class MessagesPage extends GetView<MessagesController> {
           ),
           SizedBox(width: 8.w),
 
-          // Send button
+          // Send button with scale animation
           Obx(() {
             final canSend = controller.messageInput.value.trim().isNotEmpty;
-            return InkWell(
-              onTap: canSend ? controller.sendMessage : null,
-              borderRadius: BorderRadius.circular(24.r),
-              child: Container(
-                width: 48.w,
-                height: 48.w,
-                decoration: BoxDecoration(
-                  gradient: canSend
-                      ? const LinearGradient(
-                    colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                  )
-                      : null,
-                  color: canSend ? null : const Color(0xFF0A2342).withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.send,
-                  color: canSend
-                      ? Colors.white
-                      : const Color(0xFF0A2342).withOpacity(0.4),
-                  size: 22.sp,
+            return AnimatedScale(
+              scale: canSend ? 1.0 : 0.85,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              child: InkWell(
+                onTap: canSend ? controller.sendMessage : null,
+                borderRadius: BorderRadius.circular(24.r),
+                child: Container(
+                  width: 48.w,
+                  height: 48.w,
+                  decoration: BoxDecoration(
+                    gradient: canSend
+                        ? const LinearGradient(
+                      colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+                    )
+                        : null,
+                    color: canSend ? null : const Color(0xFF0A2342).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.send,
+                    color: canSend
+                        ? Colors.white
+                        : const Color(0xFF0A2342).withOpacity(0.4),
+                    size: 22.sp,
+                  ),
                 ),
               ),
             );
           }),
-        ],
-      ),
+          ],
+        ),
+      );
+      },
     );
   }
 
@@ -901,5 +1101,272 @@ class MessagesPage extends GetView<MessagesController> {
               ),
       ),
     );
+  }
+
+  /// Build WhatsApp-like "New Messages" button
+  /// Shown when new incoming messages arrive while user is scrolled up
+  Widget _buildNewMessagesButton() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => controller.scrollToBottomManually(),
+        borderRadius: BorderRadius.circular(24.r),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: 16.w,
+            vertical: 10.h,
+          ),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+            ),
+            borderRadius: BorderRadius.circular(24.r),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 8.r,
+                offset: Offset(0, 2.h),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.keyboard_arrow_down,
+                color: Colors.white,
+                size: 20.sp,
+              ),
+              SizedBox(width: 6.w),
+              Text(
+                'New Messages',
+                style: ResponsiveTextStyles.textXs.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Calculate total items including date separators and typing indicator
+  int _calculateTotalItems(List<Message> messages, {bool includeTypingIndicator = true}) {
+    if (messages.isEmpty) {
+      return includeTypingIndicator ? 1 : 0; // Just typing indicator if included
+    }
+    
+    int count = messages.length; // Messages
+    int dateSeparators = 0;
+    
+    // Count date separators needed
+    for (int i = 0; i < messages.length; i++) {
+      if (_needsDateSeparator(messages, i)) {
+        dateSeparators++;
+      }
+    }
+    
+    return count + dateSeparators + (includeTypingIndicator ? 1 : 0); // Messages + separators + typing indicator (if included)
+  }
+
+  /// Get item at index (handles mapping between ListView index and actual items)
+  _ListViewItem _getItemAtIndex(List<Message> messages, int listViewIndex, {bool includeTypingIndicator = true}) {
+    if (messages.isEmpty) {
+      if (includeTypingIndicator && listViewIndex == 0) {
+        return _ListViewItem.typingIndicator();
+      }
+      // Should not happen, but return empty item
+      return _ListViewItem();
+    }
+    
+    int messageIndex = 0;
+    int currentIndex = 0;
+    final totalItems = _calculateTotalItems(messages, includeTypingIndicator: includeTypingIndicator);
+    
+    // Iterate through messages and add date separators as needed
+    while (messageIndex < messages.length) {
+      // Check if we need a date separator before this message
+      if (_needsDateSeparator(messages, messageIndex)) {
+        if (currentIndex == listViewIndex) {
+          // This is the date separator
+          return _ListViewItem.dateSeparator(messages[messageIndex].timestamp);
+        }
+        currentIndex++;
+      }
+      
+      // Check if this is the message we're looking for
+      if (currentIndex == listViewIndex) {
+        return _ListViewItem.message(messages[messageIndex], messageIndex);
+      }
+      
+      currentIndex++;
+      messageIndex++;
+    }
+    
+    // Must be typing indicator (if included and we've reached the last index)
+    if (includeTypingIndicator && listViewIndex == totalItems - 1) {
+      return _ListViewItem.typingIndicator();
+    }
+    
+    // Should not happen, but return empty item
+    return _ListViewItem();
+  }
+
+  /// Check if a date separator is needed before the message at index
+  bool _needsDateSeparator(List<Message> messages, int index) {
+    if (index == 0) {
+      // Always show date separator for first message
+      return true;
+    }
+    
+    final currentMessage = messages[index];
+    final previousMessage = messages[index - 1];
+    
+    // Check if day changed
+    final currentDate = DateTime(
+      currentMessage.timestamp.year,
+      currentMessage.timestamp.month,
+      currentMessage.timestamp.day,
+    );
+    final previousDate = DateTime(
+      previousMessage.timestamp.year,
+      previousMessage.timestamp.month,
+      previousMessage.timestamp.day,
+    );
+    
+    return !currentDate.isAtSameMomentAs(previousDate);
+  }
+
+  /// Format date for separator (Today, Yesterday, or formatted date)
+  String _formatDateSeparator(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final messageDate = DateTime(date.year, date.month, date.day);
+    
+    if (messageDate.isAtSameMomentAs(today)) {
+      return 'Today';
+    } else if (messageDate.isAtSameMomentAs(yesterday)) {
+      return 'Yesterday';
+    } else {
+      // Format as "Month Day, Year" or "Month Day" if same year
+      final monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      final month = monthNames[date.month - 1];
+      final day = date.day;
+      
+      if (date.year == now.year) {
+        return '$month $day';
+      } else {
+        return '$month $day, ${date.year}';
+      }
+    }
+  }
+
+  /// Build date separator widget
+  Widget _buildDateSeparator(DateTime date) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 16.h),
+      child: Row(
+        children: [
+          Expanded(
+            child: Divider(
+              color: const Color(0xFF0A2342).withOpacity(0.2),
+              thickness: 1,
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12.w),
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: 12.w,
+                vertical: 6.h,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A2342).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12.r),
+              ),
+              child: Text(
+                _formatDateSeparator(date),
+                style: ResponsiveTextStyles.textXs.copyWith(
+                  color: const Color(0xFF0A2342).withOpacity(0.7),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Divider(
+              color: const Color(0xFF0A2342).withOpacity(0.2),
+              thickness: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build animated message status indicator (Sent / Delivered / Read)
+  /// Uses existing isRead field to determine state
+  Widget _buildMessageStatusIndicator(Message message) {
+    // Determine message status based on isRead and timestamp
+    // Since we only have isRead, we infer:
+    // - Sent: Single checkmark (recent message, not read)
+    // - Delivered: Double checkmark gray (older message, not read) 
+    // - Read: Double checkmark colored (isRead = true)
+    final now = DateTime.now();
+    final messageAge = now.difference(message.timestamp);
+    final isRecent = messageAge.inMinutes < 2; // Consider "recent" if less than 2 minutes
+    
+    MessageStatus status;
+    if (message.isRead) {
+      status = MessageStatus.read;
+    } else if (isRecent) {
+      status = MessageStatus.sent;
+    } else {
+      status = MessageStatus.delivered;
+    }
+    
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return ScaleTransition(
+          scale: animation,
+          child: child,
+        );
+      },
+      child: _buildStatusIcon(status, key: ValueKey(status)),
+    );
+  }
+
+  /// Build status icon based on message status
+  Widget _buildStatusIcon(MessageStatus status, {Key? key}) {
+    switch (status) {
+      case MessageStatus.sent:
+        return Icon(
+          Icons.done,
+          key: key,
+          size: 12.sp,
+          color: Colors.white.withOpacity(0.7),
+        );
+      case MessageStatus.delivered:
+        return Icon(
+          Icons.done_all,
+          key: key,
+          size: 12.sp,
+          color: Colors.white.withOpacity(0.7),
+        );
+      case MessageStatus.read:
+        return Icon(
+          Icons.done_all,
+          key: key,
+          size: 12.sp,
+          color: const Color(0xFF00B8A9), // Colored for read status
+        );
+    }
   }
 }
