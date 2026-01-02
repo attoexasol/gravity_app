@@ -85,8 +85,8 @@ class MyApp extends StatelessWidget {
         return GetMaterialApp(
           title: 'Gravity',
           theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: ThemeMode.system,
+          darkTheme: AppTheme.lightTheme, // Force light theme even in dark mode
+          themeMode: ThemeMode.light, // Always use light mode
           initialBinding: InitialBinding(),
           initialRoute: _getInitialRoute(),
           getPages: AppPages.routes,

@@ -228,8 +228,15 @@ class _PostBodyState extends State<_PostBody> {
               },
               maxLines: 5,
               autofocus: shouldAutofocus,
-              decoration: const InputDecoration(
+              style: AppTextStyles.textBase.copyWith(
+                color: const Color(0xFF0A2342), // Dark text color
+              ),
+              cursorColor: const Color(0xFF0A2342), // Dark cursor
+              decoration: InputDecoration(
                 hintText: 'Share your wellness journey...',
+                hintStyle: AppTextStyles.textBase.copyWith(
+                  color: const Color(0xFF0A2342).withOpacity(0.4),
+                ),
                 border: InputBorder.none,
               ),
             ),

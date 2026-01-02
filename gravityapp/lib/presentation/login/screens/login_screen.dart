@@ -263,6 +263,10 @@ class LoginScreen extends GetView<LoginController> {
         TextField(
           controller: controller.emailController,
           keyboardType: TextInputType.emailAddress,
+          style: AppTextStyles.textBase.copyWith(
+            color: const Color(0xFF0A2342), // Dark text color
+          ),
+          cursorColor: const Color(0xFF0A2342), // Dark cursor
           decoration: InputDecoration(
             hintText: 'your.email@example.com',
             hintStyle: AppTextStyles.textBase.copyWith(
@@ -320,6 +324,10 @@ class LoginScreen extends GetView<LoginController> {
           () => TextField(
             controller: controller.passwordController,
             obscureText: !controller.isPasswordVisible.value,
+            style: AppTextStyles.textBase.copyWith(
+              color: const Color(0xFF0A2342), // Dark text color
+            ),
+            cursorColor: const Color(0xFF0A2342), // Dark cursor
             decoration: InputDecoration(
               hintText: '••••••••',
               hintStyle: AppTextStyles.textBase.copyWith(

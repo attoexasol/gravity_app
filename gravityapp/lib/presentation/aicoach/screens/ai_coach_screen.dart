@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'dart:io';
 import 'package:gravityapp/data/model/ai_coach.dart';
 import 'package:gravityapp/presentation/aicoach/screens/sections/quick_actions.dart';
 import '../../../app/theme/app_text_styles.dart';
@@ -580,9 +581,8 @@ class _AiCoachScreenState extends State<AiCoachScreen>
 
                 // Message bubble
                 Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16.w,
-                    vertical: 12.h,
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.7,
                   ),
                   decoration: BoxDecoration(
                     gradient: isUser
@@ -605,14 +605,60 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                       ),
                     ],
                   ),
-                  child: Text(
-                    message.text,
-                    style: ResponsiveTextStyles.textSm.copyWith(
-                      color: isUser
-                          ? Colors.white
-                          : const Color(0xFF0A2342).withOpacity(0.8),
-                      height: 1.4,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Image (if present)
+                      if (message.hasImage) ...[
+                        GestureDetector(
+                          onTap: () => _showImageFullscreen(message.imagePath!),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(20.r),
+                              topRight: Radius.circular(20.r),
+                              bottomLeft: message.hasText ? Radius.circular(0) : Radius.circular(isUser ? 20.r : 4.r),
+                              bottomRight: message.hasText ? Radius.circular(0) : Radius.circular(isUser ? 4.r : 20.r),
+                            ),
+                            child: Image.file(
+                              File(message.imagePath!),
+                              width: double.infinity,
+                              height: 200.h,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: double.infinity,
+                                  height: 200.h,
+                                  color: Colors.grey[300],
+                                  child: Icon(
+                                    Icons.broken_image,
+                                    color: Colors.grey[600],
+                                    size: 40.sp,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                      // Text (if present)
+                      if (message.hasText)
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16.w,
+                            vertical: 12.h,
+                          ),
+                          child: Text(
+                            message.text!,
+                            style: ResponsiveTextStyles.textSm.copyWith(
+                              color: isUser
+                                  ? Colors.white
+                                  : const Color(0xFF0A2342).withOpacity(0.8),
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
 
@@ -739,123 +785,282 @@ class _AiCoachScreenState extends State<AiCoachScreen>
   }
 
   Widget _buildInputArea() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(
-            color: const Color(0xFF0A2342).withOpacity(0.1),
-            width: 1,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Image preview (if image is selected)
+        Obx(() {
+          if (controller.selectedImage.value == null) {
+            return const SizedBox.shrink();
+          }
+          return _buildImagePreview();
+        }),
+        
+        // Input container
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border(
+              top: BorderSide(
+                color: const Color(0xFF0A2342).withOpacity(0.1),
+                width: 1,
+              ),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10.r,
+                offset: Offset(0, -2.h),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Avatar
+              // Container(
+              //   width: 40.w,
+              //   height: 40.w,
+              //   decoration: BoxDecoration(
+              //     color: AppColors.inputBackground,
+              //     shape: BoxShape.circle,
+              //   ),
+              //   child: Icon(
+              //     Icons.person,
+              //     color: const Color(0xFF0A2342).withOpacity(0.5),
+              //     size: 20.sp,
+              //   ),
+              // ),
+              // SizedBox(width: 12.w),
+
+              // Attachment button
+              InkWell(
+                onTap: controller.showImagePickerOptions,
+                borderRadius: BorderRadius.circular(20.r),
+                child: Container(
+                  width: 40.w,
+                  height: 40.w,
+                  decoration: BoxDecoration(
+                    color: AppColors.inputBackground,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.attach_file,
+                    color: const Color(0xFF0A2342).withOpacity(0.6),
+                    size: 20.sp,
+                  ),
+                ),
+              ),
+              SizedBox(width: 8.w),
+
+              // Input field
+              Expanded(
+                child: Obx(
+                  () => TextField(
+                    controller: controller.messageController,
+                    focusNode: controller
+                        .messageFocusNode, // Connect FocusNode for focus detection
+                    onChanged: (value) => controller.inputMessage.value = value,
+                    onSubmitted: (_) {
+                      final hasText = controller.inputMessage.value.trim().isNotEmpty;
+                      final hasImage = controller.selectedImage.value != null;
+                      if ((hasText || hasImage) &&
+                          !controller.isSending.value &&
+                          !controller.isSendingImage.value) {
+                        controller.sendMessage();
+                      }
+                    },
+                    enabled: !controller.isSending.value && !controller.isSendingImage.value,
+                    maxLines: null,
+                    style: ResponsiveTextStyles.textSm.copyWith(
+                      color: const Color(0xFF0A2342), // Dark text color
+                    ),
+                    cursorColor: const Color(0xFF0A2342), // Dark cursor
+                    decoration: InputDecoration(
+                      hintText: 'Ask your AI coach',
+                      hintStyle: ResponsiveTextStyles.textSm.copyWith(
+                        color: const Color(0xFF0A2342).withOpacity(0.4),
+                      ),
+                      filled: true,
+                      fillColor: AppColors.inputBackground,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24.r),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16.w,
+                        vertical: 12.h,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 8.w),
+
+              // Send button
+              Obx(() {
+                final hasText = controller.inputMessage.value.trim().isNotEmpty;
+                final hasImage = controller.selectedImage.value != null;
+                final canSend = (hasText || hasImage) &&
+                    !controller.isSending.value &&
+                    !controller.isSendingImage.value;
+                final isSending = controller.isSending.value || controller.isSendingImage.value;
+                return InkWell(
+                  onTap: canSend ? controller.sendMessage : null,
+                  borderRadius: BorderRadius.circular(20.r),
+                  child: Container(
+                    width: 48.w,
+                    height: 48.w,
+                    decoration: BoxDecoration(
+                      gradient: (canSend || isSending)
+                          ? const LinearGradient(
+                              colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+                            )
+                          : null,
+                      color: (canSend || isSending)
+                          ? null
+                          : const Color(0xFF0A2342).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: isSending
+                        ? SizedBox(
+                            width: 20.sp,
+                            height: 20.sp,
+                            child: const CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Icon(
+                            Icons.send,
+                            color: canSend
+                                ? Colors.white
+                                : const Color(0xFF0A2342).withOpacity(0.4),
+                            size: 22.sp,
+                          ),
+                  ),
+                );
+              }),
+            ],
           ),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10.r,
-            offset: Offset(0, -2.h),
+      ],
+    );
+  }
+
+  /// Build image preview above input field
+  Widget _buildImagePreview() {
+    return Container(
+      margin: EdgeInsets.only(
+        left: 20.w,
+        right: 20.w,
+        top: 12.h,
+        bottom: 8.h,
+      ),
+      child: Stack(
+        children: [
+          Container(
+            constraints: BoxConstraints(
+              maxWidth: 200.w,
+              maxHeight: 200.h,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12.r),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8.r,
+                  offset: Offset(0, 2.h),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12.r),
+              child: Image.file(
+                controller.selectedImage.value!,
+                width: 200.w,
+                height: 200.h,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    width: 200.w,
+                    height: 200.h,
+                    color: Colors.grey[300],
+                    child: Icon(
+                      Icons.broken_image,
+                      color: Colors.grey[600],
+                      size: 40.sp,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          // Remove button
+          Positioned(
+            top: 4.h,
+            right: 4.w,
+            child: InkWell(
+              onTap: controller.removeSelectedImage,
+              borderRadius: BorderRadius.circular(12.r),
+              child: Container(
+                width: 24.w,
+                height: 24.w,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.close,
+                  color: Colors.white,
+                  size: 16.sp,
+                ),
+              ),
+            ),
           ),
         ],
       ),
-      child: Row(
-        children: [
-          // Avatar
-          Container(
-            width: 40.w,
-            height: 40.w,
-            decoration: BoxDecoration(
-              color: AppColors.inputBackground,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.person,
-              color: const Color(0xFF0A2342).withOpacity(0.5),
-              size: 20.sp,
-            ),
-          ),
-          SizedBox(width: 12.w),
+    );
+  }
 
-          // Input field
-          Expanded(
-            child: Obx(
-              () => TextField(
-                controller: controller.messageController,
-                focusNode: controller
-                    .messageFocusNode, // Connect FocusNode for focus detection
-                onChanged: (value) => controller.inputMessage.value = value,
-                onSubmitted: (_) {
-                  if (controller.inputMessage.value.trim().isNotEmpty &&
-                      !controller.isSending.value) {
-                    controller.sendMessage();
-                  }
-                },
-                enabled: !controller.isSending.value,
-                maxLines: null,
-                decoration: InputDecoration(
-                  hintText: 'Ask your AI coach',
-                  hintStyle: ResponsiveTextStyles.textSm.copyWith(
-                    color: const Color(0xFF0A2342).withOpacity(0.4),
-                  ),
-                  filled: true,
-                  fillColor: AppColors.inputBackground,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24.r),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16.w,
-                    vertical: 12.h,
-                  ),
+  /// Show image in fullscreen
+  void _showImageFullscreen(String imagePath) {
+    Get.dialog(
+      Dialog(
+        backgroundColor: Colors.transparent,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                child: Image.file(
+                  File(imagePath),
+                  fit: BoxFit.contain,
                 ),
-                style: ResponsiveTextStyles.textSm,
               ),
             ),
-          ),
-          SizedBox(width: 8.w),
-
-          // Send button
-          Obx(() {
-            final canSend =
-                controller.inputMessage.value.trim().isNotEmpty &&
-                !controller.isSending.value;
-            final isSending = controller.isSending.value;
-            return InkWell(
-              onTap: canSend ? controller.sendMessage : null,
-              borderRadius: BorderRadius.circular(20.r),
-              child: Container(
-                width: 48.w,
-                height: 48.w,
-                decoration: BoxDecoration(
-                  gradient: (canSend || isSending)
-                      ? const LinearGradient(
-                          colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                        )
-                      : null,
-                  color: (canSend || isSending)
-                      ? null
-                      : const Color(0xFF0A2342).withOpacity(0.1),
-                  shape: BoxShape.circle,
+            Positioned(
+              top: 40.h,
+              right: 20.w,
+              child: InkWell(
+                onTap: () => Get.back(),
+                borderRadius: BorderRadius.circular(20.r),
+                child: Container(
+                  width: 40.w,
+                  height: 40.w,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    color: Colors.white,
+                    size: 24.sp,
+                  ),
                 ),
-                child: isSending
-                    ? SizedBox(
-                        width: 20.sp,
-                        height: 20.sp,
-                        child: const CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : Icon(
-                        Icons.send,
-                        color: canSend
-                            ? Colors.white
-                            : const Color(0xFF0A2342).withOpacity(0.4),
-                        size: 22.sp,
-                      ),
               ),
-            );
-          }),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

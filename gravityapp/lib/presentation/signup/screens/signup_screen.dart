@@ -285,6 +285,10 @@ class SignupScreen extends GetView<SignupController> {
         TextField(
           controller: controller.fullNameController,
           keyboardType: TextInputType.name,
+          style: AppTextStyles.textBase.copyWith(
+            color: const Color(0xFF0A2342), // Dark text color
+          ),
+          cursorColor: const Color(0xFF0A2342), // Dark cursor
           decoration: _baseInputDecoration(
             hint: 'John Doe',
             icon: Icons.person_outline,
@@ -308,6 +312,10 @@ class SignupScreen extends GetView<SignupController> {
         TextField(
           controller: controller.emailController,
           keyboardType: TextInputType.emailAddress,
+          style: AppTextStyles.textBase.copyWith(
+            color: const Color(0xFF0A2342), // Dark text color
+          ),
+          cursorColor: const Color(0xFF0A2342), // Dark cursor
           decoration: _baseInputDecoration(
             hint: 'your.email@example.com',
             icon: Icons.mail_outline,
@@ -331,6 +339,10 @@ class SignupScreen extends GetView<SignupController> {
         TextField(
           controller: controller.phoneController,
           keyboardType: TextInputType.phone,
+          style: AppTextStyles.textBase.copyWith(
+            color: const Color(0xFF0A2342), // Dark text color
+          ),
+          cursorColor: const Color(0xFF0A2342), // Dark cursor
           decoration: _baseInputDecoration(
             hint: '+1 (555) 000-0000',
             icon: Icons.phone_outlined,
@@ -389,6 +401,10 @@ class SignupScreen extends GetView<SignupController> {
           return TextField(
             controller: controller.passwordController,
             obscureText: !controller.isPasswordVisible.value,
+            style: AppTextStyles.textBase.copyWith(
+              color: const Color(0xFF0A2342), // Dark text color
+            ),
+            cursorColor: const Color(0xFF0A2342), // Dark cursor
             decoration: InputDecoration(
               hintText: '••••••••',
               hintStyle: AppTextStyles.textBase.copyWith(

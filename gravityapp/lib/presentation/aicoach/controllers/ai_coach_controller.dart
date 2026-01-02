@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gravityapp/data/model/ai_coach.dart';
 import 'dart:convert';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../data/repositories/ai_coach_repository.dart';
 import '../../../core/services/preferences_service.dart';
 
@@ -20,7 +23,12 @@ class AiCoachController extends GetxController {
   final RxString inputMessage = ''.obs;
   final RxBool isTyping = false.obs;
   final RxBool isSending = false.obs;
+  final RxBool isSendingImage = false.obs;
   final RxString errorMessage = ''.obs;
+  
+  // Image picker
+  final ImagePicker _imagePicker = ImagePicker();
+  final Rx<File?> selectedImage = Rx<File?>(null);
 
   // Text editing controller
   final TextEditingController messageController = TextEditingController();
@@ -110,9 +118,145 @@ class AiCoachController extends GetxController {
     );
   }
 
+  /// Show image picker bottom sheet
+  Future<void> showImagePickerOptions() async {
+    await Get.bottomSheet(
+      Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A2342).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Color(0xFF00B8A9)),
+              title: const Text('Camera'),
+              onTap: () {
+                Get.back();
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Color(0xFF00B8A9)),
+              title: const Text('Gallery'),
+              onTap: () {
+                Get.back();
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+    );
+  }
+
+  /// Pick image from camera or gallery
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      // Request permission for camera if needed
+      if (source == ImageSource.camera) {
+        final status = await Permission.camera.request();
+        if (!status.isGranted) {
+          Get.snackbar(
+            'Permission Denied',
+            'Camera permission is required to take photos.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Get.theme.colorScheme.error,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+          );
+          return;
+        }
+      }
+
+      // Request permission for photos if needed (iOS 14+)
+      if (source == ImageSource.gallery) {
+        final status = await Permission.photos.request();
+        if (!status.isGranted && !status.isLimited) {
+          // Try alternative permission for older iOS versions
+          final status2 = await Permission.storage.request();
+          if (!status2.isGranted) {
+            Get.snackbar(
+              'Permission Denied',
+              'Photo library permission is required to select images.',
+              snackPosition: SnackPosition.BOTTOM,
+              backgroundColor: Get.theme.colorScheme.error,
+              colorText: Colors.white,
+              duration: const Duration(seconds: 3),
+            );
+            return;
+          }
+        }
+      }
+
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85, // Compress to reduce file size
+        maxWidth: 1920, // Limit max width
+        maxHeight: 1920, // Limit max height
+      );
+
+      if (pickedFile != null) {
+        final file = File(pickedFile.path);
+        
+        // Check file size (max 10MB)
+        final fileSize = await file.length();
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        
+        if (fileSize > maxSize) {
+          Get.snackbar(
+            'Image Too Large',
+            'Please select an image smaller than 10MB.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Get.theme.colorScheme.error,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+          );
+          return;
+        }
+
+        selectedImage.value = file;
+        debugPrint('✅ Image selected: ${file.path}');
+      }
+    } catch (e) {
+      debugPrint('❌ Error picking image: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to pick image. Please try again.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Get.theme.colorScheme.error,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+    }
+  }
+
+  /// Remove selected image
+  void removeSelectedImage() {
+    selectedImage.value = null;
+  }
+
   Future<void> sendMessage() async {
-    if (inputMessage.value.trim().isEmpty) return;
-    if (isSending.value) return; // Prevent duplicate calls
+    // Check if there's anything to send
+    final hasText = inputMessage.value.trim().isNotEmpty;
+    final hasImage = selectedImage.value != null;
+    
+    if (!hasText && !hasImage) return; // Nothing to send
+    if (isSending.value || isSendingImage.value) return; // Prevent duplicate calls
 
     // Get auth token
     final apiToken = PreferencesService.getAuthToken();
@@ -129,11 +273,17 @@ class AiCoachController extends GetxController {
       return;
     }
 
+    // Store image file reference BEFORE clearing (needed for API call)
+    final imageFile = hasImage ? selectedImage.value : null;
+    
     // Add user message
-    final messageText = inputMessage.value.trim();
+    final messageText = hasText ? inputMessage.value.trim() : null;
+    final imagePath = hasImage ? selectedImage.value!.path : null;
+    
     final userMessage = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       text: messageText,
+      imagePath: imagePath,
       sender: MessageSender.user,
       timestamp: DateTime.now(),
     );
@@ -142,25 +292,30 @@ class AiCoachController extends GetxController {
     _saveMessagesToStorage(); // Save to local storage
     _scrollToBottom(); // Scroll to show most recent message
 
-    // Clear input
+    // Clear input and image (after storing reference)
     inputMessage.value = '';
     messageController.clear();
+    selectedImage.value = null;
 
     // Show typing indicator
     isTyping.value = true;
-    isSending.value = true;
+    isSending.value = hasText;
+    isSendingImage.value = hasImage;
     errorMessage.value = '';
 
     try {
-      // Call AI Coach API
+      // Call AI Coach API (supports both text-only and text+image)
+      // If image is present, it will be converted to Base64 and included in the request
+      final messageToSend = messageText ?? ''; // Use empty string if no text (image-only)
+      
       final response = await _aiCoachRepository.getAiCoachReply(
         apiToken: apiToken,
-        message: messageText,
+        message: messageToSend,
+        imageFile: imageFile,
       );
 
       if (response.isSuccess && response.data != null) {
         // Extract AI reply from response
-        // API Response format: { "success": true, "data": { "from_user": number, "user_message": string, "ai_coach_reply": string } }
         final aiReply = response.data!['ai_coach_reply'] as String?;
         
         if (aiReply != null && aiReply.isNotEmpty) {
@@ -172,8 +327,8 @@ class AiCoachController extends GetxController {
           );
 
           messages.add(aiResponse);
-          _saveMessagesToStorage(); // Save to local storage
-          _scrollToBottom(); // Scroll to show most recent message
+          _saveMessagesToStorage();
+          _scrollToBottom();
           debugPrint('✅ AI Coach reply added to chat: ${aiReply.substring(0, aiReply.length > 50 ? 50 : aiReply.length)}...');
         } else {
           // Fallback if ai_coach_reply is missing or empty
@@ -184,7 +339,7 @@ class AiCoachController extends GetxController {
             timestamp: DateTime.now(),
           );
           messages.add(errorResponse);
-          _saveMessagesToStorage(); // Save to local storage
+          _saveMessagesToStorage();
           debugPrint('⚠️ AI Coach reply is empty or missing in response');
         }
       } else {
@@ -201,7 +356,7 @@ class AiCoachController extends GetxController {
           timestamp: DateTime.now(),
         );
         messages.add(errorResponse);
-        _saveMessagesToStorage(); // Save to local storage
+        _saveMessagesToStorage();
 
         Get.snackbar(
           'Error',
@@ -224,7 +379,7 @@ class AiCoachController extends GetxController {
         timestamp: DateTime.now(),
       );
       messages.add(errorResponse);
-      _saveMessagesToStorage(); // Save to local storage
+      _saveMessagesToStorage();
 
       Get.snackbar(
         'Error',
@@ -237,6 +392,7 @@ class AiCoachController extends GetxController {
     } finally {
       isTyping.value = false;
       isSending.value = false;
+      isSendingImage.value = false;
     }
   }
 
@@ -247,6 +403,7 @@ class AiCoachController extends GetxController {
       final messagesJson = messages.map((message) => {
         'id': message.id,
         'text': message.text,
+        'imagePath': message.imagePath, // Save image path
         'sender': message.sender == MessageSender.user ? 'user' : 'ai',
         'timestamp': message.timestamp.toIso8601String(),
       }).toList();
@@ -278,7 +435,8 @@ class AiCoachController extends GetxController {
             messages.add(
               ChatMessage(
                 id: messageData['id'] as String,
-                text: messageData['text'] as String,
+                text: messageData['text'] as String?,
+                imagePath: messageData['imagePath'] as String?,
                 sender: sender,
                 timestamp: timestamp,
               ),

@@ -377,10 +377,17 @@ class GoalSettingsScreen extends GetView<GoalSettingsController> {
         TextField(
           controller: controller,
           keyboardType: keyboardType,
+          style: AppTextStyles.textBase.copyWith(
+            color: const Color(0xFF0A2342), // Dark text color
+          ),
+          cursorColor: const Color(0xFF0A2342), // Dark cursor
           decoration: InputDecoration(
             hintText: hint,
+            hintStyle: AppTextStyles.textBase.copyWith(
+              color: const Color(0xFF0A2342).withOpacity(0.4),
+            ),
             filled: true,
-            fillColor: const Color(0xFFF5F6FA),
+            fillColor: Colors.white, // Ensure white background
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide.none,
@@ -393,9 +400,6 @@ class GoalSettingsScreen extends GetView<GoalSettingsController> {
               horizontal: 16,
               vertical: 16,
             ),
-          ),
-          style: AppTextStyles.textBase.copyWith(
-            color: const Color(0xFF0A2342),
           ),
         ),
 

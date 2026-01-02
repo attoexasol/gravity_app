@@ -54,7 +54,7 @@ class AppTheme {
       // Input Decoration Theme
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.inputBackground,
+        fillColor: Colors.white, // Ensure white background for all inputs
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
           borderSide: BorderSide(color: AppColors.border),
@@ -73,8 +73,15 @@ class AppTheme {
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         hintStyle: AppTextStyles.textBase.copyWith(
-          color: AppColors.mutedForeground,
+          color: const Color(0xFF0A2342).withOpacity(0.4), // Dark hint text
         ),
+      ),
+
+      // Text Selection Theme - Ensure dark cursor and selection
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: const Color(0xFF0A2342), // Dark cursor
+        selectionColor: const Color(0xFF0A2342).withOpacity(0.2), // Dark selection highlight
+        selectionHandleColor: const Color(0xFF0A2342), // Dark selection handles
       ),
 
       // Elevated Button Theme
@@ -199,83 +206,91 @@ class AppTheme {
     );
   }
 
-  // Dark Theme
+  // Dark Theme - FORCED TO LIGHT MODE
+  // This ensures system dark mode never affects the app
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: Brightness.light, // Force light brightness
 
-      // Color Scheme
-      colorScheme: ColorScheme.dark(
-        brightness: Brightness.dark,
-        primary: AppColorsDark.primary,
-        onPrimary: AppColorsDark.primaryForeground,
-        secondary: AppColorsDark.secondary,
-        onSecondary: AppColorsDark.secondaryForeground,
-        error: AppColorsDark.destructive,
-        onError: AppColorsDark.destructiveForeground,
-        surface: AppColorsDark.card,
-        onSurface: AppColorsDark.cardForeground,
-        surfaceContainerHighest: AppColorsDark.muted,
-        outline: AppColorsDark.border,
+      // Color Scheme - FORCED TO LIGHT COLORS
+      colorScheme: ColorScheme.light(
+        brightness: Brightness.light, // Force light brightness
+        primary: AppColors.primary,
+        onPrimary: AppColors.primaryForeground,
+        secondary: AppColors.secondary,
+        onSecondary: AppColors.secondaryForeground,
+        error: AppColors.destructive,
+        onError: AppColors.destructiveForeground,
+        surface: AppColors.card,
+        onSurface: AppColors.cardForeground,
+        surfaceContainerHighest: AppColors.muted,
+        outline: AppColors.border,
       ),
 
-      // Scaffold
-      scaffoldBackgroundColor: AppColorsDark.background,
+      // Scaffold - FORCED TO LIGHT COLORS
+      scaffoldBackgroundColor: AppColors.background,
 
-      // AppBar Theme
+      // AppBar Theme - FORCED TO LIGHT COLORS
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColorsDark.background,
-        foregroundColor: AppColorsDark.foreground,
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.foreground,
         elevation: 0,
         centerTitle: false,
         titleTextStyle: AppTextStyles.textXl.copyWith(
-          color: AppColorsDark.foreground,
+          color: AppColors.foreground,
           fontWeight: FontWeight.w500,
         ),
       ),
 
-      // Card Theme
+      // Card Theme - FORCED TO LIGHT COLORS
       cardTheme: CardThemeData(
-        color: AppColorsDark.card,
+        color: AppColors.card,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-          side: BorderSide(color: AppColorsDark.border, width: 1),
+          side: BorderSide(color: AppColors.border, width: 1),
         ),
       ),
 
-      // Input Decoration Theme
+      // Input Decoration Theme - FORCED TO LIGHT COLORS WITH DARK TEXT
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColorsDark.input,
+        fillColor: Colors.white, // Ensure white background
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          borderSide: BorderSide(color: AppColorsDark.border),
+          borderSide: BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          borderSide: BorderSide(color: AppColorsDark.border),
+          borderSide: BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          borderSide: BorderSide(color: AppColorsDark.ring, width: 2),
+          borderSide: BorderSide(color: AppColors.ring, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          borderSide: BorderSide(color: AppColorsDark.destructive),
+          borderSide: BorderSide(color: AppColors.destructive),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         hintStyle: AppTextStyles.textBase.copyWith(
-          color: AppColorsDark.mutedForeground,
+          color: const Color(0xFF0A2342).withOpacity(0.4), // Dark hint text
         ),
       ),
 
-      // Elevated Button Theme
+      // Text Selection Theme - FORCED TO DARK CURSOR AND SELECTION
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: const Color(0xFF0A2342), // Dark cursor
+        selectionColor: const Color(0xFF0A2342).withOpacity(0.2), // Dark selection highlight
+        selectionHandleColor: const Color(0xFF0A2342), // Dark selection handles
+      ),
+
+      // Elevated Button Theme - FORCED TO LIGHT COLORS
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColorsDark.primary,
-          foregroundColor: AppColorsDark.primaryForeground,
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.primaryForeground,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           shape: RoundedRectangleBorder(
@@ -287,10 +302,10 @@ class AppTheme {
         ),
       ),
 
-      // Text Button Theme
+      // Text Button Theme - FORCED TO LIGHT COLORS
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColorsDark.primary,
+          foregroundColor: AppColors.primary,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusMd),
@@ -301,11 +316,11 @@ class AppTheme {
         ),
       ),
 
-      // Outlined Button Theme
+      // Outlined Button Theme - FORCED TO LIGHT COLORS
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColorsDark.foreground,
-          side: BorderSide(color: AppColorsDark.border),
+          foregroundColor: AppColors.foreground,
+          side: BorderSide(color: AppColors.border),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusMd),
@@ -316,21 +331,21 @@ class AppTheme {
         ),
       ),
 
-      // Dialog Theme
+      // Dialog Theme - FORCED TO LIGHT COLORS
       dialogTheme: DialogThemeData(
-        backgroundColor: AppColorsDark.popover,
+        backgroundColor: AppColors.popover,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusLg),
         ),
         titleTextStyle: AppTextStyles.textXl.copyWith(
-          color: AppColorsDark.popoverForeground,
+          color: AppColors.popoverForeground,
           fontWeight: FontWeight.w500,
         ),
       ),
 
-      // Bottom Sheet Theme
+      // Bottom Sheet Theme - FORCED TO LIGHT COLORS
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: AppColorsDark.card,
+        backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
             top: Radius.circular(AppSizes.radiusLg),
@@ -338,34 +353,34 @@ class AppTheme {
         ),
       ),
 
-      // Divider Theme
+      // Divider Theme - FORCED TO LIGHT COLORS
       dividerTheme: DividerThemeData(
-        color: AppColorsDark.border,
+        color: AppColors.border,
         thickness: 1,
         space: 1,
       ),
 
-      // Switch Theme
+      // Switch Theme - FORCED TO LIGHT COLORS
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppColorsDark.primaryForeground;
+            return AppColors.primaryForeground;
           }
-          return AppColorsDark.muted;
+          return AppColors.switchBackground;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppColorsDark.primary;
+            return AppColors.primary;
           }
-          return AppColorsDark.muted;
+          return AppColors.switchBackground;
         }),
       ),
 
-      // Chip Theme
+      // Chip Theme - FORCED TO LIGHT COLORS
       chipTheme: ChipThemeData(
-        backgroundColor: AppColorsDark.secondary,
+        backgroundColor: AppColors.secondary,
         labelStyle: AppTextStyles.textSm.copyWith(
-          color: AppColorsDark.secondaryForeground,
+          color: AppColors.secondaryForeground,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(
@@ -373,29 +388,29 @@ class AppTheme {
         ),
       ),
 
-      // Text Theme
+      // Text Theme - FORCED TO LIGHT COLORS WITH DARK TEXT
       textTheme: TextTheme(
-        displayLarge: AppTextStyles.text4Xl.copyWith(color: AppColorsDark.foreground),
-        displayMedium: AppTextStyles.text3Xl.copyWith(color: AppColorsDark.foreground),
-        displaySmall: AppTextStyles.text2Xl.copyWith(color: AppColorsDark.foreground),
-        headlineMedium: AppTextStyles.textXl.copyWith(color: AppColorsDark.foreground),
-        headlineSmall: AppTextStyles.textLg.copyWith(color: AppColorsDark.foreground),
-        titleLarge: AppTextStyles.textLg.copyWith(color: AppColorsDark.foreground),
-        titleMedium: AppTextStyles.textBase.copyWith(color: AppColorsDark.foreground),
-        titleSmall: AppTextStyles.textSm.copyWith(color: AppColorsDark.foreground),
-        bodyLarge: AppTextStyles.textBase.copyWith(color: AppColorsDark.foreground),
-        bodyMedium: AppTextStyles.textSm.copyWith(color: AppColorsDark.foreground),
-        bodySmall: AppTextStyles.textXs.copyWith(color: AppColorsDark.foreground),
+        displayLarge: AppTextStyles.text4Xl.copyWith(color: AppColors.foreground),
+        displayMedium: AppTextStyles.text3Xl.copyWith(color: AppColors.foreground),
+        displaySmall: AppTextStyles.text2Xl.copyWith(color: AppColors.foreground),
+        headlineMedium: AppTextStyles.textXl.copyWith(color: AppColors.foreground),
+        headlineSmall: AppTextStyles.textLg.copyWith(color: AppColors.foreground),
+        titleLarge: AppTextStyles.textLg.copyWith(color: AppColors.foreground),
+        titleMedium: AppTextStyles.textBase.copyWith(color: AppColors.foreground),
+        titleSmall: AppTextStyles.textSm.copyWith(color: AppColors.foreground),
+        bodyLarge: AppTextStyles.textBase.copyWith(color: AppColors.foreground),
+        bodyMedium: AppTextStyles.textSm.copyWith(color: AppColors.foreground),
+        bodySmall: AppTextStyles.textXs.copyWith(color: AppColors.foreground),
         labelLarge: AppTextStyles.textBase.copyWith(
-          color: AppColorsDark.foreground,
+          color: AppColors.foreground,
           fontWeight: FontWeight.w500,
         ),
         labelMedium: AppTextStyles.textSm.copyWith(
-          color: AppColorsDark.foreground,
+          color: AppColors.foreground,
           fontWeight: FontWeight.w500,
         ),
         labelSmall: AppTextStyles.textXs.copyWith(
-          color: AppColorsDark.foreground,
+          color: AppColors.foreground,
           fontWeight: FontWeight.w500,
         ),
       ),

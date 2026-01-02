@@ -739,10 +739,14 @@ class MessagesPage extends GetView<MessagesController> {
             maxLines: null,
             autofocus: true,
             style: ResponsiveTextStyles.textSm.copyWith(
-              color: const Color(0xFF0A2342),
+              color: const Color(0xFF0A2342), // Dark text color
             ),
+            cursorColor: const Color(0xFF0A2342), // Dark cursor
             decoration: InputDecoration(
               hintText: 'Edit message...',
+              hintStyle: ResponsiveTextStyles.textSm.copyWith(
+                color: const Color(0xFF0A2342).withOpacity(0.4),
+              ),
               border: InputBorder.none,
               contentPadding: EdgeInsets.zero,
             ),
@@ -942,6 +946,10 @@ class MessagesPage extends GetView<MessagesController> {
               minLines: 1,
               maxLines: 5, // Limit to 5 lines to prevent excessive expansion
               textInputAction: TextInputAction.newline,
+              style: ResponsiveTextStyles.textSm.copyWith(
+                color: const Color(0xFF0A2342), // Dark text color
+              ),
+              cursorColor: const Color(0xFF0A2342), // Dark cursor
               decoration: InputDecoration(
                 hintText: 'Type a message...',
                 hintStyle: ResponsiveTextStyles.textSm.copyWith(
@@ -958,7 +966,6 @@ class MessagesPage extends GetView<MessagesController> {
                   vertical: 12.h,
                 ),
               ),
-              style: ResponsiveTextStyles.textSm,
             ),
           ),
           SizedBox(width: 8.w),

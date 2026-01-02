@@ -509,6 +509,10 @@ class _CommunityPageState extends State<CommunityPage> {
                             }
                           },
                           enabled: !controller.isCreatingComment.value,
+                          style: ResponsiveTextStyles.textSm.copyWith(
+                            color: const Color(0xFF0A2342), // Dark text color
+                          ),
+                          cursorColor: const Color(0xFF0A2342), // Dark cursor
                           decoration: InputDecoration(
                             hintText: 'Add a comment...',
                             hintStyle: ResponsiveTextStyles.textSm.copyWith(
@@ -531,9 +535,6 @@ class _CommunityPageState extends State<CommunityPage> {
                                 width: 2,
                               ),
                             ),
-                          ),
-                          style: ResponsiveTextStyles.textSm.copyWith(
-                            color: const Color(0xFF0A2342),
                           ),
                         ),
                       ),
@@ -748,6 +749,10 @@ class _CommunityPageState extends State<CommunityPage> {
                                   controller.editPostText.value = value,
                               maxLines: 5,
                               autofocus: true,
+                              style: ResponsiveTextStyles.textBase.copyWith(
+                                color: const Color(0xFF0A2342), // Dark text color
+                              ),
+                              cursorColor: const Color(0xFF0A2342), // Dark cursor
                               decoration: InputDecoration(
                                 hintText: 'Edit your post...',
                                 hintStyle: ResponsiveTextStyles.textBase
@@ -757,9 +762,6 @@ class _CommunityPageState extends State<CommunityPage> {
                                       ).withOpacity(0.4),
                                     ),
                                 border: InputBorder.none,
-                              ),
-                              style: ResponsiveTextStyles.textBase.copyWith(
-                                color: const Color(0xFF0A2342),
                               ),
                             ),
                           ),
@@ -1271,6 +1273,10 @@ class _CommunityPageState extends State<CommunityPage> {
                                   }
                                 },
                                 enabled: !controller.isCreatingComment.value,
+                                style: ResponsiveTextStyles.textSm.copyWith(
+                                  color: const Color(0xFF0A2342), // Dark text color
+                                ),
+                                cursorColor: const Color(0xFF0A2342), // Dark cursor
                                 decoration: InputDecoration(
                                   hintText: 'Add a comment...',
                                   hintStyle: ResponsiveTextStyles.textSm
@@ -1302,11 +1308,6 @@ class _CommunityPageState extends State<CommunityPage> {
                                       width: 2,
                                     ),
                                   ),
-                                ),
-                                style: ResponsiveTextStyles.textSm.copyWith(
-                                  color: const Color(
-                                    0xFF0A2342,
-                                  ), // text-[#0A2342]
                                 ),
                               ),
                             ),
@@ -1509,6 +1510,10 @@ class _CommunityPageState extends State<CommunityPage> {
                             maxLines: 3,
                             autofocus: true,
                             enabled: !controller.isUpdatingComment.value,
+                            style: ResponsiveTextStyles.textSm.copyWith(
+                              color: const Color(0xFF0A2342), // Dark text color
+                            ),
+                            cursorColor: const Color(0xFF0A2342), // Dark cursor
                             decoration: InputDecoration(
                               hintText: 'Edit your comment...',
                               hintStyle: ResponsiveTextStyles.textSm.copyWith(
@@ -1521,9 +1526,6 @@ class _CommunityPageState extends State<CommunityPage> {
                                 borderSide: BorderSide.none,
                               ),
                               contentPadding: EdgeInsets.all(12.r),
-                            ),
-                            style: ResponsiveTextStyles.textSm.copyWith(
-                              color: const Color(0xFF0A2342).withOpacity(0.8),
                             ),
                           ),
                           SizedBox(height: 8.h),
@@ -1732,6 +1734,10 @@ class _CommunityPageState extends State<CommunityPage> {
                       onChanged: (value) => controller.newReply.value = value,
                       maxLines: 3,
                       enabled: !controller.isCreatingComment.value,
+                      style: ResponsiveTextStyles.textSm.copyWith(
+                        color: const Color(0xFF0A2342), // Dark text color
+                      ),
+                      cursorColor: const Color(0xFF0A2342), // Dark cursor
                       decoration: InputDecoration(
                         hintText: 'Write a reply...',
                         hintStyle: ResponsiveTextStyles.textSm.copyWith(
@@ -1745,7 +1751,6 @@ class _CommunityPageState extends State<CommunityPage> {
                         ),
                         contentPadding: EdgeInsets.all(12.r),
                       ),
-                      style: ResponsiveTextStyles.textSm,
                     ),
                     SizedBox(height: 8.h),
                     Row(

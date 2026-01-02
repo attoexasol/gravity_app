@@ -411,9 +411,17 @@ class _GoalInputFieldState extends State<_GoalInputField> {
           controller: _controller,
           onChanged: widget.onChanged,
           keyboardType: TextInputType.number,
+          style: ResponsiveTextStyles.textSm.copyWith(
+            color: const Color(0xFF0A2342), // Dark text color
+          ),
+          cursorColor: const Color(0xFF0A2342), // Dark cursor
           decoration: InputDecoration(
+            hintText: 'Enter value',
+            hintStyle: ResponsiveTextStyles.textSm.copyWith(
+              color: const Color(0xFF0A2342).withOpacity(0.4),
+            ),
             filled: true,
-            fillColor: const Color(0xFFF5F6FA),
+            fillColor: Colors.white, // Ensure white background
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12.r),
               borderSide: BorderSide.none,
