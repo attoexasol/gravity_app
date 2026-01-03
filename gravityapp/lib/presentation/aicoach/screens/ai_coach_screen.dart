@@ -785,19 +785,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
   }
 
   Widget _buildInputArea() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Image preview (if image is selected)
-        Obx(() {
-          if (controller.selectedImage.value == null) {
-            return const SizedBox.shrink();
-          }
-          return _buildImagePreview();
-        }),
-        
-        // Input container
-        Container(
+    return Container(
           padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -943,84 +931,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
               }),
             ],
           ),
-        ),
-      ],
-    );
-  }
-
-  /// Build image preview above input field
-  Widget _buildImagePreview() {
-    return Container(
-      margin: EdgeInsets.only(
-        left: 20.w,
-        right: 20.w,
-        top: 12.h,
-        bottom: 8.h,
-      ),
-      child: Stack(
-        children: [
-          Container(
-            constraints: BoxConstraints(
-              maxWidth: 200.w,
-              maxHeight: 200.h,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12.r),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8.r,
-                  offset: Offset(0, 2.h),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12.r),
-              child: Image.file(
-                controller.selectedImage.value!,
-                width: 200.w,
-                height: 200.h,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    width: 200.w,
-                    height: 200.h,
-                    color: Colors.grey[300],
-                    child: Icon(
-                      Icons.broken_image,
-                      color: Colors.grey[600],
-                      size: 40.sp,
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-          // Remove button
-          Positioned(
-            top: 4.h,
-            right: 4.w,
-            child: InkWell(
-              onTap: controller.removeSelectedImage,
-              borderRadius: BorderRadius.circular(12.r),
-              child: Container(
-                width: 24.w,
-                height: 24.w,
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.close,
-                  color: Colors.white,
-                  size: 16.sp,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+        );
   }
 
   /// Show image in fullscreen

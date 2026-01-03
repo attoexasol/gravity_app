@@ -265,7 +265,7 @@ class LoginController extends GetxController {
     try {
       isLoading.value = true;
 
-      final roleString = selectedRole.value == UserType.coach ? 'coach' : 'customer';
+      final roleString = selectedRole.value == UserType.coach ? 'Coach' : 'Customer';
 
       final result = await _googleAuthService.signInWithGoogle(role: roleString);
 

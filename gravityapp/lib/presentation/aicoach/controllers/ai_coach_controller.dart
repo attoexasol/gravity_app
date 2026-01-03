@@ -231,6 +231,11 @@ class AiCoachController extends GetxController {
 
         selectedImage.value = file;
         debugPrint('✅ Image selected: ${file.path}');
+        
+        // Send image immediately without showing preview
+        // Use a small delay to ensure the image is set before sending
+        await Future.delayed(const Duration(milliseconds: 100));
+        await sendMessage();
       }
     } catch (e) {
       debugPrint('❌ Error picking image: $e');
@@ -257,11 +262,14 @@ class AiCoachController extends GetxController {
     
     if (!hasText && !hasImage) return; // Nothing to send
     if (isSending.value || isSendingImage.value) return; // Prevent duplicate calls
+    if (isClosed) return; // Guard against disposed controller
 
     // Get auth token
     final apiToken = PreferencesService.getAuthToken();
     if (apiToken == null || apiToken.isEmpty) {
+      if (isClosed) return;
       errorMessage.value = 'Please login to use AI Coach';
+      // Show snackbar synchronously (before async operations)
       Get.snackbar(
         'Authentication Required',
         'Please login to use AI Coach',
@@ -276,7 +284,7 @@ class AiCoachController extends GetxController {
     // Store image file reference BEFORE clearing (needed for API call)
     final imageFile = hasImage ? selectedImage.value : null;
     
-    // Add user message
+    // Add user message (optimistic UI)
     final messageText = hasText ? inputMessage.value.trim() : null;
     final imagePath = hasImage ? selectedImage.value!.path : null;
     
@@ -288,31 +296,77 @@ class AiCoachController extends GetxController {
       timestamp: DateTime.now(),
     );
 
+    if (isClosed) return;
     messages.add(userMessage);
     _saveMessagesToStorage(); // Save to local storage
     _scrollToBottom(); // Scroll to show most recent message
 
     // Clear input and image (after storing reference)
+    if (isClosed) return;
     inputMessage.value = '';
     messageController.clear();
     selectedImage.value = null;
 
     // Show typing indicator
+    if (isClosed) return;
     isTyping.value = true;
     isSending.value = hasText;
     isSendingImage.value = hasImage;
     errorMessage.value = '';
 
     try {
-      // Call AI Coach API (supports both text-only and text+image)
-      // If image is present, it will be converted to Base64 and included in the request
-      final messageToSend = messageText ?? ''; // Use empty string if no text (image-only)
-      
+      // Convert image to base64 if present
+      String? imageBase64;
+      if (hasImage && imageFile != null) {
+        try {
+          final imageBytes = await imageFile.readAsBytes();
+          
+          // Determine image MIME type from file extension
+          String mimeType = 'image/png'; // Default
+          final extension = imageFile.path.split('.').last.toLowerCase();
+          if (extension == 'jpg' || extension == 'jpeg') {
+            mimeType = 'image/jpeg';
+          } else if (extension == 'png') {
+            mimeType = 'image/png';
+          } else if (extension == 'gif') {
+            mimeType = 'image/gif';
+          } else if (extension == 'webp') {
+            mimeType = 'image/webp';
+          }
+          
+          // Convert to Base64 with data URI prefix
+          final base64Image = base64Encode(imageBytes);
+          imageBase64 = 'data:$mimeType;base64,$base64Image';
+          debugPrint('✅ Image converted to Base64: ${base64Image.length} chars, MIME: $mimeType');
+        } catch (e) {
+          debugPrint('⚠️ Error converting image to Base64: $e');
+          if (isClosed) return;
+          isTyping.value = false;
+          isSending.value = false;
+          isSendingImage.value = false;
+          
+          // Add error message to chat
+          final errorResponse = ChatMessage(
+            id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+            text: 'I couldn\'t analyze that right now. Please try again.',
+            sender: MessageSender.ai,
+            timestamp: DateTime.now(),
+          );
+          messages.add(errorResponse);
+          _saveMessagesToStorage();
+          return;
+        }
+      }
+
+      // Call AI Coach API
+      // Send EITHER message OR imageBase64, never both
       final response = await _aiCoachRepository.getAiCoachReply(
         apiToken: apiToken,
-        message: messageToSend,
-        imageFile: imageFile,
+        message: hasText ? messageText : null,
+        imageBase64: hasImage ? imageBase64 : null,
       );
+
+      if (isClosed) return;
 
       if (response.isSuccess && response.data != null) {
         // Extract AI reply from response
@@ -329,12 +383,12 @@ class AiCoachController extends GetxController {
           messages.add(aiResponse);
           _saveMessagesToStorage();
           _scrollToBottom();
-          debugPrint('✅ AI Coach reply added to chat: ${aiReply.substring(0, aiReply.length > 50 ? 50 : aiReply.length)}...');
+          debugPrint('✅ AI Coach reply added to chat: ${aiReply.length > 50 ? "${aiReply.substring(0, 50)}..." : aiReply}');
         } else {
           // Fallback if ai_coach_reply is missing or empty
           final errorResponse = ChatMessage(
             id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-            text: 'I apologize, but I couldn\'t generate a response. Please try again.',
+            text: 'I couldn\'t analyze that right now. Please try again.',
             sender: MessageSender.ai,
             timestamp: DateTime.now(),
           );
@@ -343,53 +397,40 @@ class AiCoachController extends GetxController {
           debugPrint('⚠️ AI Coach reply is empty or missing in response');
         }
       } else {
-        // Show error message
+        // API failure - show system message in chat
+        if (isClosed) return;
         errorMessage.value = response.message.isNotEmpty 
             ? response.message 
             : 'Failed to get AI response. Please try again.';
         
-        // Add error message to chat
+        // Add error message to chat (no Snackbar after async)
         final errorResponse = ChatMessage(
           id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-          text: 'Sorry, I encountered an error. Please try again.',
+          text: 'I couldn\'t analyze that right now. Please try again.',
           sender: MessageSender.ai,
           timestamp: DateTime.now(),
         );
         messages.add(errorResponse);
         _saveMessagesToStorage();
-
-        Get.snackbar(
-          'Error',
-          errorMessage.value,
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-          duration: const Duration(seconds: 3),
-        );
+        debugPrint('❌ AI Coach API error: ${errorMessage.value}');
       }
     } catch (e) {
       debugPrint('❌ Error sending message to AI Coach: $e');
+      if (isClosed) return;
+      
       errorMessage.value = 'An unexpected error occurred. Please try again.';
       
-      // Add error message to chat
+      // Add error message to chat (no Snackbar after async)
       final errorResponse = ChatMessage(
         id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-        text: 'Sorry, I encountered an error. Please try again.',
+        text: 'I couldn\'t analyze that right now. Please try again.',
         sender: MessageSender.ai,
         timestamp: DateTime.now(),
       );
       messages.add(errorResponse);
       _saveMessagesToStorage();
-
-      Get.snackbar(
-        'Error',
-        errorMessage.value,
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-        duration: const Duration(seconds: 3),
-      );
     } finally {
+      if (isClosed) return;
       isTyping.value = false;
       isSending.value = false;
       isSendingImage.value = false;

@@ -133,6 +133,10 @@ class CommunityController extends GetxController {
   final RxString userProfileImage = ''.obs;
   final RxString userName = ''.obs;
 
+  // API call control flags
+  bool _isFetching = false;
+  DateTime? _lastReload;
+
   /// Load user profile data from storage
   void _loadUserProfile() {
     // Load user name
@@ -584,8 +588,7 @@ class CommunityController extends GetxController {
     loadUserReactions();
     // Load user pinned posts from API
     loadUserPinnedPosts();
-    // Reload posts when page becomes visible to ensure reaction and comment counts are up-to-date
-    _fetchAllPosts();
+    // Note: Removed duplicate _fetchAllPosts() call to prevent API flooding
   }
 
   /// Load user reactions from API
@@ -601,7 +604,7 @@ class CommunityController extends GetxController {
       debugPrint('🔄 Loading user reactions from API...');
       final response = await _communityRepository.getUserWiseReact(
         apiToken: apiToken,
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (response.isSuccess && response.data != null) {
         activeReactions.clear();
@@ -736,10 +739,17 @@ class CommunityController extends GetxController {
         return;
       }
 
+      // SOLUTION 3: Debounce - Prevent rapid reloads
+      final now = DateTime.now();
+      if (_lastReload != null && now.difference(_lastReload!) < const Duration(seconds: 2)) {
+        debugPrint('⏸️ Pinned posts reload debounced');
+        return;
+      }
+
       debugPrint('🔄 Loading user pinned posts from API...');
       final response = await _communityRepository.getUserWisePinnedPosts(
         apiToken: apiToken,
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (response.isSuccess && response.data != null) {
         // Extract post IDs that are pinned by the user
@@ -974,6 +984,21 @@ class CommunityController extends GetxController {
 
   /// Fetch all posts from API
   Future<void> _fetchAllPosts() async {
+    // SOLUTION 3: Debounce - Prevent rapid reloads (minimum 3 seconds between calls)
+    if (_lastReload != null &&
+        DateTime.now().difference(_lastReload!) < const Duration(seconds: 3)) {
+      debugPrint('⏸️ Reload debounced - too soon since last reload');
+      return;
+    }
+
+    // SOLUTION 1: Prevent concurrent fetches
+    if (_isFetching) {
+      debugPrint('⏸️ Already fetching posts, skipping duplicate call');
+      return;
+    }
+
+    _isFetching = true;
+    _lastReload = DateTime.now();
     isLoadingPosts.value = true;
     postsError.value = '';
 
@@ -1010,10 +1035,12 @@ class CommunityController extends GetxController {
       debugPrint('❌ Error fetching posts: $e');
     } finally {
       isLoadingPosts.value = false;
+      _isFetching = false;
     }
   }
 
   /// Public method to refresh posts (for pull-to-refresh)
+  /// Uses same debounce and loading flags as _fetchAllPosts
   Future<void> refreshPosts() async {
     await _fetchAllPosts();
   }
@@ -1223,47 +1250,41 @@ class CommunityController extends GetxController {
   }
 
   /// Fetch comment counts for posts and update them
-  /// Fetches comments in parallel for better performance
+  /// Fetches comments sequentially to prevent API overload
+  /// SOLUTION 1: Sequential loading instead of parallel to reduce backend load
   Future<void> _fetchCommentCountsForPosts(List<Post> postsList) async {
     if (postsList.isEmpty) return;
 
-    debugPrint('🔄 Fetching comments for ${postsList.length} posts...');
+    debugPrint('🔄 Fetching comments for ${postsList.length} posts sequentially...');
 
-    // Fetch comments for all posts in parallel
-    final futures = postsList.asMap().entries.map((entry) async {
-      final index = entry.key;
-      final post = entry.value;
+    // SOLUTION 1: Fetch comments sequentially instead of parallel
+    // This prevents overwhelming the backend with simultaneous requests
+    for (int index = 0; index < postsList.length; index++) {
+      final post = postsList[index];
 
       try {
-        final commentsResponse = await _communityRepository.getAllPostComments(
-          postId: post.id,
-        );
+        // SOLUTION 4: Add timeout to prevent hanging requests
+        final commentsResponse = await _communityRepository
+            .getAllPostComments(postId: post.id)
+            .timeout(const Duration(seconds: 15));
 
         if (commentsResponse.isSuccess && commentsResponse.data != null) {
           final comments = _mapApiResponseToComments(commentsResponse.data!);
-          return MapEntry(index, comments);
+          postsList[index] = postsList[index].copyWith(comments: comments);
+          if (comments.isNotEmpty) {
+            debugPrint(
+              '✅ Loaded ${comments.length} comments for post ${post.id}',
+            );
+          }
         }
       } catch (e) {
         debugPrint('⚠️ Could not fetch comments for post ${post.id}: $e');
+        // Continue with next post even if one fails
       }
 
-      return MapEntry(index, <Comment>[]);
-    });
-
-    // Wait for all comment fetches to complete
-    final results = await Future.wait(futures);
-
-    // Update posts with their comments
-    for (final entry in results) {
-      final index = entry.key;
-      final comments = entry.value;
-      if (index < postsList.length) {
-        postsList[index] = postsList[index].copyWith(comments: comments);
-        if (comments.isNotEmpty) {
-          debugPrint(
-            '✅ Loaded ${comments.length} comments for post ${postsList[index].id}',
-          );
-        }
+      // Small delay between requests to reduce server load
+      if (index < postsList.length - 1) {
+        await Future.delayed(const Duration(milliseconds: 100));
       }
     }
 

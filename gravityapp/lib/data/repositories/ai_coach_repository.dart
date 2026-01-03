@@ -1,6 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'dart:io';
-import 'dart:convert';
 import '../../core/services/api_service.dart';
 import '../model/api_response.dart';
 
@@ -10,71 +8,83 @@ class AiCoachRepository {
 
   /// Get AI Coach reply
   /// API: POST https://gravity.attoexasolutions.com/api/ai_coach/reply
-  /// Request (text only): { "api_token": string, "message": string }
-  /// Request (with image): { "api_token": string, "message": string, "image_base64": "data:image/png;base64,..." }
-  /// Response: { "success": true, "data": { "from_user": number, "user_message": string, "ai_coach_reply": string } }
+  /// 
+  /// Request Modes:
+  /// 1) TEXT: { "api_token": string, "message": string }
+  /// 2) IMAGE: { "api_token": string, "image_base64": "data:image/png;base64,..." }
+  /// 
+  /// Response Modes:
+  /// TEXT: { "success": true, "data": { "from_user": number, "user_message": string, "ai_coach_reply": string } }
+  /// IMAGE: { "success": true, "data": { "from_user": number, "ai_coach_reply": string } }
+  /// 
+  /// Rules:
+  /// - Send EITHER "message" OR "image_base64", NEVER both
+  /// - message is REQUIRED only for text mode
+  /// - image_base64 is REQUIRED only for image mode
   Future<ApiResponse<Map<String, dynamic>>> getAiCoachReply({
     required String apiToken,
-    required String message,
-    File? imageFile,
+    String? message,
+    String? imageBase64,
   }) async {
     try {
-      debugPrint('🔄 Getting AI Coach reply...');
-      debugPrint('   - Message: $message');
-      debugPrint('   - Has Image: ${imageFile != null}');
-
-      // Build request body conditionally
-      final Map<String, dynamic> requestBody = {
-        'api_token': apiToken,
-        'message': message,
-      };
-
-      // Add image_base64 only if image file is provided
-      if (imageFile != null) {
-        try {
-          // Read image file as bytes
-          final imageBytes = await imageFile.readAsBytes();
-          
-          // Determine image MIME type from file extension
-          String mimeType = 'image/png'; // Default
-          final extension = imageFile.path.split('.').last.toLowerCase();
-          if (extension == 'jpg' || extension == 'jpeg') {
-            mimeType = 'image/jpeg';
-          } else if (extension == 'png') {
-            mimeType = 'image/png';
-          } else if (extension == 'gif') {
-            mimeType = 'image/gif';
-          } else if (extension == 'webp') {
-            mimeType = 'image/webp';
-          }
-          
-          // Convert to Base64 with data URI prefix
-          final base64Image = base64Encode(imageBytes);
-          final imageBase64 = 'data:$mimeType;base64,$base64Image';
-          
-          requestBody['image_base64'] = imageBase64;
-          debugPrint('   - Image Base64 size: ${base64Image.length} chars');
-          debugPrint('   - Image MIME type: $mimeType');
-        } catch (e) {
-          debugPrint('⚠️ Error converting image to Base64: $e');
-          // Continue without image if conversion fails
-        }
+      // Validation: must have either message or imageBase64, but not both
+      if (message == null && imageBase64 == null) {
+        throw ArgumentError('Either message or imageBase64 must be provided');
+      }
+      if (message != null && imageBase64 != null) {
+        throw ArgumentError('Cannot send both message and imageBase64 together');
       }
 
+      // Determine request mode
+      final isTextMode = message != null;
+      final isImageMode = imageBase64 != null;
+
+      debugPrint('🔄 Getting AI Coach reply...');
+      debugPrint('   - Mode: ${isTextMode ? "TEXT" : "IMAGE"}');
+      if (isTextMode) {
+        debugPrint('   - Message: $message');
+      } else {
+        debugPrint('   - Has Image: true');
+        debugPrint('   - Image Base64 size: ${imageBase64!.length} chars');
+      }
+
+      // Build request body dynamically
+      // Send ONLY message OR image_base64, never both
+      final Map<String, dynamic> requestBody = {
+        'api_token': apiToken,
+      };
+
+      if (isTextMode) {
+        requestBody['message'] = message!;
+      } else {
+        requestBody['image_base64'] = imageBase64!;
+      }
+
+      // Call API with 60 second timeout
       final response = await _apiService.post(
         '/ai_coach/reply',
         body: requestBody,
+        timeout: const Duration(seconds: 60),
       );
 
       debugPrint('📥 AI Coach Reply Response Status: ${response['success']}');
-      debugPrint('📥 AI Coach Reply Response Data: ${response['data']}');
+      if (response['data'] != null) {
+        debugPrint('📥 AI Coach Reply Response Data keys: ${(response['data'] as Map<String, dynamic>).keys}');
+      }
 
       // Extract data from response
-      // API Response format: { "success": true, "data": { "from_user": number, "user_message": string, "ai_coach_reply": string } }
+      // Response format varies:
+      // TEXT: { "success": true, "data": { "from_user": number, "user_message": string, "ai_coach_reply": string } }
+      // IMAGE: { "success": true, "data": { "from_user": number, "ai_coach_reply": string } }
       Map<String, dynamic>? responseData;
       if (response['data'] != null && response['data'] is Map<String, dynamic>) {
         responseData = response['data'] as Map<String, dynamic>;
-        debugPrint('📥 AI Coach Reply: ${responseData['ai_coach_reply']}');
+        final aiReply = responseData['ai_coach_reply'] as String?;
+        if (aiReply != null) {
+          debugPrint('📥 AI Coach Reply: ${aiReply.length > 100 ? "${aiReply.substring(0, 100)}..." : aiReply}');
+        } else {
+          debugPrint('⚠️ AI Coach Reply is missing in response');
+        }
       }
 
       return ApiResponse<Map<String, dynamic>>(
