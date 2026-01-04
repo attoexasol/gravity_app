@@ -61,6 +61,7 @@ class GoogleAuthService {
 
       final response = result['response'] as ApiResponse<UserModel>;
       final token = result['token'] as String?;
+      final userId = result['user_id'] as int?;
 
       if (response.isSuccess && token != null) {
         await PreferencesService.saveAuthToken(token);
@@ -73,6 +74,30 @@ class GoogleAuthService {
             'user_profile_image_url',
             user.photoURL,
           );
+        }
+
+        // Save user_id from Google sign-in response
+        if (userId != null && userId != 0) {
+          await PreferencesService.saveUserId(userId);
+          debugPrint('✅ User ID saved from Google sign-in: $userId');
+        } else if (response.data != null && response.data!.id != 0) {
+          // Fallback to UserModel id if user_id not in result
+          await PreferencesService.saveUserId(response.data!.id);
+          debugPrint('✅ User ID saved from UserModel: ${response.data!.id}');
+        } else {
+          // Fallback: Fetch user profile from API to get user_id
+          debugPrint('⚠️ User ID not found in Google sign-in response, fetching from API...');
+          try {
+            final profileResponse = await _authRepository.getSingleUser();
+            if (profileResponse.isSuccess && profileResponse.data != null && profileResponse.data!.id != 0) {
+              await PreferencesService.saveUserId(profileResponse.data!.id);
+              debugPrint('✅ User ID saved from API fallback: ${profileResponse.data!.id}');
+            } else {
+              debugPrint('⚠️ Could not determine user ID from API fallback');
+            }
+          } catch (e) {
+            debugPrint('⚠️ Error fetching user profile for user_id: $e');
+          }
         }
 
         return {
