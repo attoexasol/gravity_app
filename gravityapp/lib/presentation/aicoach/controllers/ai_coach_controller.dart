@@ -29,6 +29,7 @@ class AiCoachController extends GetxController {
   // Image picker
   final ImagePicker _imagePicker = ImagePicker();
   final Rx<File?> selectedImage = Rx<File?>(null);
+  bool _isPickingImage = false; // Flag to prevent double calls
 
   // Text editing controller
   final TextEditingController messageController = TextEditingController();
@@ -120,7 +121,28 @@ class AiCoachController extends GetxController {
 
   /// Show image picker bottom sheet
   Future<void> showImagePickerOptions() async {
-    await Get.bottomSheet(
+    // Guard: Prevent opening if controller is disposed
+    if (isClosed) return;
+    if (!Get.isRegistered<AiCoachController>()) return;
+
+    // Guard: Prevent opening if bottom sheet is already open
+    if (Get.isBottomSheetOpen == true) {
+      debugPrint('⏸️ Bottom sheet already open, skipping');
+      return;
+    }
+
+    // Guard: Prevent opening if already picking an image
+    if (_isPickingImage == true) {
+      debugPrint('⏸️ Already picking image, skipping');
+      return;
+    }
+
+    // Dismiss keyboard before opening bottom sheet
+    FocusManager.instance.primaryFocus?.unfocus();
+    messageFocusNode.unfocus();
+
+    // Show bottom sheet and await the selected ImageSource
+    final ImageSource? source = await Get.bottomSheet<ImageSource>(
       Container(
         padding: const EdgeInsets.all(24),
         decoration: const BoxDecoration(
@@ -143,16 +165,46 @@ class AiCoachController extends GetxController {
               leading: const Icon(Icons.camera_alt, color: Color(0xFF00B8A9)),
               title: const Text('Camera'),
               onTap: () {
-                Get.back();
-                _pickImage(ImageSource.camera);
+                // Use Navigator.pop() instead of Get.back() to avoid snackbar controller error
+                try {
+                  final context = Get.context;
+                  if (context != null && Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop(ImageSource.camera);
+                  } else {
+                    // Fallback to Get.back() if Navigator fails
+                    Get.back(result: ImageSource.camera);
+                  }
+                } catch (e) {
+                  // Fallback to Get.back() if Navigator.pop() fails
+                  try {
+                    Get.back(result: ImageSource.camera);
+                  } catch (e2) {
+                    debugPrint('⚠️ Failed to close bottom sheet: $e2');
+                  }
+                }
               },
             ),
             ListTile(
               leading: const Icon(Icons.photo_library, color: Color(0xFF00B8A9)),
               title: const Text('Gallery'),
               onTap: () {
-                Get.back();
-                _pickImage(ImageSource.gallery);
+                // Use Navigator.pop() instead of Get.back() to avoid snackbar controller error
+                try {
+                  final context = Get.context;
+                  if (context != null && Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop(ImageSource.gallery);
+                  } else {
+                    // Fallback to Get.back() if Navigator fails
+                    Get.back(result: ImageSource.gallery);
+                  }
+                } catch (e) {
+                  // Fallback to Get.back() if Navigator.pop() fails
+                  try {
+                    Get.back(result: ImageSource.gallery);
+                  } catch (e2) {
+                    debugPrint('⚠️ Failed to close bottom sheet: $e2');
+                  }
+                }
               },
             ),
             const SizedBox(height: 16),
@@ -162,15 +214,53 @@ class AiCoachController extends GetxController {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
     );
+
+    // If no source was selected (user dismissed bottom sheet), return
+    if (source == null) {
+      return;
+    }
+
+    // Guard: Check again if controller is still valid
+    if (isClosed) return;
+    if (!Get.isRegistered<AiCoachController>()) return;
+
+    // Delay to let bottom sheet fully close before opening image picker
+    await Future.delayed(const Duration(milliseconds: 180));
+
+    // Guard: Check again after delay
+    if (isClosed) return;
+    if (!Get.isRegistered<AiCoachController>()) return;
+
+    // Dismiss keyboard again (important after bottom sheet closes)
+    FocusManager.instance.primaryFocus?.unfocus();
+    messageFocusNode.unfocus();
+
+    // Call _pickImage with the selected source
+    await _pickImage(source);
   }
 
   /// Pick image from camera or gallery
   Future<void> _pickImage(ImageSource source) async {
+    // Guard: Prevent execution if controller is disposed
+    if (isClosed) return;
+    if (!Get.isRegistered<AiCoachController>()) return;
+
+    // Guard: Prevent double calls
+    if (_isPickingImage == true) {
+      debugPrint('⏸️ Already picking image, skipping duplicate call');
+      return;
+    }
+
+    // Set flag to prevent double calls
+    _isPickingImage = true;
+
     try {
       // Request permission for camera if needed
       if (source == ImageSource.camera) {
+        if (isClosed) return;
         final status = await Permission.camera.request();
         if (!status.isGranted) {
+          if (isClosed) return;
           Get.snackbar(
             'Permission Denied',
             'Camera permission is required to take photos.',
@@ -185,11 +275,14 @@ class AiCoachController extends GetxController {
 
       // Request permission for photos if needed (iOS 14+)
       if (source == ImageSource.gallery) {
+        if (isClosed) return;
         final status = await Permission.photos.request();
         if (!status.isGranted && !status.isLimited) {
           // Try alternative permission for older iOS versions
+          if (isClosed) return;
           final status2 = await Permission.storage.request();
           if (!status2.isGranted) {
+            if (isClosed) return;
             Get.snackbar(
               'Permission Denied',
               'Photo library permission is required to select images.',
@@ -203,6 +296,7 @@ class AiCoachController extends GetxController {
         }
       }
 
+      if (isClosed) return;
       final XFile? pickedFile = await _imagePicker.pickImage(
         source: source,
         imageQuality: 85, // Compress to reduce file size
@@ -211,6 +305,7 @@ class AiCoachController extends GetxController {
       );
 
       if (pickedFile != null) {
+        if (isClosed) return;
         final file = File(pickedFile.path);
         
         // Check file size (max 10MB)
@@ -218,6 +313,7 @@ class AiCoachController extends GetxController {
         const maxSize = 10 * 1024 * 1024; // 10MB
         
         if (fileSize > maxSize) {
+          if (isClosed) return;
           Get.snackbar(
             'Image Too Large',
             'Please select an image smaller than 10MB.',
@@ -229,15 +325,30 @@ class AiCoachController extends GetxController {
           return;
         }
 
+        if (isClosed) return;
+        
+        // Dismiss keyboard after image selection
+        FocusManager.instance.primaryFocus?.unfocus();
+        messageFocusNode.unfocus();
+
         selectedImage.value = file;
         debugPrint('✅ Image selected: ${file.path}');
         
         // Send image immediately without showing preview
         // Use a small delay to ensure the image is set before sending
         await Future.delayed(const Duration(milliseconds: 100));
+        if (isClosed) return;
         await sendMessage();
       }
     } catch (e) {
+      if (isClosed) {
+        _isPickingImage = false;
+        return;
+      }
+      if (!Get.isRegistered<AiCoachController>()) {
+        _isPickingImage = false;
+        return;
+      }
       debugPrint('❌ Error picking image: $e');
       Get.snackbar(
         'Error',
@@ -247,6 +358,9 @@ class AiCoachController extends GetxController {
         colorText: Colors.white,
         duration: const Duration(seconds: 3),
       );
+    } finally {
+      // Always reset the flag, even if an error occurred
+      _isPickingImage = false;
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:gravityapp/data/model/navigation_item.dart';
 import '../../../core/services/preferences_service.dart';
+import '../../aicoach/controllers/ai_coach_controller.dart';
 
 class MainLayoutController extends GetxController {
   // Current selected navigation index
@@ -141,6 +142,11 @@ class MainLayoutController extends GetxController {
       // Clear user data and auth tokens
       await PreferencesService.clearAuthToken();
       await PreferencesService.clearUserData(); // Clear email and name
+
+      // Delete AI Coach controller to prevent state reuse after logout
+      if (Get.isRegistered<AiCoachController>()) {
+        Get.delete<AiCoachController>(force: true);
+      }
 
       // TODO: Call logout API if needed
       // await AuthService.logout();

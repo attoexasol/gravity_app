@@ -50,7 +50,7 @@ class InitialBinding extends Bindings {
     Get.lazyPut<DashboardController>(() => DashboardController(), fenix: true);
 
     // AI Coach Controller
-    Get.lazyPut<AiCoachController>(() => AiCoachController(), fenix: true);
+    Get.lazyPut<AiCoachController>(() => AiCoachController(), fenix: false);
 
     // Messages Controller
     Get.lazyPut<MessagesController>(() => MessagesController(), fenix: true);

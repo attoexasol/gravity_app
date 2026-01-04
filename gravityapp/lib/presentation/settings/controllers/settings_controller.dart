@@ -19,6 +19,7 @@ import '../../../data/model/notification_preferences.dart';
 import '../../../data/repositories/goals_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../core/services/api_service.dart';
+import '../../aicoach/controllers/ai_coach_controller.dart';
 
 class SettingsController extends GetxController {
   // Services
@@ -1724,6 +1725,11 @@ Future<void> saveProfileImage() async {
 
         // Clear all storage data (token, user data, preferences, etc.)
         await PreferencesService.clearAll();
+
+        // Delete AI Coach controller to prevent state reuse after logout
+        if (Get.isRegistered<AiCoachController>()) {
+          Get.delete<AiCoachController>(force: true);
+        }
 
         // Navigate to login screen and clear navigation stack
         Get.offAllNamed('/login');
