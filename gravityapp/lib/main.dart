@@ -46,6 +46,12 @@ void main() async {
   // Initialize storage
   await PreferencesService.init();
 
+  // SESSION-BASED AUTHENTICATION: Clear token on app startup
+  // This ensures users must log in again every time the app is opened
+  await PreferencesService.clearAuthToken();
+  await PreferencesService.clearUserData();
+  debugPrint('🔒 Session-based auth: Token cleared on app startup');
+
   // Lock orientation to portrait for consistency
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -55,20 +61,47 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
-  /// Get initial route based on authentication state
-  String _getInitialRoute() {
-    // Check if user has a valid auth token
-    final token = PreferencesService.getAuthToken();
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
 
-    if (token != null && token.isNotEmpty) {
-      // User is logged in, redirect to home/dashboard
-      return AppRoutes.home;
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    // Add lifecycle observer to detect when app goes to background
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    // Remove lifecycle observer
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // Optional: Log lifecycle changes for debugging
+    // Note: We don't clear token here because clearing on background
+    // would log users out when they just switch apps temporarily.
+    // Token is cleared on app startup (in main()) which is more reliable.
+    if (kDebugMode) {
+      debugPrint('📱 App lifecycle state changed: $state');
     }
+  }
 
-    // No token found, show onboarding
+  /// Get initial route based on authentication state
+  /// Note: With session-based auth, this will always return onboarding/login
+  /// since token is cleared on startup
+  String _getInitialRoute() {
+    // With session-based authentication, token is always cleared on startup
+    // So we always show onboarding/login
     return AppRoutes.onboarding;
   }
 
