@@ -33,6 +33,9 @@ class MessagesController extends GetxController {
   // Scroll controller for messages list
   final ScrollController messagesScrollController = ScrollController();
   
+  // Scroll controller for conversations list
+  final ScrollController conversationsScrollController = ScrollController();
+  
   // WhatsApp-like scroll behavior state
   final RxBool isNearBottom = true.obs; // User is within 80px of bottom
   final RxBool hasNewIncomingMessage = false.obs; // New message arrived while scrolled up
@@ -164,6 +167,7 @@ class MessagesController extends GetxController {
     editMessageController.dispose();
     messageFocusNode.dispose();
     messagesScrollController.dispose();
+    conversationsScrollController.dispose();
     super.onClose();
   }
   
@@ -257,6 +261,18 @@ class MessagesController extends GetxController {
   /// Manually scroll to bottom (called when user clicks scroll button)
   void scrollToBottomManually() {
     scrollToBottom(smooth: true, force: true);
+  }
+
+  /// Scroll to the top of the conversations list
+  void scrollToTop() {
+    if (conversationsScrollController.hasClients && 
+        selectedConversationId.value.isEmpty) {
+      conversationsScrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   void _loadUserType() {

@@ -26,6 +26,15 @@ class _CommunityPageState extends State<CommunityPage> {
   final ItemScrollController _itemScrollController = ItemScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    // Pass scroll controller to the controller after the first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      controller.setScrollController(_itemScrollController);
+    });
+  }
+
+  @override
   void dispose() {
     super.dispose();
   }

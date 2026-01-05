@@ -3,6 +3,10 @@ import 'package:get/get.dart';
 import 'package:gravityapp/data/model/navigation_item.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../aicoach/controllers/ai_coach_controller.dart';
+import '../../community/controllers/community_controller.dart';
+import '../../messages/controllers/messages_controllers.dart';
+import '../../dashboard/controller/dashboard_controller.dart';
+import '../../coach_dashboard/controllers/coach_dashboard_controller.dart';
 
 class MainLayoutController extends GetxController {
   // Current selected navigation index
@@ -80,6 +84,50 @@ class MainLayoutController extends GetxController {
     final maxIndex = userType.value == 'coach' ? 4 : 3;
     
     if (index >= 0 && index <= maxIndex) {
+      // Check if Home tab (index 0) is tapped again
+      if (index == 0 && currentIndex.value == 0) {
+        // User tapped Home tab while already on Dashboard page
+        // Scroll to top of Dashboard page
+        if (Get.isRegistered<DashboardController>()) {
+          final dashboardController = Get.find<DashboardController>();
+          dashboardController.scrollToTop();
+        }
+        return; // Don't change the index since we're already on Dashboard
+      }
+
+      // Check if Community tab (index 1) is tapped again
+      if (index == 1 && currentIndex.value == 1) {
+        // User tapped Community tab while already on Community page
+        // Scroll to top of Community page
+        if (Get.isRegistered<CommunityController>()) {
+          final communityController = Get.find<CommunityController>();
+          communityController.scrollToTop();
+        }
+        return; // Don't change the index since we're already on Community
+      }
+
+      // Check if Messages tab (index 3) is tapped again
+      if (index == 3 && currentIndex.value == 3) {
+        // User tapped Messages tab while already on Messages page
+        // Scroll to top of Messages page (conversations list)
+        if (Get.isRegistered<MessagesController>()) {
+          final messagesController = Get.find<MessagesController>();
+          messagesController.scrollToTop();
+        }
+        return; // Don't change the index since we're already on Messages
+      }
+
+      // Check if Coach Dashboard tab (index 4) is tapped again
+      if (index == 4 && currentIndex.value == 4) {
+        // User tapped Dashboard tab while already on Coach Dashboard page
+        // Scroll to top of Coach Dashboard page
+        if (Get.isRegistered<CoachDashboardController>()) {
+          final coachDashboardController = Get.find<CoachDashboardController>();
+          coachDashboardController.scrollToTop();
+        }
+        return; // Don't change the index since we're already on Coach Dashboard
+      }
+
       currentIndex.value = index;
 
       // Handle navigation based on index

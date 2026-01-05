@@ -153,6 +153,7 @@ class MessagesPage extends GetView<MessagesController> {
             }
 
             return ListView.builder(
+              controller: controller.conversationsScrollController,
               padding: EdgeInsets.only(
                 left: 20.w,
                 right: 20.w,

@@ -13,16 +13,18 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
     // Instantiate the controller if it hasn't been already
     Get.put(CoachDashboardController());
 
-    return SafeArea(
-      child: Container(
-        color: const Color(0xFFF5F6FA),
-        child: Column(
-          children: [
-            // Header
-            _buildHeader(),
-            // Content
-            Expanded(
+    return Container(
+      color: const Color(0xFFF5F6FA),
+      child: Column(
+        children: [
+          // Header
+          _buildHeader(),
+          // Content
+          Expanded(
+            child: SafeArea(
+              top: false,
               child: SingleChildScrollView(
+                controller: controller.dashboardScrollController,
                 padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -45,8 +47,8 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -64,104 +66,109 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
           bottomRight: Radius.circular(40.r),
         ),
       ),
-      padding: EdgeInsets.only(
-        top: 56.h,
-        bottom: 24.h,
-        left: 24.w,
-        right: 24.w,
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: SafeArea(
+        bottom: false, // Don't apply bottom safe area padding
+        child: Padding(
+          padding: EdgeInsets.only(
+            top: 12.h,
+            bottom: 24.h,
+            left: 24.w,
+            right: 24.w,
+          ),
+          child: Column(
             children: [
-              Text(
-                'Coach Dashboard',
-                style: ResponsiveTextStyles.textXl.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Notifications Button
-                  GestureDetector(
-                    onTap: controller.navigateToNotifications,
-                    child: Container(
-                      width: 40.w,
-                      height: 40.h,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12.r),
-                      ),
-                      child: Stack(
-                        children: [
-                          Center(
-                            child: Icon(
-                              Icons.notifications_outlined,
-                              color: Colors.white,
-                              size: 20.sp,
-                            ),
+                  Text(
+                    'Coach Dashboard',
+                    style: ResponsiveTextStyles.textXl.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      // Notifications Button
+                      GestureDetector(
+                        onTap: controller.navigateToNotifications,
+                        child: Container(
+                          width: 40.w,
+                          height: 40.h,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12.r),
                           ),
-                          // Notification Badge
-                          Positioned(
-                            top: 8.h,
-                            right: 8.w,
-                            child: Container(
-                              width: 20.w,
-                              height: 20.h,
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
+                          child: Stack(
+                            children: [
+                              Center(
+                                child: Icon(
+                                  Icons.notifications_outlined,
+                                  color: Colors.white,
+                                  size: 20.sp,
+                                ),
                               ),
-                              child: Center(
-                                child: Text(
-                                  '2',
-                                  style: ResponsiveTextStyles.textXs.copyWith(
-                                    color: Colors.white,
-                                    fontSize: 10.sp,
+                              // Notification Badge
+                              Positioned(
+                                top: 8.h,
+                                right: 8.w,
+                                child: Container(
+                                  width: 20.w,
+                                  height: 20.h,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      '2',
+                                      style: ResponsiveTextStyles.textXs.copyWith(
+                                        color: Colors.white,
+                                        fontSize: 10.sp,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                  SizedBox(width: 12.w),
-                  // Settings Button
-                  GestureDetector(
-                    onTap: controller.navigateToSettings,
-                    child: Container(
-                      width: 40.w,
-                      height: 40.h,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12.r),
+                      SizedBox(width: 12.w),
+                      // Settings Button
+                      GestureDetector(
+                        onTap: controller.navigateToSettings,
+                        child: Container(
+                          width: 40.w,
+                          height: 40.h,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12.r),
+                          ),
+                          child: Icon(
+                            Icons.settings_outlined,
+                            color: Colors.white,
+                            size: 20.sp,
+                          ),
+                        ),
                       ),
-                      child: Icon(
-                        Icons.settings_outlined,
-                        color: Colors.white,
-                        size: 20.sp,
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
+              SizedBox(height: 8.h),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'User Compliance Overview',
+                  style: ResponsiveTextStyles.textSm.copyWith(
+                    color: const Color(0xFFD4AF37),
+                  ),
+                ),
+              ),
             ],
           ),
-          SizedBox(height: 8.h),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'User Compliance Overview',
-              style: ResponsiveTextStyles.textSm.copyWith(
-                color: const Color(0xFFD4AF37),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -222,24 +222,41 @@ class _AiCoachScreenState extends State<AiCoachScreen>
       _updateKeyboardVisibility();
     });
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      // Use resizeToAvoidBottomInset to handle keyboard properly
-      resizeToAvoidBottomInset: true,
-      body: SafeArea(
-        child: Column(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (bool didPop) {
+        if (!didPop) {
+          // Intercept back gesture (swipe or back button) and use our custom navigation
+          _safeBack();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        // Use resizeToAvoidBottomInset to handle keyboard properly
+        resizeToAvoidBottomInset: true,
+        body: Column(
           children: [
-            // Custom Header with Back Button
+            // Custom Header with Back Button - extends to status bar
             _buildHeader(),
 
-            // Quick Actions (with keyboard-aware animation)
-            _buildAnimatedQuickActions(),
+            // Content area with SafeArea for bottom only
+            Expanded(
+              child: SafeArea(
+                top: false, // Don't apply top safe area (header handles it)
+                child: Column(
+                  children: [
+                    // Quick Actions (with keyboard-aware animation)
+                    _buildAnimatedQuickActions(),
 
-            // Messages List
-            Expanded(child: _buildMessagesList()),
+                    // Messages List
+                    Expanded(child: _buildMessagesList()),
 
-            // Input Area
-            _buildInputArea(),
+                    // Input Area
+                    _buildInputArea(),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -248,7 +265,6 @@ class _AiCoachScreenState extends State<AiCoachScreen>
 
   Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF6C63FF), Color(0xFF00B8A9)],
@@ -260,7 +276,11 @@ class _AiCoachScreenState extends State<AiCoachScreen>
           bottomRight: Radius.circular(40),
         ),
       ),
-      child: Column(
+      child: SafeArea(
+        bottom: false, // Don't apply bottom safe area padding
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+          child: Column(
         children: [
           // Top row with back button and actions
           Row(
@@ -413,6 +433,8 @@ class _AiCoachScreenState extends State<AiCoachScreen>
             ],
           ),
         ],
+      ),
+      ),
       ),
     );
   }

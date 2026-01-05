@@ -1,9 +1,13 @@
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:gravityapp/data/model/client_user.dart';
 
 class CoachDashboardController extends GetxController {
   // Sample user data - in production, this would come from an API
   final RxList<ClientUser> users = <ClientUser>[].obs;
+  
+  // Scroll controller for the dashboard view
+  final ScrollController dashboardScrollController = ScrollController();
 
   @override
   void onInit() {
@@ -111,6 +115,23 @@ class CoachDashboardController extends GetxController {
   // Navigate to settings
   void navigateToSettings() {
     Get.toNamed('/settings');
+  }
+
+  /// Scroll to the top of the dashboard view
+  void scrollToTop() {
+    if (dashboardScrollController.hasClients) {
+      dashboardScrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  @override
+  void onClose() {
+    dashboardScrollController.dispose();
+    super.onClose();
   }
 }
 

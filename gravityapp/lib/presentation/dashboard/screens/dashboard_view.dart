@@ -18,6 +18,7 @@ class DashboardView extends GetView<DashboardController> {
     }
 
     return SingleChildScrollView(
+      controller: controller.dashboardScrollController,
       padding: EdgeInsets.only(
         bottom: 20.h,
         top: 70.h, // Space for sticky sync section

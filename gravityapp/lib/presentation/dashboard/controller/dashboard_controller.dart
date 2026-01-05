@@ -51,6 +51,9 @@ class DashboardController extends GetxController {
   final sleepInput = ''.obs;
   final hydrationInput = ''.obs;
 
+  // Scroll controller for dashboard view
+  final ScrollController dashboardScrollController = ScrollController();
+
   @override
   void onInit() {
     super.onInit();
@@ -338,6 +341,7 @@ class DashboardController extends GetxController {
   void onClose() {
     // Don't dispose the health service since it's a singleton
     // and may be used by other controllers
+    dashboardScrollController.dispose();
     super.onClose();
   }
 
@@ -523,5 +527,16 @@ class DashboardController extends GetxController {
     if (diff.inMinutes < 1) return 'Just now';
     if (diff.inHours < 1) return '${diff.inMinutes}m ago';
     return '${diff.inHours}h ago';
+  }
+
+  /// Scroll to the top of the dashboard view
+  void scrollToTop() {
+    if (dashboardScrollController.hasClients) {
+      dashboardScrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 }

@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../../data/repositories/community_repository.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../app/theme/app_colors.dart';
@@ -136,6 +137,9 @@ class CommunityController extends GetxController {
   // API call control flags
   bool _isFetching = false;
   DateTime? _lastReload;
+
+  // Scroll controller for Community page
+  ItemScrollController? _itemScrollController;
 
   /// Load user profile data from storage
   void _loadUserProfile() {
@@ -3394,5 +3398,22 @@ class CommunityController extends GetxController {
       return singlePost.value;
     }
     return posts.firstWhereOrNull((p) => p.id == selectedPostId.value);
+  }
+
+  /// Set the scroll controller for the Community page
+  void setScrollController(ItemScrollController controller) {
+    _itemScrollController = controller;
+  }
+
+  /// Scroll to the top of the Community page
+  void scrollToTop() {
+    if (_itemScrollController != null && posts.isNotEmpty) {
+      _itemScrollController!.scrollTo(
+        index: 0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+        alignment: 0.0,
+      );
+    }
   }
 }
