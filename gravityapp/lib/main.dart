@@ -9,7 +9,7 @@ import 'app/routes/app_routes.dart';
 import 'app/routes/app_pages.dart';
 import 'core/services/preferences_service.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,7 +17,7 @@ void main() async {
   // Initialize Firebase with error handling
   try {
     // Check if running on iOS and verify GoogleService-Info.plist exists
-    if (Platform.isIOS) {
+    if (!kIsWeb && Platform.isIOS) {
       debugPrint('🔍 Checking Firebase configuration for iOS...');
       // Firebase.initializeApp() should automatically find GoogleService-Info.plist
       // if it's properly added to the Xcode project
@@ -28,7 +28,7 @@ void main() async {
   } catch (e, stackTrace) {
     debugPrint('⚠️ Firebase initialization failed: $e');
     debugPrint('Stack trace: $stackTrace');
-    if (Platform.isIOS) {
+    if (!kIsWeb && Platform.isIOS) {
       debugPrint('');
       debugPrint('📱 iOS Firebase Setup Checklist:');
       debugPrint('   1. Verify GoogleService-Info.plist exists in ios/Runner/');
@@ -36,8 +36,10 @@ void main() async {
       debugPrint('   3. Check that the file is included in "Copy Bundle Resources" build phase');
       debugPrint('   4. Verify the Bundle ID matches: com.attoexa.gravityapp');
       debugPrint('');
-    } else {
+    } else if (!kIsWeb) {
       debugPrint('   This may happen if google-services.json (Android) is missing.');
+    } else {
+      debugPrint('   For web, ensure Firebase is properly configured in your web app.');
     }
     debugPrint('   The app will continue to run, but Firebase features (like Google Sign-In) may not work.');
     // Continue app initialization even if Firebase fails
@@ -52,11 +54,13 @@ void main() async {
   await PreferencesService.clearUserData();
   debugPrint('🔒 Session-based auth: Token cleared on app startup');
 
-  // Lock orientation to portrait for consistency
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  // Lock orientation to portrait for consistency (not applicable on web)
+  if (!kIsWeb) {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+  }
 
   runApp(const MyApp());
 }

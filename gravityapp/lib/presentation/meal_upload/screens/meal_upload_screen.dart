@@ -17,21 +17,22 @@ class MealUploadScreen extends GetView<MealUploadController> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFFF5F6FA), Colors.white],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFFF5F6FA), Colors.white],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              child: Column(
-                children: [
-                  _buildHeader(),
-                  Expanded(
+            ),
+            child: Column(
+              children: [
+                _buildHeader(),
+                Expanded(
+                  child: SafeArea(
+                    top: false, // Don't apply top safe area (header handles it)
                     child: Obx(() {
                       if (controller.selectedImagePath.value == null) {
                         return _buildUploadState();
@@ -40,33 +41,27 @@ class MealUploadScreen extends GetView<MealUploadController> {
                       }
                     }),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+          ),
 
-            /// Limit warning modal
-            Obx(
-              () => controller.showLimitWarning.value
-                  ? _buildLimitWarningModal()
-                  : const SizedBox.shrink(),
-            ),
-          ],
-        ),
+          /// Limit warning modal
+          Obx(
+            () => controller.showLimitWarning.value
+                ? _buildLimitWarningModal()
+                : const SizedBox.shrink(),
+          ),
+        ],
       ),
     );
   }
 
   // -------------------------
-  // HEADER (React Style)
+  // HEADER (React Style) - Extends to status bar like MainAppBar
   // -------------------------
   Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.only(
-        left: 24.w,
-        right: 24.w,
-        top: 20.h,
-        bottom: 24.h,
-      ),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF0A2342), Color(0xFF00B8A9)],
@@ -78,67 +73,79 @@ class MealUploadScreen extends GetView<MealUploadController> {
           bottomRight: Radius.circular(40),
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Flexible(
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: controller.navigateBack,
-                  child: AnimatedScale(
-                    scale: 1.0,
-                    duration: const Duration(milliseconds: 150),
-                    child: Container(
-                      width: 44.w,
-                      height: 44.h,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.20),
-                        borderRadius: BorderRadius.circular(12.r),
-                      ),
-                      child: Icon(
-                        Icons.arrow_back,
-                        size: 20.sp,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 16.w),
-                Flexible(
-                  child: Text(
-                    "AI Meal Analysis",
-                    style: ResponsiveTextStyles.textXl.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
+      child: SafeArea(
+        bottom: false, // Don't apply bottom safe area padding
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 24.w,
+            right: 24.w,
+            top: 12.h,
+            bottom: 24.h,
           ),
-
-          /// Daily Limit Indicator
-          Obx(() {
-            // Access trigger to make this reactive
-            controller.statsTrigger.value;
-            final remaining = controller.remainingAnalyses;
-            return Container(
-              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.20),
-                borderRadius: BorderRadius.circular(20.r),
-              ),
-              child: Text(
-                "$remaining/5000 left today",
-                style: ResponsiveTextStyles.textSm.copyWith(
-                  color: Colors.white,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: controller.navigateBack,
+                      behavior: HitTestBehavior.opaque,
+                      child: AnimatedScale(
+                        scale: 1.0,
+                        duration: const Duration(milliseconds: 150),
+                        child: Container(
+                          width: 44.w,
+                          height: 44.h,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.20),
+                            borderRadius: BorderRadius.circular(12.r),
+                          ),
+                          child: Icon(
+                            Icons.arrow_back,
+                            size: 20.sp,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 16.w),
+                    Flexible(
+                      child: Text(
+                        "AI Meal Analysis",
+                        style: ResponsiveTextStyles.textXl.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            );
-          }),
-        ],
+
+              /// Daily Limit Indicator
+              Obx(() {
+                // Access trigger to make this reactive
+                controller.statsTrigger.value;
+                final remaining = controller.remainingAnalyses;
+                return Container(
+                  padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.20),
+                    borderRadius: BorderRadius.circular(20.r),
+                  ),
+                  child: Text(
+                    "$remaining/5000 left today",
+                    style: ResponsiveTextStyles.textSm.copyWith(
+                      color: Colors.white,
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
       ),
     );
   }

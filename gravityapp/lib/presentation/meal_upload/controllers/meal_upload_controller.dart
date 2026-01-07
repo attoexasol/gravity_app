@@ -107,8 +107,26 @@ class MealUploadController extends GetxController {
   }
 
   /// Navigate back
+  /// Uses Navigator directly to avoid Get.back()'s internal snackbar closing logic
   void navigateBack() {
-    Get.back();
+    try {
+      final context = Get.context;
+      if (context != null && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+        debugPrint('✅ Navigated back via Navigator.pop()');
+        return;
+      }
+    } catch (e) {
+      debugPrint('⚠️ Navigator.pop() failed: $e');
+    }
+    
+    // Fallback: try Get.back() if Navigator fails
+    try {
+      Get.back();
+      debugPrint('✅ Navigated back via Get.back()');
+    } catch (e) {
+      debugPrint('⚠️ Get.back() also failed: $e - Navigation may have already occurred');
+    }
   }
 
   /// Close limit warning
