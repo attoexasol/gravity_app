@@ -9,6 +9,7 @@ class ProgressRing extends StatelessWidget {
   final String? suffix;
   final String? trend;
   final double? trendValue;
+  final String? customValue; // For custom display like "1/2" for fasting
 
   const ProgressRing({
     super.key,
@@ -20,6 +21,7 @@ class ProgressRing extends StatelessWidget {
     this.suffix,
     this.trend,
     this.trendValue,
+    this.customValue,
   });
 
   @override
@@ -49,7 +51,7 @@ class ProgressRing extends StatelessWidget {
                 children: [
                   if (icon != null) Icon(icon, size: 16, color: color),
                   Text(
-                    value.toStringAsFixed(1),
+                    customValue ?? value.toStringAsFixed(1),
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
                   ),
                 ],

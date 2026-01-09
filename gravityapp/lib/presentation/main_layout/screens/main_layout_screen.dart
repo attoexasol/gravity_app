@@ -3,7 +3,7 @@ import 'package:get/get.dart';
 import '../../community/screens/community_page.dart';
 import '../../dashboard/screens/dashboard_view.dart';
 import '../../dashboard/screens/sections/sync_status_section.dart';
-import '../../dashboard/controller/dashboard_controller.dart';
+import '../../dashboard/controllers/dashboard_controller.dart';
 import '../../messages/screens/messages_page.dart';
 import '../../coach_dashboard/screens/coach_dashboard_screen.dart';
 import '../../widgets/main_app_bar.dart';

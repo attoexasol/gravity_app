@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Camera, TrendingUp, Users, Settings, Droplet, Moon, Footprints, RefreshCw, AlertCircle, Scale, Plus, X, Bell } from 'lucide-react';
+import { Camera, TrendingUp, Users, Settings, Droplet, Moon, Footprints, RefreshCw, AlertCircle, Scale, Plus, X, Bell, UtensilsCrossed, FileText, Calendar, BarChart3 } from 'lucide-react';
 import { ProgressRing } from '../ProgressRing';
 import { Screen, UserType } from '../../App';
 import { useEffect, useState } from 'react';
@@ -22,11 +22,16 @@ export function DashboardScreen({ onNavigate, userType }: DashboardScreenProps) 
   const [previousWeight] = useState(82.8); // Previous weight for trend calculation
   const weightGoal = 75; // Target weight in kg
   
+  // Fasting states
+  const [fastingMode, setFastingMode] = useState<'normal' | 'omad'>('normal'); // normal = 2 meals, omad = 1 meal
+  const [mealsEaten, setMealsEaten] = useState(1); // Number of meals eaten today
+  
   // Modal states
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [showStepsModal, setShowStepsModal] = useState(false);
   const [showSleepModal, setShowSleepModal] = useState(false);
   const [showHydrationModal, setShowHydrationModal] = useState(false);
+  const [showFastingModal, setShowFastingModal] = useState(false);
   
   // Input states
   const [weightInput, setWeightInput] = useState('');
@@ -230,60 +235,29 @@ export function DashboardScreen({ onNavigate, userType }: DashboardScreenProps) 
               suffix="hrs"
             />
             <ProgressRing
-              value={waterIntake}
-              max={2.5}
-              label="Hydration"
-              icon={<Droplet className="w-4 h-4" />}
-              color="#00B8A9"
-              suffix="L"
+              value={mealsEaten}
+              max={fastingMode === 'omad' ? 1 : 2}
+              label="Fasting"
+              icon={<UtensilsCrossed className="w-4 h-4" />}
+              color="#D4AF37"
+              customValue={`${mealsEaten}/${fastingMode === 'omad' ? 1 : 2}`}
             />
           </div>
         </motion.div>
       </div>
 
-      {/* Today's Summary Card */}
-      <div className="px-4 sm:px-6 md:px-8 mb-4">
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 max-w-7xl mx-auto">
-          <motion.div
-            className="bg-[#FFF9E6] rounded-[20px] p-4 border border-[#D4AF37]/20"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <h4 className="text-[#0A2342] mb-2">Today's Summary</h4>
-            <p className="text-[#0A2342]/70 mb-4 text-sm">
-              You're at {overallProgress}% of your daily goal. {overallProgress >= 75 ? 'Great progress! 🎉' : 'Keep going! 💪'}
-            </p>
-            <motion.button
-              onClick={() => onNavigate('daily-summary')}
-              className="text-[#0A2342] flex items-center gap-1 text-sm"
-              whileTap={{ scale: 0.95 }}
-            >
-              <span>View Details</span>
-              <span className="text-[#0A2342]/60">↗</span>
-            </motion.button>
-          </motion.div>
+      {/* Weight Loss Journey */}
+      <div className="px-4 sm:px-6 md:px-8 mb-4 sm:mb-6">
+        <WeightLossTracker
+          startingWeight={85}
+          currentWeight={weight}
+          goalWeight={weightGoal}
+        />
+      </div>
 
-          <motion.div
-            className="bg-[#E6F7F5] rounded-[20px] p-4 border border-[#00B8A9]/20"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-          >
-            <h4 className="text-[#0A2342] mb-2">Weekly Stats</h4>
-            <p className="text-[#0A2342]/70 mb-4 text-sm">
-              Check your 7-day trends and insights to track your progress.
-            </p>
-            <motion.button
-              onClick={() => onNavigate('weekly-summary')}
-              className="text-[#0A2342] flex items-center gap-1 text-sm"
-              whileTap={{ scale: 0.95 }}
-            >
-              <span>View Details</span>
-              <span className="text-[#0A2342]/60">↗</span>
-            </motion.button>
-          </motion.div>
-        </div>
+      {/* Summary & Reports Navigation */}
+      <div className="px-4 sm:px-6 md:px-8 mb-4 sm:mb-6">
+        <SummaryReportsNav onNavigate={onNavigate} />
       </div>
 
       {/* Quick Actions */}
@@ -320,6 +294,12 @@ export function DashboardScreen({ onNavigate, userType }: DashboardScreenProps) 
               title="Log Steps"
               gradient="from-[#00B8A9] to-[#00D4C3]"
               onClick={() => setShowStepsModal(true)}
+            />
+            <QuickActionCard
+              icon={<UtensilsCrossed className="w-5 h-5 sm:w-6 sm:h-6" />}
+              title="Fasting Mode"
+              gradient="from-[#D4AF37] to-[#B8941F]"
+              onClick={() => setShowFastingModal(true)}
             />
           </div>
         </div>
@@ -376,6 +356,24 @@ export function DashboardScreen({ onNavigate, userType }: DashboardScreenProps) 
         placeholder="Enter water intake in liters"
         unit="liters"
         gradient="from-[#00B8A9] to-[#00E5D3]"
+      />
+
+      {/* Fasting Mode Modal */}
+      <FastingModeModal
+        open={showFastingModal}
+        onOpenChange={setShowFastingModal}
+        currentMode={fastingMode}
+        onModeChange={(mode) => {
+          setFastingMode(mode);
+          // Reset meals if changing to OMAD and already eaten 2
+          if (mode === 'omad' && mealsEaten > 1) {
+            setMealsEaten(1);
+          }
+          setShowFastingModal(false);
+        }}
+        mealsEaten={mealsEaten}
+        onMealsChange={setMealsEaten}
+        maxMeals={fastingMode === 'omad' ? 1 : 2}
       />
 
       {/* Community Preview */}
@@ -474,5 +472,297 @@ function ManualEntryModal({ open, onOpenChange, title, icon, value, onChange, on
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface FastingModeModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  currentMode: 'normal' | 'omad';
+  onModeChange: (mode: 'normal' | 'omad') => void;
+  mealsEaten: number;
+  onMealsChange: (meals: number) => void;
+  maxMeals: number;
+}
+
+function FastingModeModal({ open, onOpenChange, currentMode, onModeChange, mealsEaten, onMealsChange, maxMeals }: FastingModeModalProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent 
+        className="bg-white rounded-[20px] shadow-sm p-5 sm:p-7 max-w-7xl mx-auto"
+        onClose={() => onOpenChange(false)}
+      >
+        <DialogHeader>
+          <DialogTitle className="text-[#0A2342] mb-2">Fasting Tracker</DialogTitle>
+          <DialogDescription className="text-[#0A2342]/60 text-sm mb-4">
+            Manage your daily meal plan
+          </DialogDescription>
+        </DialogHeader>
+        
+        {/* Mode Selection */}
+        <div>
+          <p className="text-[#0A2342]/70 text-sm mb-3">Fasting Mode:</p>
+          <div className="grid grid-cols-2 gap-4">
+            <motion.button
+              onClick={() => {
+                onModeChange('normal');
+                if (mealsEaten > 2) onMealsChange(2);
+              }}
+              className={`${
+                currentMode === 'normal' 
+                  ? 'bg-gradient-to-br from-[#D4AF37] to-[#B8941F] text-white' 
+                  : 'bg-[#F5F6FA] text-[#0A2342]'
+              } rounded-[16px] p-4 shadow-sm flex flex-col items-center justify-center gap-2`}
+              whileTap={{ scale: 0.95 }}
+            >
+              <UtensilsCrossed className="w-6 h-6" />
+              <div className="text-center">
+                <p className="font-semibold">Normal</p>
+                <p className="text-xs opacity-80">2 Meals/Day</p>
+              </div>
+            </motion.button>
+            <motion.button
+              onClick={() => {
+                onModeChange('omad');
+                if (mealsEaten > 1) onMealsChange(1);
+              }}
+              className={`${
+                currentMode === 'omad' 
+                  ? 'bg-gradient-to-br from-[#D4AF37] to-[#B8941F] text-white' 
+                  : 'bg-[#F5F6FA] text-[#0A2342]'
+              } rounded-[16px] p-4 shadow-sm flex flex-col items-center justify-center gap-2`}
+              whileTap={{ scale: 0.95 }}
+            >
+              <UtensilsCrossed className="w-6 h-6" />
+              <div className="text-center">
+                <p className="font-semibold">O.M.A.D</p>
+                <p className="text-xs opacity-80">1 Meal/Day</p>
+              </div>
+            </motion.button>
+          </div>
+        </div>
+
+        {/* Meal Tracking */}
+        <div className="mt-6 pt-6 border-t border-[#0A2342]/10">
+          <p className="text-[#0A2342]/70 text-sm mb-3">Log Your Meals:</p>
+          <div className="grid grid-cols-2 gap-3">
+            <motion.button
+              onClick={() => onMealsChange(mealsEaten === 1 ? 0 : 1)}
+              className={`${
+                mealsEaten >= 1
+                  ? 'bg-gradient-to-br from-[#00B8A9] to-[#0A2342] text-white'
+                  : 'bg-[#F5F6FA] text-[#0A2342]/40'
+              } rounded-[14px] p-4 shadow-sm flex flex-col items-center justify-center gap-2`}
+              whileTap={{ scale: 0.95 }}
+            >
+              <UtensilsCrossed className="w-5 h-5" />
+              <p className="text-sm font-semibold">Meal 1</p>
+              {mealsEaten >= 1 && <p className="text-xs opacity-80">✓ Logged</p>}
+            </motion.button>
+            
+            {currentMode === 'normal' && (
+              <motion.button
+                onClick={() => onMealsChange(mealsEaten === 2 ? 1 : 2)}
+                className={`${
+                  mealsEaten >= 2
+                    ? 'bg-gradient-to-br from-[#00B8A9] to-[#0A2342] text-white'
+                    : 'bg-[#F5F6FA] text-[#0A2342]/40'
+                } rounded-[14px] p-4 shadow-sm flex flex-col items-center justify-center gap-2`}
+                whileTap={{ scale: 0.95 }}
+              >
+                <UtensilsCrossed className="w-5 h-5" />
+                <p className="text-sm font-semibold">Meal 2</p>
+                {mealsEaten >= 2 && <p className="text-xs opacity-80">✓ Logged</p>}
+              </motion.button>
+            )}
+          </div>
+          
+          {/* Reset Button */}
+          <motion.button
+            onClick={() => onMealsChange(0)}
+            className="w-full mt-3 bg-[#F5F6FA] text-[#0A2342]/60 rounded-[12px] px-4 py-2 text-sm hover:bg-[#0A2342]/5"
+            whileTap={{ scale: 0.95 }}
+          >
+            Reset All
+          </motion.button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface WeightLossTrackerProps {
+  startingWeight: number;
+  currentWeight: number;
+  goalWeight: number;
+}
+
+function WeightLossTracker({ startingWeight, currentWeight, goalWeight }: WeightLossTrackerProps) {
+  const totalWeightLoss = startingWeight - goalWeight;
+  const currentWeightLoss = startingWeight - currentWeight;
+  const remainingWeight = currentWeight - goalWeight;
+  const progressPercentage = Math.min(100, Math.max(0, (currentWeightLoss / totalWeightLoss) * 100));
+
+  return (
+    <motion.div
+      className="bg-white rounded-[28px] shadow-sm p-5 sm:p-7 max-w-7xl mx-auto"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+    >
+      <h3 className="text-[#0A2342] mb-6" style={{ fontSize: 'var(--text-lg)', fontWeight: 'var(--font-weight-medium)' }}>Weight Loss Journey</h3>
+      
+      {/* Top Labels - Starting and Current Weight */}
+      <div className="flex justify-between items-start mb-3">
+        <div>
+          <p className="text-[#0A2342]/50 text-xs mb-1">Starting Weight</p>
+          <p className="text-[#0A2342] font-semibold">{startingWeight} kg</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[#0A2342]/50 text-xs mb-1">Current Weight</p>
+          <p className="text-[#00B8A9] font-bold text-lg">{currentWeight} kg</p>
+        </div>
+      </div>
+
+      {/* Progress Bar Container */}
+      <div className="relative py-8">
+        {/* Labels Above Bar */}
+        <div className="absolute -top-1 left-0 right-0 flex justify-between text-xs text-[#0A2342]/40">
+          <span>0 kg</span>
+          <span>Goal: {totalWeightLoss.toFixed(1)} kg</span>
+        </div>
+
+        {/* Progress Bar Track */}
+        <div className="relative h-2 bg-[#E5E7EB] rounded-full overflow-hidden">
+          {/* Active Progress with Gradient */}
+          <motion.div
+            className="absolute left-0 top-0 h-full bg-gradient-to-r from-[#00B8A9] to-[#0A2342] rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${progressPercentage}%` }}
+            transition={{ duration: 1, ease: 'easeOut' }}
+          />
+        </div>
+
+        {/* Progress Marker (Thumb) */}
+        <motion.div
+          className="absolute top-1/2 -translate-y-1/2"
+          style={{ left: `${progressPercentage}%` }}
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.5, type: 'spring', stiffness: 200 }}
+        >
+          {/* Marker Circle */}
+          <div className="relative -translate-x-1/2">
+            <div className="w-6 h-6 bg-[#D4AF37] rounded-full shadow-lg border-4 border-white" />
+            {/* Text Below Marker */}
+            <div className="absolute top-8 left-1/2 -translate-x-1/2 whitespace-nowrap">
+              <p className="text-[#D4AF37] font-bold text-sm">{currentWeightLoss.toFixed(1)} kg lost</p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Bottom Summary */}
+      <div className="mt-6 pt-4 border-t border-[#0A2342]/10 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-[#00B8A9] rounded-full" />
+          <p className="text-[#0A2342]/70 text-sm">
+            Weight Lost: <span className="text-[#0A2342] font-semibold">{currentWeightLoss.toFixed(1)} kg</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-[#E5E7EB] rounded-full" />
+          <p className="text-[#0A2342]/70 text-sm">
+            Remaining: <span className="text-[#0A2342] font-semibold">{remainingWeight.toFixed(1)} kg</span>
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+interface SummaryReportsNavProps {
+  onNavigate: (screen: Screen) => void;
+}
+
+function SummaryReportsNav({ onNavigate }: SummaryReportsNavProps) {
+  // Get current date for week range
+  const getCurrentWeekRange = () => {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const startDate = new Date(now);
+    startDate.setDate(now.getDate() - dayOfWeek);
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    
+    const formatDate = (date: Date) => {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+    
+    return `${formatDate(startDate)} - ${formatDate(endDate)}`;
+  };
+
+  return (
+    <motion.div
+      className="bg-white rounded-[28px] shadow-sm p-5 sm:p-7 max-w-7xl mx-auto"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.3 }}
+    >
+      <div className="mb-4">
+        <h3 className="text-[#0A2342]" style={{ fontSize: 'var(--text-lg)', fontWeight: 'var(--font-weight-medium)' }}>Gravity</h3>
+        <p className="text-[#0A2342]/60 text-sm">Your wellness companion</p>
+      </div>
+
+      <div className="space-y-3">
+        {/* Today Card */}
+        <motion.button
+          onClick={() => onNavigate('daily-summary')}
+          className="w-full bg-[#E6F7F5] rounded-[16px] p-4 border-2 border-[#00B8A9]/30 flex items-center gap-4"
+          whileTap={{ scale: 0.98 }}
+        >
+          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center flex-shrink-0 shadow-sm">
+            <FileText className="w-5 h-5 text-[#00B8A9]" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-[#0A2342] font-semibold">Today</p>
+            <p className="text-[#0A2342]/60 text-sm">End-of-day summary</p>
+          </div>
+          <div className="text-[#00B8A9]">→</div>
+        </motion.button>
+
+        {/* Weekly Review Card */}
+        <motion.button
+          onClick={() => onNavigate('weekly-review')}
+          className="w-full bg-[#FFF9E6] rounded-[16px] p-4 border-2 border-[#D4AF37]/30 flex items-center gap-4"
+          whileTap={{ scale: 0.98 }}
+        >
+          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center flex-shrink-0 shadow-sm">
+            <Calendar className="w-5 h-5 text-[#D4AF37]" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-[#0A2342] font-semibold">Weekly Review</p>
+            <p className="text-[#0A2342]/60 text-sm">{getCurrentWeekRange()}</p>
+          </div>
+          <div className="text-[#D4AF37]">→</div>
+        </motion.button>
+
+        {/* Daily Details Card */}
+        <motion.button
+          onClick={() => onNavigate('daily-details')}
+          className="w-full bg-[#E6F7F5] rounded-[16px] p-4 border-2 border-[#00B8A9]/30 flex items-center gap-4"
+          whileTap={{ scale: 0.98 }}
+        >
+          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center flex-shrink-0 shadow-sm">
+            <BarChart3 className="w-5 h-5 text-[#00B8A9]" />
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-[#0A2342] font-semibold">Daily Details</p>
+            <p className="text-[#0A2342]/60 text-sm">Day-by-day breakdown</p>
+          </div>
+          <div className="text-[#00B8A9]">→</div>
+        </motion.button>
+      </div>
+    </motion.div>
   );
 }

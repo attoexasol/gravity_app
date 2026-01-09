@@ -6,7 +6,7 @@ import '../../presentation/goal_settings/controllers/goal_settings_controller.da
 import '../../presentation/login/controllers/login_controller.dart';
 import '../../presentation/messages/controllers/messages_controllers.dart';
 import '../../presentation/onboarding/controllers/onboarding_controller.dart';
-import '../../presentation/dashboard/controller/dashboard_controller.dart';
+import '../../presentation/dashboard/controllers/dashboard_controller.dart';
 import '../../presentation/signup/controllers/signup_controller.dart';
 import '../../presentation/settings/controllers/settings_controller.dart';
 import '../../presentation/meal_upload/controllers/meal_upload_controller.dart';

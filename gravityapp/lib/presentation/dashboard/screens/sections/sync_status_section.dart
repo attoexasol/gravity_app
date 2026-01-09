@@ -14,6 +14,7 @@ class SyncStatusSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      controller.timeTicker.value; // force rebuild for relative time updates
       final healthMetrics = controller.healthMetrics.value;
       final isSyncing = controller.isSyncing.value;
 

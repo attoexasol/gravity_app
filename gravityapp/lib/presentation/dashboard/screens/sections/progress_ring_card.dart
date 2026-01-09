@@ -44,16 +44,7 @@ class ProgressRingsSection extends StatelessWidget {
               crossAxisSpacing: 4.w,
               childAspectRatio: 0.75,
               children: [
-                ProgressRing(
-                  value: controller.weight.value,
-                  max: controller.weightGoal.value,
-                  label: "Weight",
-                  icon: Icons.monitor_weight_outlined,
-                  color: const Color(0xFFD4AF37),
-                  suffix: "kg",
-                  trend: controller.weightTrend,
-                  trendValue: controller.weightChange,
-                ),
+                // Steps
                 ProgressRing(
                   value: controller.healthMetrics.value.steps.toDouble(),
                   max: controller.stepGoal.value.toDouble(),
@@ -61,6 +52,7 @@ class ProgressRingsSection extends StatelessWidget {
                   icon: Icons.directions_walk_outlined,
                   color: const Color(0xFF00B8A9),
                 ),
+                // Sleep
                 ProgressRing(
                   value: controller.healthMetrics.value.sleepHours,
                   max: controller.sleepGoal.value,
@@ -69,6 +61,7 @@ class ProgressRingsSection extends StatelessWidget {
                   color: const Color(0xFF0A2342),
                   suffix: "hrs",
                 ),
+                // Hydration
                 ProgressRing(
                   value: controller.waterIntake.value,
                   max: controller.waterGoal.value,
@@ -76,6 +69,15 @@ class ProgressRingsSection extends StatelessWidget {
                   icon: Icons.water_drop_outlined,
                   color: const Color(0xFF00B8A9),
                   suffix: "L",
+                ),
+                // Fasting
+                ProgressRing(
+                  value: controller.mealsEaten.value.toDouble(),
+                  max: 2.0,
+                  label: "Fasting",
+                  icon: Icons.restaurant_outlined,
+                  color: const Color(0xFFD4AF37),
+                  customValue: "${controller.mealsEaten.value}/2",
                 ),
               ],
             ),

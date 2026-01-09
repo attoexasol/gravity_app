@@ -5,7 +5,7 @@ import '../../../core/services/preferences_service.dart';
 import '../../aicoach/controllers/ai_coach_controller.dart';
 import '../../community/controllers/community_controller.dart';
 import '../../messages/controllers/messages_controllers.dart';
-import '../../dashboard/controller/dashboard_controller.dart';
+import '../../dashboard/controllers/dashboard_controller.dart';
 import '../../coach_dashboard/controllers/coach_dashboard_controller.dart';
 
 class MainLayoutController extends GetxController {

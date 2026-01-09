@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
@@ -23,6 +24,7 @@ class DashboardController extends GetxController {
   final waterIntake = 0.0.obs; // in Liters - will be updated from HealthKit
   final weight = 0.0.obs; // in kg - will be updated from HealthKit
   final previousWeight = 0.0.obs; // in kg
+  final mealsEaten = 0.obs; // Number of meals eaten today (0-2)
 
   // Today's entry from DB
   final todayEntry = Rx<UserGravityEntry?>(null);
@@ -50,9 +52,14 @@ class DashboardController extends GetxController {
   final stepsInput = ''.obs;
   final sleepInput = ''.obs;
   final hydrationInput = ''.obs;
+  final fastingInput = ''.obs;
 
   // Scroll controller for dashboard view
   final ScrollController dashboardScrollController = ScrollController();
+
+  // Time ticker for forcing relative time updates
+  final timeTicker = 0.obs;
+  Timer? _timeTickerTimer;
 
   @override
   void onInit() {
@@ -121,6 +128,11 @@ class DashboardController extends GetxController {
       if (success) {
         _healthService.syncHealthData();
       }
+    });
+
+    // Force rebuild every 30 seconds for relative sync time
+    _timeTickerTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      timeTicker.value++;
     });
   }
 
@@ -339,8 +351,7 @@ class DashboardController extends GetxController {
 
   @override
   void onClose() {
-    // Don't dispose the health service since it's a singleton
-    // and may be used by other controllers
+    _timeTickerTimer?.cancel();
     dashboardScrollController.dispose();
     super.onClose();
   }
@@ -422,6 +433,18 @@ class DashboardController extends GetxController {
       
       // Save to DB using manual entry API
       await _saveManualEntry(type: 'hydration', value: value.toString());
+    }
+  }
+
+  Future<void> handleFastingSubmit() async {
+    final value = int.tryParse(fastingInput.value);
+    if (value != null && value >= 0 && value <= 2) {
+      // Update local state immediately (optimistic update)
+      mealsEaten.value = value;
+      fastingInput.value = '';
+      
+      // Save to DB using manual entry API
+      await _saveManualEntry(type: 'meals_eaten', value: value.toString());
     }
   }
 
@@ -520,14 +543,31 @@ class DashboardController extends GetxController {
     return (stepsProgress + sleepProgress + waterProgress + weightProgress) / 4;
   }
 
+  // String get formatLastSync {
+  //   if (healthMetrics.value.lastSyncTime == null) return 'Never';
+  //   final now = DateTime.now();
+  //   final diff = now.difference(healthMetrics.value.lastSyncTime!);
+  //   if (diff.inMinutes < 1) return 'Just now';
+  //   if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+  //   return '${diff.inHours}h ago';
+  // }
+
   String get formatLastSync {
-    if (healthMetrics.value.lastSyncTime == null) return 'Never';
+    final lastSync = healthMetrics.value.lastSyncTime;
+    if (lastSync == null) return 'Never';
+
     final now = DateTime.now();
-    final diff = now.difference(healthMetrics.value.lastSyncTime!);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
-    return '${diff.inHours}h ago';
+    final diff = now.difference(lastSync);
+
+    if (diff.inSeconds < 60) {
+      return 'Just now';
+    } else if (diff.inMinutes < 60) {
+      return '${diff.inMinutes}m ago';
+    } else {
+      return '${diff.inHours}h ago';
+    }
   }
+
 
   /// Scroll to the top of the dashboard view
   void scrollToTop() {
