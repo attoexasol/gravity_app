@@ -7,6 +7,8 @@ import '../../presentation/login/screens/login_screen.dart';
 import '../../presentation/signup/screens/signup_screen.dart';
 import '../../presentation/settings/screens/settings_page.dart';
 import '../../presentation/meal_upload/screens/meal_upload_screen.dart';
+import '../../presentation/daily_summary/screens/daily_summary_screen.dart';
+import '../../presentation/daily_summary/controllers/daily_summary_controller.dart';
 import 'app_routes.dart';
 import '../../presentation/onboarding/screens/onboarding_screen.dart';
 
@@ -79,6 +81,17 @@ class AppPages {
     GetPage(
       name: AppRoutes.mealUpload,
       page: () => const MealUploadScreen(),
+      transition: Transition.rightToLeft,
+      transitionDuration: const Duration(milliseconds: 300),
+    ),
+
+    // Daily Summary
+    GetPage(
+      name: AppRoutes.dailySummary,
+      page: () => const DailySummaryScreen(),
+      binding: BindingsBuilder(() {
+        Get.lazyPut(() => DailySummaryController());
+      }),
       transition: Transition.rightToLeft,
       transitionDuration: const Duration(milliseconds: 300),
     ),

@@ -31,7 +31,7 @@ class DashboardView extends GetView<DashboardController> {
           ProgressRingsSection(controller: controller),
           WeightLossJourneySection(controller: controller),
           SummaryReportsNavSection(
-            onTodayTap: () => print('Navigate to daily-summary'),
+            onTodayTap: () => Get.toNamed('/daily-summary'),
             onWeeklyReviewTap: () => print('Navigate to weekly-review'),
             onDailyDetailsTap: () => print('Navigate to daily-details'),
           ),
