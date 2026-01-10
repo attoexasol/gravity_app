@@ -131,24 +131,25 @@ class WeightLossJourneySection extends StatelessWidget {
                   final markerSize = 24.w; // w-6 h-6 = 24px
                   final markerRadius = markerSize / 2;
                   final barHeight = 8.h; // h-2 = 8px
-                  final progressBarWidth = availableWidth - 100.w; // Width minus label spaces
-                  final labelSpacing = 50.w; // Space for "0 kg" and "Goal: X kg" labels
-                  final textHeight = 20.h; // Approximate height for "X kg lost" text
-                  final totalHeight = markerSize + textHeight + 6.h + 1.h; // Total height needed + small buffer
+                  final labelSpacing = 70.w; // Space for "0 kg" and "Goal: X kg" labels
+                  final horizontalSpacing = 12.w; // Equal spacing between sections
+                  final progressBarWidth = availableWidth - (labelSpacing * 2) - (horizontalSpacing * 2); // Width minus label spaces and spacing
+                  final trackHeight = markerSize; // Height for track and thumb
                   
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Progress Bar Row
+                      // Progress Bar Row - All three sections on same horizontal line with equal spacing
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.center, // Center align all elements
                         children: [
-                          // "0 kg" label - positioned below left end of track
+                          // "0 kg" label - First section (correct, keep as is)
                           SizedBox(
                             width: labelSpacing,
-                            child: Padding(
-                              padding: EdgeInsets.only(top: markerRadius + 6.h), // Below track + thumb extension
+                            height: trackHeight, // Match track height for alignment
+                            child: Align(
+                              alignment: Alignment.centerLeft,
                               child: Text(
                                 "0 kg",
                                 style: ResponsiveTextStyles.textXs.copyWith(
@@ -158,142 +159,131 @@ class WeightLossJourneySection extends StatelessWidget {
                               ),
                             ),
                           ),
-                          // Progress Bar Container (relative, overflow-hidden)
+                          // Equal spacing
+                          SizedBox(width: horizontalSpacing),
+                          // Progress Bar Container - Second section (move further left)
                           Expanded(
-                            child: SizedBox(
-                              height: totalHeight, // Height to accommodate thumb + text
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  // Progress Bar Track (relative, h-2, bg-[#E5E7EB], rounded-full)
-                                  Positioned(
-                                    top: markerRadius - (barHeight / 2), // Center track vertically
-                                    left: 0,
-                                    right: 0,
-                                    child: Container(
-                                      height: barHeight,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFE5E7EB),
-                                        borderRadius: BorderRadius.circular(barHeight / 2), // rounded-full
+                            child: Transform.translate(
+                              offset: Offset(-12.w, 0), // Move further to the left
+                              child: SizedBox(
+                                height: trackHeight, // Height for track and thumb
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    // Progress Bar Track (relative, h-2, bg-[#E5E7EB], rounded-full)
+                                    Positioned(
+                                      top: markerRadius - (barHeight / 2), // Center track vertically
+                                      left: 0,
+                                      right: 0,
+                                      child: Container(
+                                        height: barHeight,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFE5E7EB),
+                                          borderRadius: BorderRadius.circular(barHeight / 2), // rounded-full
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  // Active Progress with Gradient (absolute, left-0, top-0, h-full)
-                                  Positioned(
-                                    top: markerRadius - (barHeight / 2), // Align with track
-                                    left: 0,
-                                    right: 0,
-                                    child: TweenAnimationBuilder<double>(
+                                    // Active Progress with Gradient (absolute, left-0, top-0, h-full)
+                                    Positioned(
+                                      top: markerRadius - (barHeight / 2), // Align with track
+                                      left: 0,
+                                      right: 0,
+                                      child: TweenAnimationBuilder<double>(
+                                        tween: Tween(begin: 0.0, end: progressPercentage),
+                                        duration: const Duration(milliseconds: 1000),
+                                        curve: Curves.easeOut,
+                                        builder: (context, value, child) {
+                                          return Container(
+                                            height: barHeight,
+                                            clipBehavior: Clip.hardEdge, // overflow-hidden
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(barHeight / 2),
+                                            ),
+                                            child: FractionallySizedBox(
+                                              widthFactor: (value / 100).clamp(0.0, 1.0),
+                                              alignment: Alignment.centerLeft,
+                                              child: Container(
+                                                height: barHeight,
+                                                decoration: BoxDecoration(
+                                                  gradient: const LinearGradient(
+                                                    colors: [
+                                                      Color(0xFF00B8A9), // from-[#00B8A9]
+                                                      Color(0xFF0A2342), // to-[#0A2342]
+                                                    ],
+                                                  ),
+                                                  borderRadius: BorderRadius.circular(barHeight / 2), // rounded-full
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    // Thumb/Indicator (w-6 h-6, bg-[#D4AF37], rounded-full, shadow-lg, border-4 border-white)
+                                    TweenAnimationBuilder<double>(
                                       tween: Tween(begin: 0.0, end: progressPercentage),
                                       duration: const Duration(milliseconds: 1000),
                                       curve: Curves.easeOut,
                                       builder: (context, value, child) {
-                                        return Container(
-                                          height: barHeight,
-                                          clipBehavior: Clip.hardEdge, // overflow-hidden
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(barHeight / 2),
-                                          ),
-                                          child: FractionallySizedBox(
-                                            widthFactor: (value / 100).clamp(0.0, 1.0),
-                                            alignment: Alignment.centerLeft,
+                                        final clampedValue = (value / 100).clamp(0.0, 1.0);
+                                        final progressWidth = progressBarWidth * clampedValue;
+                                        // Position thumb center at the end of progress fill
+                                        final thumbCenterX = progressWidth > 0
+                                            ? progressWidth.clamp(markerRadius, progressBarWidth - markerRadius)
+                                            : markerRadius;
+                                        
+                                        return _DelayedScaleAnimation(
+                                          delay: const Duration(milliseconds: 500),
+                                          child: Positioned(
+                                            left: thumbCenterX - markerRadius,
+                                            top: 0, // Top of container (thumb extends above/below track)
                                             child: Container(
-                                              height: barHeight,
+                                              width: markerSize, // w-6
+                                              height: markerSize, // h-6
                                               decoration: BoxDecoration(
-                                                gradient: const LinearGradient(
-                                                  colors: [
-                                                    Color(0xFF00B8A9), // from-[#00B8A9]
-                                                    Color(0xFF0A2342), // to-[#0A2342]
-                                                  ],
+                                                color: const Color(0xFFD4AF37), // bg-[#D4AF37]
+                                                shape: BoxShape.circle, // rounded-full
+                                                border: Border.all(
+                                                  color: Colors.white,
+                                                  width: 4.w, // border-4 border-white
                                                 ),
-                                                borderRadius: BorderRadius.circular(barHeight / 2), // rounded-full
+                                                boxShadow: [
+                                                  // shadow-lg
+                                                  BoxShadow(
+                                                    color: Colors.black.withOpacity(0.1),
+                                                    blurRadius: 10.r,
+                                                    offset: Offset(0, 4.h),
+                                                  ),
+                                                  BoxShadow(
+                                                    color: Colors.black.withOpacity(0.06),
+                                                    blurRadius: 4.r,
+                                                    offset: Offset(0, 2.h),
+                                                  ),
+                                                ],
                                               ),
                                             ),
                                           ),
                                         );
                                       },
                                     ),
-                                  ),
-                                  // Thumb/Indicator (w-6 h-6, bg-[#D4AF37], rounded-full, shadow-lg, border-4 border-white)
-                                  TweenAnimationBuilder<double>(
-                                    tween: Tween(begin: 0.0, end: progressPercentage),
-                                    duration: const Duration(milliseconds: 1000),
-                                    curve: Curves.easeOut,
-                                    builder: (context, value, child) {
-                                      final clampedValue = (value / 100).clamp(0.0, 1.0);
-                                      final progressWidth = progressBarWidth * clampedValue;
-                                      // Position thumb center at the end of progress fill
-                                      final thumbCenterX = progressWidth > 0
-                                          ? progressWidth.clamp(markerRadius, progressBarWidth - markerRadius)
-                                          : markerRadius;
-                                      
-                                      return _DelayedScaleAnimation(
-                                        delay: const Duration(milliseconds: 500),
-                                        child: Positioned(
-                                          left: thumbCenterX - markerRadius,
-                                          top: 0, // Top of container (thumb extends above/below track)
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment: CrossAxisAlignment.center,
-                                            children: [
-                                              Container(
-                                                width: markerSize, // w-6
-                                                height: markerSize, // h-6
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFFD4AF37), // bg-[#D4AF37]
-                                                  shape: BoxShape.circle, // rounded-full
-                                                  border: Border.all(
-                                                    color: Colors.white,
-                                                    width: 4.w, // border-4 border-white
-                                                  ),
-                                                  boxShadow: [
-                                                    // shadow-lg
-                                                    BoxShadow(
-                                                      color: Colors.black.withOpacity(0.1),
-                                                      blurRadius: 10.r,
-                                                      offset: Offset(0, 4.h),
-                                                    ),
-                                                    BoxShadow(
-                                                      color: Colors.black.withOpacity(0.06),
-                                                      blurRadius: 4.r,
-                                                      offset: Offset(0, 2.h),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              SizedBox(height: 6.h),
-                                              SizedBox(
-                                                width: 80.w,
-                                                child: Text(
-                                                  "${currentWeightLoss.toStringAsFixed(1)} kg lost",
-                                                  style: ResponsiveTextStyles.textSm.copyWith(
-                                                    fontWeight: FontWeight.bold,
-                                                    color: const Color(0xFFD4AF37),
-                                                  ),
-                                                  textAlign: TextAlign.center,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  maxLines: 1,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                          // "Goal: X kg" label - positioned below right end of track
+                          // Equal spacing
+                          SizedBox(width: horizontalSpacing),
+                          // "Goal: X kg" label - Third section (improved readability)
                           SizedBox(
                             width: labelSpacing,
-                            child: Padding(
-                              padding: EdgeInsets.only(top: markerRadius + 6.h), // Below track + thumb extension
+                            height: trackHeight, // Match track height for alignment
+                            child: Align(
+                              alignment: Alignment.centerRight,
                               child: Text(
                                 "Goal: ${totalWeightLoss.toStringAsFixed(1)} kg",
                                 style: ResponsiveTextStyles.textXs.copyWith(
-                                  color: const Color(0xFF0A2342).withOpacity(0.4),
+                                  color: const Color(0xFF0A2342).withOpacity(0.6), // Increased opacity for better readability
+                                  fontWeight: FontWeight.w500, // Slightly bolder for clarity
                                 ),
                                 textAlign: TextAlign.right,
                                 maxLines: 1,
@@ -302,6 +292,32 @@ class WeightLossJourneySection extends StatelessWidget {
                             ),
                           ),
                         ],
+                      ),
+                      // Separate section for "X kg lost" text below the progress bar
+                      SizedBox(height: 6.h),
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.0, end: progressPercentage),
+                        duration: const Duration(milliseconds: 1000),
+                        curve: Curves.easeOut,
+                        builder: (context, value, child) {
+                          final clampedValue = (value / 100).clamp(0.0, 1.0);
+                          final progressWidth = progressBarWidth * clampedValue;
+                          final thumbCenterX = progressWidth > 0
+                              ? progressWidth.clamp(markerRadius, progressBarWidth - markerRadius)
+                              : markerRadius;
+                          
+                          return Padding(
+                            padding: EdgeInsets.only(left: labelSpacing + horizontalSpacing + thumbCenterX - 40.w), // Align with thumb center
+                            child: Text(
+                              "${currentWeightLoss.toStringAsFixed(1)} kg lost",
+                              style: ResponsiveTextStyles.textSm.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFFD4AF37),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          );
+                        },
                       ),
                     ],
                   );
