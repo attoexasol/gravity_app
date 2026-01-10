@@ -7,8 +7,14 @@ import '../../presentation/login/screens/login_screen.dart';
 import '../../presentation/signup/screens/signup_screen.dart';
 import '../../presentation/settings/screens/settings_page.dart';
 import '../../presentation/meal_upload/screens/meal_upload_screen.dart';
-import '../../presentation/daily_summary/screens/daily_summary_screen.dart';
-import '../../presentation/daily_summary/controllers/daily_summary_controller.dart';
+import '../../presentation/today_views/screens/today_screen.dart';
+import '../../presentation/today_views/controllers/today_controller.dart';
+import '../../presentation/weekly_review/screens/weekly_review_screen.dart';
+import '../../presentation/weekly_review/controllers/weekly_review_controller.dart';
+import '../../presentation/daily_details/screens/daily_details_screen.dart';
+import '../../presentation/daily_details/controllers/daily_details_controller.dart';
+import '../../presentation/weight_history/screens/weight_history_screen.dart';
+import '../../presentation/weight_history/controllers/weight_history_controller.dart';
 import 'app_routes.dart';
 import '../../presentation/onboarding/screens/onboarding_screen.dart';
 
@@ -85,12 +91,46 @@ class AppPages {
       transitionDuration: const Duration(milliseconds: 300),
     ),
 
-    // Daily Summary
+    // Today Screen (Daily Summary)
     GetPage(
       name: AppRoutes.dailySummary,
-      page: () => const DailySummaryScreen(),
+      page: () => const TodayScreen(),
       binding: BindingsBuilder(() {
-        Get.lazyPut(() => DailySummaryController());
+        Get.lazyPut(() => TodayController());
+      }),
+      transition: Transition.rightToLeft,
+      transitionDuration: const Duration(milliseconds: 300),
+    ),
+
+    // Weekly Review
+    GetPage(
+      name: AppRoutes.weeklyReview,
+      page: () => const WeeklyReviewScreen(),
+      binding: BindingsBuilder(() {
+        Get.lazyPut(() => WeeklyReviewController());
+      }),
+      transition: Transition.rightToLeft,
+      transitionDuration: const Duration(milliseconds: 300),
+    ),
+
+    // Daily Details
+    GetPage(
+      name: AppRoutes.dailyDetails,
+      page: () => const DailyDetailsScreen(),
+      binding: BindingsBuilder(() {
+        final fromScreen = Get.parameters['from'] ?? 'dashboard';
+        Get.lazyPut(() => DailyDetailsController(fromScreen: fromScreen));
+      }),
+      transition: Transition.rightToLeft,
+      transitionDuration: const Duration(milliseconds: 300),
+    ),
+
+    // Weight History
+    GetPage(
+      name: AppRoutes.weightHistory,
+      page: () => const WeightHistoryScreen(),
+      binding: BindingsBuilder(() {
+        Get.lazyPut(() => WeightHistoryController());
       }),
       transition: Transition.rightToLeft,
       transitionDuration: const Duration(milliseconds: 300),

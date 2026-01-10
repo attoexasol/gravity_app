@@ -29,6 +29,9 @@ class AppRoutes {
   static const String aiCoach = '/ai-coach';
   static const String mealUpload = '/meal-upload';
   static const String dailySummary = '/daily-summary';
+  static const String weeklyReview = '/weekly-review';
+  static const String dailyDetails = '/daily-details';
+  static const String weightHistory = '/weight-history';
 
   // Add your other routes here as needed
   // Example:

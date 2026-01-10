@@ -6,6 +6,7 @@ import 'package:gravityapp/presentation/dashboard/screens/sections/weight_journe
 import 'package:gravityapp/presentation/dashboard/screens/sections/summary_reports_nav_section.dart';
 import 'package:gravityapp/presentation/dashboard/screens/sections/quick_actions_section.dart';
 import '../../../app/theme/app_text_styles.dart';
+import '../../../app/routes/app_routes.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../../main_layout/controllers/main_layout_controller.dart';
@@ -31,9 +32,9 @@ class DashboardView extends GetView<DashboardController> {
           ProgressRingsSection(controller: controller),
           WeightLossJourneySection(controller: controller),
           SummaryReportsNavSection(
-            onTodayTap: () => Get.toNamed('/daily-summary'),
-            onWeeklyReviewTap: () => print('Navigate to weekly-review'),
-            onDailyDetailsTap: () => print('Navigate to daily-details'),
+            onTodayTap: () => Get.toNamed(AppRoutes.dailySummary),
+            onWeeklyReviewTap: () => Get.toNamed(AppRoutes.weeklyReview),
+            onDailyDetailsTap: () => Get.toNamed('${AppRoutes.dailyDetails}?from=dashboard'),
           ),
           QuickActionsSection(controller: controller),
           _buildCommunityPreview(),
