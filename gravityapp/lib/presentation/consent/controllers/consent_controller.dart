@@ -92,63 +92,43 @@ class ConsentController extends GetxController {
     // Get.offAllNamed(AppRoutes.login);
   }
 
-  /// Continue to app
+  /// Continue to app (or go back to onboarding)
   Future<void> continueToApp() async {
     try {
       isLoading.value = true;
 
       // Get token from storage
       final token = PreferencesService.getAuthToken();
-      if (token == null || token.isEmpty) {
-        _safeSnackbar(
-          title: 'Error',
-          message: 'Authentication token not found. Please login again.',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-          duration: const Duration(seconds: 4),
+      if (token != null && token.isNotEmpty) {
+        // Call consent API if token is available
+        final response = await _consentRepository.createConsent(
+          token: token,
+          isAiFeatures: aiFeatures.value ? 1 : 0,
+          isDataPreferences: dataPreferences.value ? 1 : 0,
+          isDeleteMyData: 0, // Default to 0, deletion is handled separately
         );
-        isLoading.value = false;
-        return;
-      }
 
-      // Call consent API
-      final response = await _consentRepository.createConsent(
-        token: token,
-        isAiFeatures: aiFeatures.value ? 1 : 0,
-        isDataPreferences: dataPreferences.value ? 1 : 0,
-        isDeleteMyData: 0, // Default to 0, deletion is handled separately
-      );
-
-      if (response.isSuccess) {
-        // Save consent preferences locally
-        saveConsents();
-
-        // Navigate to goal settings screen (skip snackbar since we're navigating)
-        // The next screen will show success if needed
-        await Future.delayed(const Duration(milliseconds: 300));
-        Get.offAllNamed('/goal-settings');
+        if (response.isSuccess) {
+          // Save consent preferences locally
+          saveConsents();
+        } else {
+          // Still save locally even if API call fails
+          saveConsents();
+          debugPrint('⚠️ Consent API call failed, but preferences saved locally');
+        }
       } else {
-        // Show error message (we're staying on this screen)
-        _safeSnackbar(
-          title: 'Error',
-          message: response.message,
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-          duration: const Duration(seconds: 4),
-        );
+        // No token available (e.g., during onboarding), just save locally
+        saveConsents();
       }
+
+      // Navigate back to onboarding screen
+      await Future.delayed(const Duration(milliseconds: 300));
+      Get.back();
     } catch (e) {
       debugPrint('❌ Continue to App Error: $e');
-      _safeSnackbar(
-        title: 'Error',
-        message: 'An unexpected error occurred. Please try again.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-        duration: const Duration(seconds: 4),
-      );
+      // Still try to save locally and go back
+      saveConsents();
+      Get.back();
     } finally {
       isLoading.value = false;
     }

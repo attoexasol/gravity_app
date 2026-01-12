@@ -38,8 +38,11 @@ class LoginController extends GetxController {
   void onInit() {
     super.onInit();
     // Initialize controllers in onInit to ensure they're created when controller is initialized
-    emailController = TextEditingController(text: "rajibduet02@gmail.com");
-    passwordController = TextEditingController(text: "Gravity@024017");
+    // emailController = TextEditingController(text: "rajibduet02@gmail.com");
+    // passwordController = TextEditingController(text: "Gravity@024017");
+
+    emailController = TextEditingController(text: "");
+    passwordController = TextEditingController(text: "");
   }
 
   @override
@@ -156,6 +159,14 @@ class LoginController extends GetxController {
       if (isClosed) return;
 
       if (response.isSuccess && token != null) {
+        // Mark onboarding as completed when user successfully logs in
+        // This ensures onboarding is only shown once, on first launch
+        await PreferencesService.setOnboardingCompleted(true);
+        
+        // IMPORTANT: Do NOT mark first-time setup as completed here
+        // First-time setup should only be marked when goals are saved in goal_settings_controller
+        // This ensures: Sign up → Login → Goal Settings (first time) → Dashboard (subsequent)
+        
         // Save token from root level
         await PreferencesService.saveAuthToken(token);
 
@@ -272,6 +283,13 @@ class LoginController extends GetxController {
       if (isClosed) return;
 
       if (result['success'] == true) {
+        // Mark onboarding as completed when user successfully logs in with Google
+        await PreferencesService.setOnboardingCompleted(true);
+        
+        // IMPORTANT: Do NOT mark first-time setup as completed here
+        // First-time setup should only be marked when goals are saved in goal_settings_controller
+        // This ensures: Google Sign up → Google Login → Goal Settings (first time) → Dashboard (subsequent)
+        
         final token = result['token'] as String;
         await _checkUserDataAndNavigate(token);
       } else {
@@ -339,52 +357,49 @@ class LoginController extends GetxController {
   }
 
   /// Check consent and goals data availability and navigate accordingly
+  /// Implements conditional navigation:
+  /// - First-time login (first-time setup not completed) → Goal Settings (skip consent)
+  /// - Subsequent logins (first-time setup completed) → Dashboard directly (skip consent)
   Future<void> _checkUserDataAndNavigate(String token) async {
     try {
       // Check if controller is still mounted
       if (isClosed) return;
 
-      // Call both APIs in parallel
-      final consentResponse = await _consentRepository.getSingleConsent(
-        token: token,
-      );
-      final goalsResponse = await _goalsRepository.getSingleGoal(token: token);
+      // Check if first-time setup has been completed
+      final isFirstTimeSetupCompleted = PreferencesService.isFirstTimeSetupCompleted();
+      
+      debugPrint('📊 First-time setup completed: $isFirstTimeSetupCompleted');
 
-      // Check if controller is still mounted after async calls
-      if (isClosed) return;
+      // If first-time setup is not completed, navigate to Goal Settings (skip consent)
+      if (!isFirstTimeSetupCompleted) {
+        debugPrint('✅ First-time login → Navigating to Goal Settings (skipping consent)');
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!isClosed) {
+          Get.offAllNamed(AppRoutes.goalSettings);
+        }
+        return;
+      }
 
-      final hasConsent =
-          consentResponse.isSuccess && consentResponse.data != null;
-      final hasGoals = goalsResponse.isSuccess && goalsResponse.data != null;
-
-      debugPrint('📊 Consent available: $hasConsent');
-      debugPrint('📊 Goals available: $hasGoals');
-
-      // Navigate based on data availability
+      // For subsequent logins, navigate directly to Dashboard (skip consent check)
+      debugPrint('✅ Subsequent login → Navigating directly to Dashboard');
       await Future.delayed(const Duration(milliseconds: 500));
-
-      if (hasConsent && hasGoals) {
-        // Both found → Dashboard
-        debugPrint('✅ Both consent and goals found → Navigating to Dashboard');
+      if (!isClosed) {
         Get.offAllNamed(AppRoutes.home);
-      } else if (hasConsent && !hasGoals) {
-        // Only Consent → Goal Settings → Dashboard
-        debugPrint('✅ Only consent found → Navigating to Goal Settings');
-        Get.offAllNamed(AppRoutes.goalSettings);
-      } else if (!hasConsent && hasGoals) {
-        // Only Goal Settings → Consent → Dashboard
-        debugPrint('✅ Only goals found → Navigating to Consent');
-        Get.offAllNamed(AppRoutes.consent);
-      } else {
-        // Neither → Consent → Goal Settings → Dashboard (current flow)
-        debugPrint('✅ Neither found → Navigating to Consent');
-        Get.offAllNamed(AppRoutes.consent);
       }
     } catch (e) {
       debugPrint('❌ Error checking user data: $e');
-      // On error, default to consent screen
+      // On error, check first-time setup status
       if (!isClosed) {
-        Get.offAllNamed(AppRoutes.consent);
+        final isFirstTimeSetupCompleted = PreferencesService.isFirstTimeSetupCompleted();
+        if (!isFirstTimeSetupCompleted) {
+          // Default to goal settings for first-time users
+          debugPrint('⚠️ Error occurred, defaulting to Goal Settings for first-time user');
+          Get.offAllNamed(AppRoutes.goalSettings);
+        } else {
+          // Default to dashboard for subsequent logins
+          debugPrint('⚠️ Error occurred, defaulting to Dashboard for subsequent login');
+          Get.offAllNamed(AppRoutes.home);
+        }
       }
     }
   }

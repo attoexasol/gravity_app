@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 import 'package:gravityapp/data/model/onboarding_slide_model.dart';
+import '../../../core/services/preferences_service.dart';
 
 class OnboardingController extends GetxController {
   // Observable for current slide index
@@ -50,7 +51,7 @@ class OnboardingController extends GetxController {
   }
 
   /// Navigate to next slide or complete onboarding
-  void handleNext() {
+  Future<void> handleNext() async {
     if (currentSlide.value < slides.length - 1) {
       // Go to next slide
       pageController.animateToPage(
@@ -60,22 +61,22 @@ class OnboardingController extends GetxController {
       );
     } else {
       // Complete onboarding
-      completeOnboarding();
+      await completeOnboarding();
     }
   }
 
   /// Complete onboarding and navigate to main app
-  void completeOnboarding() {
-    // TODO: Save onboarding completion status to local storage
-    // Example: await PreferencesService.setOnboardingCompleted(true);
+  Future<void> completeOnboarding() async {
+    // Save onboarding completion status to local storage
+    await PreferencesService.setOnboardingCompleted(true);
 
     // Navigate to login screen
     Get.offAllNamed('/login');
   }
 
   /// Skip onboarding
-  void skipOnboarding() {
-    completeOnboarding();
+  Future<void> skipOnboarding() async {
+    await completeOnboarding();
   }
 
   /// Get button text based on current slide
@@ -86,5 +87,10 @@ class OnboardingController extends GetxController {
   /// Check if current slide is the last one
   bool get isLastSlide {
     return currentSlide.value == slides.length - 1;
+  }
+
+  /// Navigate to Privacy & Data Control screen (consent screen)
+  void navigateToPrivacyDetails() {
+    Get.toNamed('/consent');
   }
 }

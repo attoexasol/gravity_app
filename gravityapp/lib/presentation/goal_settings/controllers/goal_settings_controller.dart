@@ -226,6 +226,12 @@ class GoalSettingsController extends GetxController {
       );
 
       if (response.isSuccess) {
+        // Mark first-time setup as completed when goals are successfully saved
+        // This is the ONLY place where first-time setup should be marked as completed
+        // Flow: Sign up → Login → Goal Settings (first time, this method) → Dashboard (subsequent)
+        await PreferencesService.setFirstTimeSetupCompleted(true);
+        debugPrint('✅ First-time setup marked as completed');
+        
         // Navigate to dashboard after successful API call (skip snackbar since we're navigating)
         await Future.delayed(const Duration(milliseconds: 300));
         Get.offAllNamed(AppRoutes.home);

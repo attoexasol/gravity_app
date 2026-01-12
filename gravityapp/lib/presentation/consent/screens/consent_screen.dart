@@ -403,7 +403,7 @@ class ConsentScreen extends GetView<ConsentController> {
                         ),
                       )
                     : Text(
-                        'Continue to App',
+                        'Done',
                         style: AppTextStyles.textBase.copyWith(
                           fontWeight: FontWeight.w600,
                           color: Colors.white,

@@ -100,13 +100,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  /// Get initial route based on authentication state
-  /// Note: With session-based auth, this will always return onboarding/login
-  /// since token is cleared on startup
+  /// Get initial route based on authentication and onboarding state
+  /// Note: With session-based auth, token is cleared on startup
+  /// Onboarding should only be shown once - on first launch
   String _getInitialRoute() {
-    // With session-based authentication, token is always cleared on startup
-    // So we always show onboarding/login
-    return AppRoutes.onboarding;
+    // Check if onboarding has been completed
+    final isOnboardingCompleted = PreferencesService.isOnboardingCompleted();
+    
+    if (isOnboardingCompleted) {
+      // Onboarding completed - navigate directly to login
+      return AppRoutes.login;
+    } else {
+      // First time user - show onboarding
+      return AppRoutes.onboarding;
+    }
   }
 
   @override

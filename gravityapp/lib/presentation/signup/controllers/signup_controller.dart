@@ -5,6 +5,7 @@ import '../../../data/repositories/consent_repository.dart';
 import '../../../data/repositories/goals_repository.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../core/services/google_auth_service.dart';
+import '../../../core/services/preferences_service.dart';
 
 enum UserType { customer, coach }
 
@@ -190,6 +191,14 @@ class SignupController extends GetxController {
 
       // Handle response
       if (response.isSuccess && response.data != null) {
+        // Mark onboarding as completed when user successfully registers
+        // This ensures onboarding is only shown once, on first launch
+        await PreferencesService.setOnboardingCompleted(true);
+        
+        // IMPORTANT: Do NOT mark first-time setup as completed here
+        // First-time setup should only be marked when goals are saved
+        // This ensures: Sign up → Login → Goal Settings (first time) → Dashboard (subsequent)
+        
         // Success - Set success state and show message
         FocusManager.instance.primaryFocus?.unfocus();
         isSignupSuccess.value = true;
@@ -243,6 +252,9 @@ class SignupController extends GetxController {
       if (isClosed) return;
 
       if (result['success'] == true) {
+        // Mark onboarding as completed when user successfully signs up with Google
+        await PreferencesService.setOnboardingCompleted(true);
+        
         final token = result['token'] as String;
         await _checkUserDataAndNavigate(token);
       } else {
@@ -270,43 +282,46 @@ class SignupController extends GetxController {
   }
 
   /// Check consent and goals data availability and navigate accordingly
+  /// For signup (Google signup that logs in directly), use first-time setup logic
+  /// First-time users → Goal Settings (skip consent), Subsequent → Dashboard directly
   Future<void> _checkUserDataAndNavigate(String token) async {
     try {
       if (isClosed) return;
 
-      final consentResponse = await _consentRepository.getSingleConsent(
-        token: token,
-      );
-      final goalsResponse = await _goalsRepository.getSingleGoal(token: token);
+      // Check if first-time setup has been completed
+      final isFirstTimeSetupCompleted = PreferencesService.isFirstTimeSetupCompleted();
+      
+      debugPrint('📊 First-time setup completed: $isFirstTimeSetupCompleted');
 
-      if (isClosed) return;
+      // If first-time setup is not completed, navigate to Goal Settings (skip consent)
+      if (!isFirstTimeSetupCompleted) {
+        debugPrint('✅ First-time signup → Navigating to Goal Settings (skipping consent)');
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!isClosed) {
+          Get.offAllNamed(AppRoutes.goalSettings);
+        }
+        return;
+      }
 
-      final hasConsent =
-          consentResponse.isSuccess && consentResponse.data != null;
-      final hasGoals = goalsResponse.isSuccess && goalsResponse.data != null;
-
-      debugPrint('📊 Consent available: $hasConsent');
-      debugPrint('📊 Goals available: $hasGoals');
-
+      // For subsequent logins, navigate directly to Dashboard (skip consent check)
+      debugPrint('✅ Subsequent login → Navigating directly to Dashboard');
       await Future.delayed(const Duration(milliseconds: 500));
-
-      if (hasConsent && hasGoals) {
-        debugPrint('✅ Both consent and goals found → Navigating to Dashboard');
+      if (!isClosed) {
         Get.offAllNamed(AppRoutes.home);
-      } else if (hasConsent && !hasGoals) {
-        debugPrint('✅ Only consent found → Navigating to Goal Settings');
-        Get.offAllNamed(AppRoutes.goalSettings);
-      } else if (!hasConsent && hasGoals) {
-        debugPrint('✅ Only goals found → Navigating to Consent');
-        Get.offAllNamed(AppRoutes.consent);
-      } else {
-        debugPrint('✅ Neither found → Navigating to Consent');
-        Get.offAllNamed(AppRoutes.consent);
       }
     } catch (e) {
       debugPrint('❌ Error checking user data: $e');
       if (!isClosed) {
-        Get.offAllNamed(AppRoutes.consent);
+        final isFirstTimeSetupCompleted = PreferencesService.isFirstTimeSetupCompleted();
+        if (!isFirstTimeSetupCompleted) {
+          // Default to goal settings for first-time users
+          debugPrint('⚠️ Error occurred, defaulting to Goal Settings for first-time user');
+          Get.offAllNamed(AppRoutes.goalSettings);
+        } else {
+          // Default to dashboard for subsequent logins
+          debugPrint('⚠️ Error occurred, defaulting to Dashboard for subsequent login');
+          Get.offAllNamed(AppRoutes.home);
+        }
       }
     }
   }

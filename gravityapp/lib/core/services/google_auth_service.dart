@@ -64,6 +64,10 @@ class GoogleAuthService {
       final userId = result['user_id'] as int?;
 
       if (response.isSuccess && token != null) {
+        // IMPORTANT: Do NOT mark first-time setup as completed here
+        // First-time setup should only be marked when goals are saved in goal_settings_controller
+        // This ensures: Google Sign up → Google Login → Goal Settings (first time) → Dashboard (subsequent)
+        
         await PreferencesService.saveAuthToken(token);
         await PreferencesService.saveUserEmail(user.email ?? '');
         await PreferencesService.saveUserName(user.displayName ?? '');

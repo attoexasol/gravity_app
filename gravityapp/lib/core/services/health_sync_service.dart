@@ -129,22 +129,29 @@ class HealthSyncService {
       _health = Health();
 
       // Request permissions - use platform-specific data types
-      final types = (!kIsWeb && Platform.isAndroid)
+      // For Android, request essential permissions first, then optionally sleep permissions
+      // This prevents the entire authorization from failing if sleep types aren't supported
+      final essentialTypes = (!kIsWeb && Platform.isAndroid)
           ? [
-              // Google Fit supported types
+              // Health Connect/Google Fit essential types (known to work)
               HealthDataType.STEPS,
               HealthDataType.WEIGHT,
               HealthDataType.WATER,
-              // Note: Sleep types are not well supported in Google Fit
             ]
           : [
-              // HealthKit supported types
+              // HealthKit supported types (all at once for iOS)
               HealthDataType.STEPS,
               HealthDataType.SLEEP_IN_BED,
               HealthDataType.SLEEP_ASLEEP,
               HealthDataType.WEIGHT,
               HealthDataType.WATER,
             ];
+
+      // Sleep types for Android (requested separately as optional)
+      final sleepTypes = [
+        HealthDataType.SLEEP_IN_BED,
+        HealthDataType.SLEEP_ASLEEP,
+      ];
 
       print('🔵 Requesting $platformName permissions...');
 
@@ -158,15 +165,15 @@ class HealthSyncService {
           );
           print('🔵 This should open the permission dialog...');
           print(
-            '🔵 Requesting permissions for: ${types.map((t) => t.toString()).join(", ")}',
+            '🔵 Requesting essential permissions: ${essentialTypes.map((t) => t.toString()).join(", ")}',
           );
 
-          // Try to check if Google Fit/Health Connect is available by attempting authorization
+          // First, request essential permissions (steps, weight, water)
           // This should trigger the permission dialog
           // Note: The health package will show the Health Connect permission dialog automatically
           // if Health Connect is installed and properly configured
-          granted = await _health!.requestAuthorization(types);
-          print('🔵 Permission granted: $granted');
+          granted = await _health!.requestAuthorization(essentialTypes);
+          print('🔵 Essential permissions granted: $granted');
 
           if (!granted) {
             print(
@@ -190,6 +197,19 @@ class HealthSyncService {
             _updateMetrics(SyncStatus.error, platform: HealthPlatform.google);
             return false;
           }
+
+          // If essential permissions granted, try to request sleep permissions (optional)
+          try {
+            print('🔵 Requesting optional sleep permissions...');
+            final sleepGranted = await _health!.requestAuthorization(sleepTypes);
+            print('🔵 Sleep permissions granted: $sleepGranted');
+            if (!sleepGranted) {
+              print('⚠️ Sleep permissions not available - will continue without sleep data');
+            }
+          } catch (e) {
+            print('⚠️ Could not request sleep permissions: $e - will continue without sleep data');
+            // Don't fail the entire initialization if sleep permissions fail
+          }
         } catch (e, stackTrace) {
           print(
             '❌ Error requesting Health Connect/Google Fit authorization: $e',
@@ -211,7 +231,8 @@ class HealthSyncService {
           return false;
         }
       } else {
-        granted = await _health!.requestAuthorization(types);
+        // For iOS, request all permissions at once
+        granted = await _health!.requestAuthorization(essentialTypes);
         print('🔵 Permission granted: $granted');
 
         if (!granted) {
@@ -293,6 +314,7 @@ class HealthSyncService {
 
     try {
       final now = DateTime.now();
+      // Calculate today's start in local time (midnight today)
       final todayStart = DateTime(now.year, now.month, now.day);
       // For sleep, check from yesterday evening (6 PM yesterday) to now
       final yesterdayEvening = todayStart.subtract(const Duration(hours: 6));
@@ -313,7 +335,14 @@ class HealthSyncService {
               )
               .reduce((a, b) => a + b);
         }
-        print('📊 Today\'s steps: $steps');
+        if (steps > 0) {
+          print('📊 Today\'s steps: $steps (from ${stepsData.length} data points)');
+        } else if (stepsData.isEmpty) {
+          print('⚠️ No steps data found in health platform for today');
+          print('   Query range: ${todayStart.toString()} to ${now.toString()}');
+        } else {
+          print('📊 Today\'s steps: $steps (data points found but sum is 0)');
+        }
       } catch (e) {
         print('⚠️ Error fetching steps: $e');
       }
@@ -321,46 +350,58 @@ class HealthSyncService {
       // Fetch Sleep Hours (from yesterday evening to now to catch overnight sleep)
       double sleepHours = 0.0;
       try {
-        if (Platform.isAndroid) {
-          // Google Fit doesn't support sleep data types, skip for Android
-          print('⚠️ Sleep tracking not available in Google Fit');
-        } else {
-          // HealthKit sleep tracking
-          final sleepTypes = [
-            HealthDataType.SLEEP_IN_BED,
-            HealthDataType.SLEEP_ASLEEP,
-            HealthDataType.SLEEP_AWAKE,
-          ];
-          final sleepData = await _health!.getHealthDataFromTypes(
-            types: sleepTypes,
-            startTime: yesterdayEvening,
-            endTime: now,
-          );
-          if (sleepData.isNotEmpty) {
-            // Calculate total sleep in hours for today
-            // Group by sleep sessions and calculate total
-            for (var data in sleepData) {
-              final start = data.dateFrom;
-              final end = data.dateTo;
-              // Only count sleep that ended today or is still ongoing
-              if (end.isAfter(todayStart) || end.isAtSameMomentAs(todayStart)) {
-                final sleepStart = start.isBefore(todayStart)
-                    ? todayStart
-                    : start;
-                final duration = end.difference(sleepStart).inMinutes / 60.0;
-                // Only count actual sleep (not awake time)
-                if (data.type != HealthDataType.SLEEP_AWAKE) {
-                  sleepHours += duration;
-                }
+        // Health Connect (Android) and HealthKit (iOS) both support sleep data
+        final sleepTypes = [
+          HealthDataType.SLEEP_IN_BED,
+          HealthDataType.SLEEP_ASLEEP,
+          HealthDataType.SLEEP_AWAKE,
+        ];
+        print('🔵 Querying sleep data from ${Platform.isIOS ? 'HealthKit' : 'Health Connect'}...');
+        print('   Time range: ${yesterdayEvening.toString()} to ${now.toString()}');
+        // Query sleep data (health package handles timezone conversion)
+        final sleepData = await _health!.getHealthDataFromTypes(
+          types: sleepTypes,
+          startTime: yesterdayEvening,
+          endTime: now,
+        );
+        print('🔵 Sleep data query returned ${sleepData.length} data points');
+        
+        if (sleepData.isNotEmpty) {
+          // Calculate total sleep in hours for today
+          // Group by sleep sessions and calculate total
+          for (var data in sleepData) {
+            final start = data.dateFrom;
+            final end = data.dateTo;
+            final duration = end.difference(start).inMinutes / 60.0;
+            print('   - Sleep entry: ${data.type.toString()} from ${start.toString()} to ${end.toString()} (${duration.toStringAsFixed(2)}h)');
+            
+            // Only count sleep that ended today or is still ongoing
+            if (end.isAfter(todayStart) || end.isAtSameMomentAs(todayStart)) {
+              final sleepStart = start.isBefore(todayStart)
+                  ? todayStart
+                  : start;
+              final sleepDuration = end.difference(sleepStart).inMinutes / 60.0;
+              // Only count actual sleep (not awake time)
+              if (data.type != HealthDataType.SLEEP_AWAKE) {
+                sleepHours += sleepDuration;
+                print('     ✓ Counted ${sleepDuration.toStringAsFixed(2)}h (total: ${sleepHours.toStringAsFixed(2)}h)');
+              } else {
+                print('     ✗ Skipped (awake time)');
               }
+            } else {
+              print('     ✗ Skipped (ended before today)');
             }
-          } else {
-            print('⚠️ No sleep data found in HealthKit');
           }
+          print('📊 Today\'s sleep: ${sleepHours.toStringAsFixed(1)}h');
+        } else {
+          final platformName = kIsWeb ? 'Web' : (Platform.isIOS ? 'HealthKit' : 'Health Connect');
+          print('⚠️ No sleep data found in $platformName');
+          print('   💡 Make sure sleep is tracked in Google Fit/Health Connect app');
         }
-        print('📊 Today\'s sleep: ${sleepHours.toStringAsFixed(1)}h');
-      } catch (e) {
+      } catch (e, stackTrace) {
         print('⚠️ Error fetching sleep: $e');
+        print('   Stack trace: $stackTrace');
+        // Don't fail the entire sync if sleep fetch fails
       }
 
       // Fetch Weight (most recent from last 30 days for better chance of finding data)
@@ -391,37 +432,54 @@ class HealthSyncService {
       // Fetch Water Intake (today only)
       double? waterIntake;
       try {
+        // Query water intake for today
+        print('🔵 Querying water intake data from ${Platform.isIOS ? 'HealthKit' : 'Health Connect'}...');
+        print('   Time range: ${todayStart.toString()} to ${now.toString()}');
         final waterData = await _health!.getHealthDataFromTypes(
           types: [HealthDataType.WATER],
           startTime: todayStart,
           endTime: now,
         );
+        print('🔵 Water data query returned ${waterData.length} data points');
+        
         if (waterData.isNotEmpty) {
-          waterIntake = waterData
-              .map(
-                (data) =>
-                    (data.value as NumericHealthValue).numericValue.toDouble(),
-              )
-              .reduce((a, b) => a + b);
-          print('📊 Today\'s water intake: $waterIntake L');
+          // Sum all water intake values
+          // Note: Health Connect/Google Fit may return values in different units
+          // The health package should handle unit conversion, but we'll log the raw values
+          double totalWater = 0.0;
+          for (var data in waterData) {
+            final value = (data.value as NumericHealthValue).numericValue.toDouble();
+            print('   - Water entry: $value (from ${data.dateFrom} to ${data.dateTo})');
+            totalWater += value;
+          }
+          waterIntake = totalWater;
+          print('📊 Today\'s water intake: $waterIntake L (from ${waterData.length} entries)');
         } else {
-          final platformName = kIsWeb ? 'Web' : (Platform.isIOS ? 'HealthKit' : 'Google Fit');
-          print('⚠️ No water intake data found in $platformName for today');
+          // Set to 0.0 to indicate we checked but found no data (vs null which means not checked)
+          waterIntake = 0.0;
+          final platformName = kIsWeb ? 'Web' : (Platform.isIOS ? 'HealthKit' : 'Health Connect');
+          print('⚠️ No water intake data found in $platformName for today (set to 0.0)');
+          print('   💡 Make sure water intake is logged in Google Fit/Health Connect app');
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
         print('⚠️ Error fetching water: $e');
+        print('   Stack trace: $stackTrace');
+        // On error, set to null to indicate we couldn't fetch (vs 0.0 which means no data found)
+        waterIntake = null;
       }
 
       // Update metrics with fetched data
+      // If waterIntake is null (error fetching), set to 0.0 to indicate we checked but couldn't fetch
+      final finalWaterIntake = waterIntake ?? 0.0;
       print(
-        '✅ Health data synced: Steps=$steps, Sleep=${sleepHours}h, Weight=$weight kg, Water=$waterIntake L',
+        '✅ Health data synced: Steps=$steps, Sleep=${sleepHours.toStringAsFixed(1)}h, Weight=$weight kg, Water=$finalWaterIntake L',
       );
       _updateMetrics(
         SyncStatus.success,
         steps: steps,
         sleepHours: sleepHours,
         weight: weight,
-        waterIntake: waterIntake,
+        waterIntake: finalWaterIntake,
       );
       // Record successful sync
       _recordSyncActivity(

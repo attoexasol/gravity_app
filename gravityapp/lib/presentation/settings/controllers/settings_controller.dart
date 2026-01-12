@@ -1855,8 +1855,9 @@ Future<void> saveProfileImage() async {
         final message = response['message'] as String? ?? '';
 
         if (status) {
-          // Success - clear all local storage
-          await PreferencesService.clearAll();
+          // Success - clear all local storage including first-time setup status
+          // This ensures that after account deletion, re-sign-up will be treated as first-time
+          await PreferencesService.clearAllForAccountDeletion();
 
           // Show success snackbar
           _safeSnackbar(

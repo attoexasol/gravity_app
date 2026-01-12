@@ -80,6 +80,9 @@ class OnboardingScreen extends GetView<OnboardingController> {
                         color: Colors.white.withOpacity(0.6),
                       ),
                     ),
+
+                    // Privacy & Data Control Section (only on last slide)
+                    Obx(() => controller.isLastSlide ? _buildPrivacySection() : const SizedBox.shrink()),
                   ],
                 ),
               ),
@@ -140,6 +143,64 @@ class OnboardingScreen extends GetView<OnboardingController> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPrivacySection() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        children: [
+          // Section Title
+          Text(
+            'Privacy & Data Control',
+            textAlign: TextAlign.center,
+            style: ResponsiveTextStyles.textBase.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          
+          // Description
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Your privacy matters. We ensure your data is encrypted, stored securely, and you have full control over your personal wellness information.',
+              textAlign: TextAlign.center,
+              style: ResponsiveTextStyles.textSm.copyWith(
+                color: Colors.white.withOpacity(0.8),
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          
+          // Learn More Link
+          GestureDetector(
+            onTap: () => controller.navigateToPrivacyDetails(),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Learn more',
+                  style: ResponsiveTextStyles.textSm.copyWith(
+                    color: const Color(0xFFD4AF37),
+                    fontWeight: FontWeight.w500,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.arrow_forward,
+                  color: const Color(0xFFD4AF37),
+                  size: 16,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

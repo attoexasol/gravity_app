@@ -4,6 +4,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:get/get.dart';
+import 'package:flutter/scheduler.dart';
+import '../../messages/controllers/messages_controllers.dart';
 
 import '../../../core/services/health_sync_service.dart';
 import '../../../core/services/preferences_service.dart';
@@ -60,6 +62,10 @@ class DashboardController extends GetxController {
   // Time ticker for forcing relative time updates
   final timeTicker = 0.obs;
   Timer? _timeTickerTimer;
+  Timer? _healthSyncTimer;
+  
+  // App lifecycle observer for syncing when app resumes
+  late AppLifecycleObserver _lifecycleObserver;
 
   @override
   void onInit() {
@@ -71,8 +77,12 @@ class DashboardController extends GetxController {
     
     // Subscribe to health service updates BEFORE initializing
     _healthService.subscribe((metrics) {
+      // Always update healthMetrics to trigger UI rebuild
       healthMetrics.value = metrics;
       isSyncing.value = metrics.syncStatus == SyncStatus.syncing;
+      
+      // Debug: Log when metrics update
+      debugPrint('🔄 Health metrics updated: Steps=${metrics.steps}, Sleep=${metrics.sleepHours}, Water=${metrics.waterIntake}, Status=${metrics.syncStatus}');
       
       // Update weight from HealthKit if available
       if (metrics.weight != null && metrics.weight! > 0) {
@@ -102,10 +112,17 @@ class DashboardController extends GetxController {
         }
       }
       
-      // Update water intake from HealthKit if available
-      // Note: If waterIntake is 0 or null, that's correct - it means no water logged today in HealthKit
-      if (metrics.waterIntake != null) {
+      // Update water intake from HealthKit/Google Fit if available
+      // Always update when sync is successful, even if value is 0 (means no water logged today)
+      if (metrics.syncStatus == SyncStatus.success && metrics.platform != HealthPlatform.none) {
+        // If sync was successful, always use the synced value (even if 0 or null)
+        // null means error fetching, 0.0 means no data found
+        waterIntake.value = metrics.waterIntake ?? 0.0;
+        debugPrint('💧 Updated water intake from health sync: ${waterIntake.value} L (sync status: ${metrics.syncStatus}, platform: ${metrics.platform})');
+      } else if (metrics.waterIntake != null) {
+        // Update if we have any value (including 0) even if sync wasn't fully successful
         waterIntake.value = metrics.waterIntake!;
+        debugPrint('💧 Updated water intake from metrics: ${waterIntake.value} L');
       }
 
       // When sync finishes successfully, save to DB
@@ -134,6 +151,50 @@ class DashboardController extends GetxController {
     _timeTickerTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       timeTicker.value++;
     });
+    
+    // Periodic health data sync every 2 minutes to refresh data after walking
+    _healthSyncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+      final currentMetrics = _healthService.getMetrics();
+      // Only sync if not already syncing and health service is initialized
+      if (currentMetrics.syncStatus != SyncStatus.syncing && 
+          (currentMetrics.platform == HealthPlatform.apple || 
+           currentMetrics.platform == HealthPlatform.google)) {
+        debugPrint('🔄 Periodic health sync triggered');
+        _healthService.syncHealthData();
+      }
+    });
+    
+    // Setup lifecycle observer to sync when app resumes
+    _setupLifecycleObserver();
+  }
+  
+  /// Setup app lifecycle observer to sync health data when app resumes
+  void _setupLifecycleObserver() {
+    _lifecycleObserver = AppLifecycleObserver(
+      onPaused: () {
+        debugPrint('📱 Dashboard: App paused');
+      },
+      onResumed: () {
+        debugPrint('📱 Dashboard: App resumed - syncing health data');
+        final currentMetrics = _healthService.getMetrics();
+        // Sync if health service is initialized and not already syncing
+        if (currentMetrics.syncStatus != SyncStatus.syncing && 
+            (currentMetrics.platform == HealthPlatform.apple || 
+             currentMetrics.platform == HealthPlatform.google)) {
+          _healthService.syncHealthData();
+        }
+      },
+    );
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
+  }
+  
+  @override
+  void onClose() {
+    _timeTickerTimer?.cancel();
+    _healthSyncTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
+    dashboardScrollController.dispose();
+    super.onClose();
   }
 
   /// Get today's date string in yyyy-MM-dd format
@@ -174,17 +235,40 @@ class DashboardController extends GetxController {
           todayEntry.value = todayEntryFound;
           todayEntryId.value = todayEntryFound.id;
 
-          // Populate UI values from DB entry (DB is source of truth when available)
+          // Populate UI values from DB entry with priority logic
+          // Priority: Health Sync (if successful) > Manual DB Entry > Default
           final oldMetrics = healthMetrics.value;
+          final isHealthSyncSuccessful = oldMetrics.syncStatus == SyncStatus.success;
+          final isDbEntryManual = todayEntryFound.dataSource == 'manual';
+          final hasHealthSyncPlatform = oldMetrics.platform == HealthPlatform.apple || 
+                                         oldMetrics.platform == HealthPlatform.google;
+          
+          // Determine final values with priority
+          // Priority: If health sync was successful, always use health sync data (even if 0)
+          // This ensures we show the most up-to-date data from Google Fit/Apple Health
+          final finalSteps = (isHealthSyncSuccessful && hasHealthSyncPlatform)
+              ? oldMetrics.steps  // Health sync wins (most recent, even if 0)
+              : (todayEntryFound.steps ?? oldMetrics.steps);  // Use DB or fallback
+          
+          final finalSleep = (isHealthSyncSuccessful && hasHealthSyncPlatform)
+              ? oldMetrics.sleepHours  // Health sync wins (most recent, even if 0)
+              : (todayEntryFound.sleepHours ?? oldMetrics.sleepHours);  // Use DB or fallback
+          
+          final finalWater = (isHealthSyncSuccessful && hasHealthSyncPlatform)
+              ? (oldMetrics.waterIntake ?? 0.0)  // Health sync wins (most recent, even if 0 or null)
+              : (todayEntryFound.hydrationLiters ?? oldMetrics.waterIntake ?? 0.0);  // Use DB or fallback
+          
           healthMetrics.value = HealthMetrics(
-            steps: todayEntryFound.steps ?? oldMetrics.steps,
-            sleepHours: todayEntryFound.sleepHours ?? oldMetrics.sleepHours,
+            steps: finalSteps,
+            sleepHours: finalSleep,
             syncStatus: oldMetrics.syncStatus, // Preserve sync status
             lastSyncTime: oldMetrics.lastSyncTime, // Preserve last sync time
             platform: oldMetrics.platform, // Preserve platform
             weight: todayEntryFound.weight ?? oldMetrics.weight,
-            waterIntake: todayEntryFound.hydrationLiters ?? oldMetrics.waterIntake,
+            waterIntake: finalWater,
           );
+          
+          debugPrint('📊 Merged data - Steps: $finalSteps (DB: ${todayEntryFound.steps}, Health: ${oldMetrics.steps}), Health sync active: $isHealthSyncSuccessful');
           
           // Update weight separately if available
           if (todayEntryFound.weight != null && todayEntryFound.weight! > 0) {
@@ -192,8 +276,12 @@ class DashboardController extends GetxController {
           }
           
           // Update water intake separately if available
-          if (todayEntryFound.hydrationLiters != null) {
+          // Only update from DB if health sync wasn't successful (to avoid overwriting fresh sync data)
+          if (!isHealthSyncSuccessful && todayEntryFound.hydrationLiters != null) {
             waterIntake.value = todayEntryFound.hydrationLiters!;
+          } else if (isHealthSyncSuccessful && hasHealthSyncPlatform) {
+            // Use health sync value (even if 0)
+            waterIntake.value = finalWater ?? 0.0;
           }
 
           Get.printInfo(info: '✅ Loaded today\'s entry from DB: ${todayEntryFound.id}');
@@ -349,12 +437,6 @@ class DashboardController extends GetxController {
     }
   }
 
-  @override
-  void onClose() {
-    _timeTickerTimer?.cancel();
-    dashboardScrollController.dispose();
-    super.onClose();
-  }
 
   // Manual sync handler
   Future<void> handleManualSync() async {
