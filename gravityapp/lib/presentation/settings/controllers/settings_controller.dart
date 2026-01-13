@@ -54,6 +54,7 @@ class SettingsController extends GetxController {
     'stepGoal': '12000',
     'waterIntake': '3',
     'sleepHours': '7-8',
+    'aiTone': 'encouraging', // Default AI tone
   }.obs;
 
   // Sync logs
@@ -1121,6 +1122,7 @@ Future<void> saveProfileImage() async {
           'stepGoal': goalsMap['stepGoal']?.toString() ?? '12000',
           'waterIntake': goalsMap['waterIntake']?.toString() ?? '3',
           'sleepHours': goalsMap['sleepHours']?.toString() ?? '7-8',
+          'aiTone': goalsMap['aiTone']?.toString() ?? 'encouraging',
         };
       } catch (e) {
         debugPrint('Error loading goals: $e');
@@ -1160,6 +1162,7 @@ Future<void> saveProfileImage() async {
           'stepGoal': goalData['step_goal']?.toString() ?? '12000',
           'waterIntake': waterIntakeValue,
           'sleepHours': goalData['sleep_hours']?.toString() ?? '7-8',
+          'aiTone': goalData['ai_tone']?.toString() ?? 'encouraging',
         };
 
         // Also save to local storage
@@ -1503,6 +1506,9 @@ Future<void> saveProfileImage() async {
           ? waterIntake
           : '$waterIntake L';
 
+      // Get AI tone from goals map, default to 'encouraging' if not set
+      final aiTone = goals['aiTone'] ?? 'encouraging';
+
       // Save to API
       final response = await _goalsRepository.createGoals(
         token: token,
@@ -1511,6 +1517,7 @@ Future<void> saveProfileImage() async {
         stepGoal: goals['stepGoal'] ?? '12000',
         dailyWaterIntake: waterIntakeWithUnit,
         sleepHours: goals['sleepHours'] ?? '7-8',
+        aiTone: aiTone,
       );
 
       if (response.isSuccess) {

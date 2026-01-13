@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../../data/model/daily_details.dart';
+import '../../../../app/routes/app_routes.dart';
 
 class DailyDetailsController extends GetxController {
   // Source screen: 'dashboard' or 'weekly-review'
@@ -218,11 +219,8 @@ class DailyDetailsController extends GetxController {
   }
 
   void onBack() {
-    if (fromScreen == 'dashboard') {
-      Get.back();
-    } else {
-      Get.back(); // Will go back to weekly review
-    }
+    // Always navigate to dashboard
+    Get.offNamed(AppRoutes.home);
   }
 
   // Helper methods for status

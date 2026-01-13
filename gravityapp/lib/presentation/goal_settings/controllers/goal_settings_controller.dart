@@ -111,10 +111,23 @@ class GoalSettingsController extends GetxController {
     // Select a random example when tone is selected
     selectedExample.value = _getRandomExampleForTone(tone);
   }
-  
+
   /// Get the currently selected example
   String getExampleForTone() {
     return selectedExample.value;
+  }
+
+  /// Map UI tone values to API-expected format
+  /// Converts UI display names to API format (lowercase with underscores)
+  String _mapToneToApiFormat(String uiTone) {
+    // Map UI values to API format
+    // UI: "Encouraging" -> API: "encouraging" or "motivational" (adjust based on backend)
+    // UI: "Faith centered" -> API: "faith_centered"
+    // UI: "Tough love" -> API: "tough_love"
+    // UI: "Balanced tone" -> API: "balanced_tone"
+    
+    // Convert to lowercase and replace spaces with underscores
+    return uiTone.toLowerCase().replaceAll(' ', '_');
   }
 
   @override
@@ -215,6 +228,11 @@ class GoalSettingsController extends GetxController {
           ? waterIntake
           : '$waterIntake L';
 
+      // Prepare AI tone - map UI value to API format
+      // UI options: "Encouraging", "Faith centered", "Tough love", "Balanced tone"
+      // Maps to API format: "encouraging", "faith_centered", "tough_love", "balanced_tone"
+      final aiTone = _mapToneToApiFormat(selectedAiTone.value);
+
       // Call API to create goals
       final response = await _goalsRepository.createGoals(
         token: token,
@@ -223,6 +241,7 @@ class GoalSettingsController extends GetxController {
         stepGoal: stepGoalController.text.trim(),
         dailyWaterIntake: waterIntakeWithUnit,
         sleepHours: sleepHoursController.text.trim(),
+        aiTone: aiTone,
       );
 
       if (response.isSuccess) {

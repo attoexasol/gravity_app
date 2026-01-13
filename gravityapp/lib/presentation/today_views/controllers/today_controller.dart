@@ -10,14 +10,11 @@ class TodayController extends GetxController {
   final RxDouble currentWeight = 79.0.obs;
   final RxDouble goalWeight = 71.5.obs;
 
-  // Reflection and focus
+  // Reflection
   final RxString reflection = ''.obs;
-  final RxString tomorrowFocus = "10 minutes of movement, no matter how small.".obs;
-  final RxBool isEditingFocus = false.obs;
   
   // Text controllers
   late final TextEditingController reflectionController;
-  late final TextEditingController tomorrowFocusController;
   late final TextEditingController weightController;
   
   // Weigh-in modal data
@@ -34,24 +31,17 @@ class TodayController extends GetxController {
   void onInit() {
     super.onInit();
     reflectionController = TextEditingController();
-    tomorrowFocusController = TextEditingController(text: tomorrowFocus.value);
     weightController = TextEditingController(text: currentWeight.value.toString());
     
     // Listen to reflection changes
     reflectionController.addListener(() {
       reflection.value = reflectionController.text;
     });
-    
-    // Listen to tomorrow focus changes
-    tomorrowFocusController.addListener(() {
-      tomorrowFocus.value = tomorrowFocusController.text;
-    });
   }
 
   @override
   void onClose() {
     reflectionController.dispose();
-    tomorrowFocusController.dispose();
     weightController.dispose();
     super.onClose();
   }
@@ -147,24 +137,6 @@ class TodayController extends GetxController {
     reflection.value = '';
   }
 
-  void updateTomorrowFocus(String value) {
-    tomorrowFocus.value = value;
-  }
-
-  void toggleEditingFocus() {
-    isEditingFocus.value = !isEditingFocus.value;
-  }
-
-  void saveTomorrowFocus() {
-    isEditingFocus.value = false;
-  }
-
-  void cancelEditingFocus() {
-    tomorrowFocus.value = "10 minutes of movement, no matter how small.";
-    tomorrowFocusController.text = tomorrowFocus.value;
-    isEditingFocus.value = false;
-  }
-
   void openWeighInModal() {
     weightController.text = currentWeight.value.toString();
     selectedDate.value = DateTime.now();
@@ -210,9 +182,8 @@ class TodayController extends GetxController {
     
     _isNavigating = true;
     
-    // Save reflection and tomorrow's focus
+    // Save reflection
     print('Saving reflection: ${reflection.value}');
-    print('Tomorrow focus: ${tomorrowFocus.value}');
     
     // Use a small delay to ensure state is saved, then navigate
     Future.delayed(const Duration(milliseconds: 100), () {

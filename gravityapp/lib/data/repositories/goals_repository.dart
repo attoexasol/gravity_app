@@ -14,6 +14,7 @@ class GoalsRepository {
     required String stepGoal,
     required String dailyWaterIntake,
     required String sleepHours,
+    required String aiTone,
   }) async {
     try {
       final response = await _apiService.post(
@@ -25,6 +26,7 @@ class GoalsRepository {
           'step_goal': stepGoal,
           'daily_water_intake': dailyWaterIntake,
           'sleep_hours': sleepHours,
+          'ai_tone': aiTone,
         },
       );
 

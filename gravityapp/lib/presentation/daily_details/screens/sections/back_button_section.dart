@@ -13,10 +13,6 @@ class BackButtonSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final backText = controller.fromScreen == 'dashboard'
-        ? 'Back to Dashboard'
-        : 'Back to Weekly Review';
-
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
       child: GestureDetector(
@@ -25,11 +21,10 @@ class BackButtonSection extends StatelessWidget {
           width: double.infinity,
           padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20.r),
-            border: Border.all(
-              color: const Color(0xFF0A2342).withOpacity(0.1),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF0A2342), Color(0xFF00B8A9)],
             ),
+            borderRadius: BorderRadius.circular(16.r),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
@@ -42,14 +37,14 @@ class BackButtonSection extends StatelessWidget {
             children: [
               Icon(
                 Icons.chevron_left,
-                color: const Color(0xFF0A2342),
+                color: Colors.white,
                 size: 20.sp,
               ),
               SizedBox(width: 8.w),
               Text(
-                backText,
+                'Back to Dashboard',
                 style: ResponsiveTextStyles.button.copyWith(
-                  color: const Color(0xFF0A2342),
+                  color: Colors.white,
                   fontWeight: FontWeight.w600,
                 ),
               ),

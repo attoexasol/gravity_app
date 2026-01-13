@@ -38,11 +38,11 @@ class LoginController extends GetxController {
   void onInit() {
     super.onInit();
     // Initialize controllers in onInit to ensure they're created when controller is initialized
-    // emailController = TextEditingController(text: "rajibduet02@gmail.com");
-    // passwordController = TextEditingController(text: "Gravity@024017");
+    emailController = TextEditingController(text: "rajibduet02@gmail.com");
+    passwordController = TextEditingController(text: "Gravity@024017");
 
-    emailController = TextEditingController(text: "");
-    passwordController = TextEditingController(text: "");
+    // emailController = TextEditingController(text: "");
+    // passwordController = TextEditingController(text: "");
   }
 
   @override
@@ -213,8 +213,9 @@ class LoginController extends GetxController {
           debugPrint('✅ Profile image saved from login: $profileImageUrl');
         } else {
           // Try to fetch user profile to get the latest profile image
+          // Using getSingleUser() instead of getUserProfile() since /user/profile route doesn't exist
           try {
-            final profileResponse = await _authRepository.getUserProfile();
+            final profileResponse = await _authRepository.getSingleUser();
             if (profileResponse.isSuccess &&
                 profileResponse.data != null &&
                 profileResponse.data!.profileImage != null &&
@@ -234,14 +235,15 @@ class LoginController extends GetxController {
           }
         }
 
-        // Show success message
-        _safeSnackbar(
-          title: 'Success',
-          message: response.message,
-          backgroundColor: const Color(0xFF00B8A9),
-          colorText: Colors.white,
-          duration: const Duration(seconds: 2),
-        );
+        // Skip snackbar before navigation to avoid overlay errors
+        // Navigation happens immediately after, which can cause overlay to be unavailable
+        // _safeSnackbar(
+        //   title: 'Success',
+        //   message: response.message,
+        //   backgroundColor: const Color(0xFF00B8A9),
+        //   colorText: Colors.white,
+        //   duration: const Duration(seconds: 2),
+        // );
 
         // Check consent and goals data availability
         await _checkUserDataAndNavigate(token);

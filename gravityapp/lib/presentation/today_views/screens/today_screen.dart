@@ -9,7 +9,6 @@ import 'sections/weight_journey_section.dart';
 import 'sections/wins_today_section.dart';
 import 'sections/one_thing_to_watch_section.dart';
 import 'sections/reflection_section.dart';
-import 'sections/tomorrows_focus_section.dart';
 import 'sections/done_button_section.dart';
 import 'modals/log_weigh_in_modal.dart';
 
@@ -52,9 +51,6 @@ class TodayScreen extends GetView<TodayController> {
                         SizedBox(height: 16.h),
                         // Reflection
                         ReflectionSection(controller: controller),
-                        SizedBox(height: 16.h),
-                        // Tomorrow's Focus
-                        TomorrowsFocusSection(controller: controller),
                         SizedBox(height: 16.h),
                         // Done Button
                         DoneButtonSection(controller: controller),

@@ -232,11 +232,13 @@ class WeightLossJourneySection extends StatelessWidget {
                                             ? progressWidth.clamp(markerRadius, progressBarWidth - markerRadius)
                                             : markerRadius;
                                         
-                                        return _DelayedScaleAnimation(
-                                          delay: const Duration(milliseconds: 500),
-                                          child: Positioned(
-                                            left: thumbCenterX - markerRadius,
-                                            top: 0, // Top of container (thumb extends above/below track)
+                                        // Positioned must be a direct child of Stack, not wrapped in Transform
+                                        // So we apply the animation to the Container inside Positioned
+                                        return Positioned(
+                                          left: thumbCenterX - markerRadius,
+                                          top: 0, // Top of container (thumb extends above/below track)
+                                          child: _DelayedScaleAnimation(
+                                            delay: const Duration(milliseconds: 500),
                                             child: Container(
                                               width: markerSize, // w-6
                                               height: markerSize, // h-6
@@ -341,7 +343,7 @@ class WeightLossJourneySection extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Weight Lost
-                    Expanded(
+                    Flexible(
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -380,7 +382,7 @@ class WeightLossJourneySection extends StatelessWidget {
                     ),
                     SizedBox(width: 16.w),
                     // Remaining
-                    Expanded(
+                    Flexible(
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.end,

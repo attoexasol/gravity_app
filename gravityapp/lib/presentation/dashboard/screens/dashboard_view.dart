@@ -73,7 +73,7 @@ class DashboardView extends GetView<DashboardController> {
                         ),
                       ),
                       SizedBox(height: 8.h),
-                      Expanded(
+                      Flexible(
                         child: Text(
                           "You're at ${controller.overallProgress.toStringAsFixed(0)}% of your daily goal. ${controller.overallProgress >= 75 ? 'Great progress! 🎉' : 'Keep going! 💪'}",
                           style: ResponsiveTextStyles.textXs.copyWith(
@@ -136,7 +136,7 @@ class DashboardView extends GetView<DashboardController> {
                         ),
                       ),
                       SizedBox(height: 8.h),
-                      Expanded(
+                      Flexible(
                         child: Text(
                           "Check your 7-day trends and insights to track your progress.",
                           style: ResponsiveTextStyles.textXs.copyWith(
