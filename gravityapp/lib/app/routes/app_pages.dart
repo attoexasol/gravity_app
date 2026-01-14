@@ -4,6 +4,10 @@ import '../../presentation/main_layout/screens/main_layout_screen.dart';
 import '../../presentation/consent/screens/consent_screen.dart';
 import '../../presentation/goal_settings/screens/goal_settings_screen.dart';
 import '../../presentation/login/screens/login_screen.dart';
+import '../../presentation/login/screens/forgot_password_screen.dart';
+import '../../presentation/login/screens/reset_password_screen.dart';
+import '../../presentation/login/controllers/forgot_password_controller.dart';
+import '../../presentation/login/controllers/reset_password_controller.dart';
 import '../../presentation/signup/screens/signup_screen.dart';
 import '../../presentation/settings/screens/settings_page.dart';
 import '../../presentation/meal_upload/screens/meal_upload_screen.dart';
@@ -41,6 +45,28 @@ class AppPages {
     GetPage(
       name: AppRoutes.signup,
       page: () => const SignupScreen(),
+      transition: Transition.rightToLeft,
+      transitionDuration: const Duration(milliseconds: 300),
+    ),
+
+    // Forgot Password
+    GetPage(
+      name: AppRoutes.forgotPassword,
+      page: () => const ForgotPasswordScreen(),
+      binding: BindingsBuilder(() {
+        Get.lazyPut(() => ForgotPasswordController());
+      }),
+      transition: Transition.rightToLeft,
+      transitionDuration: const Duration(milliseconds: 300),
+    ),
+
+    // Reset Password
+    GetPage(
+      name: AppRoutes.resetPassword,
+      page: () => const ResetPasswordScreen(),
+      binding: BindingsBuilder(() {
+        Get.lazyPut(() => ResetPasswordController());
+      }),
       transition: Transition.rightToLeft,
       transitionDuration: const Duration(milliseconds: 300),
     ),

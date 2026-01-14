@@ -429,4 +429,142 @@ class AuthRepository {
       );
     }
   }
+
+  /// Forgot Password - Request password reset link
+  /// TODO: Replace with real API call when backend is ready
+  /// Expected API: POST /user/forgot-password
+  /// Body: { "email": "user@example.com" }
+  /// Response: { "status": true, "message": "Password reset link sent to your email" }
+  Future<ApiResponse<void>> forgotPassword({required String email}) async {
+    try {
+      // TODO: Replace this mock implementation with real API call
+      // Uncomment the code below and remove the mock implementation
+      
+      /*
+      final response = await _apiService.post(
+        '/user/forgot-password',
+        body: {'email': email},
+      );
+
+      return ApiResponse<void>(
+        status: response['status'] ?? false,
+        message: response['message'] ?? '',
+        data: null,
+      );
+      */
+
+      // MOCK IMPLEMENTATION - Simulates API call with delay
+      debugPrint('🔵 [MOCK] Forgot Password Request for: $email');
+      await Future.delayed(const Duration(seconds: 2)); // Simulate network delay
+
+      // Simulate success response
+      return ApiResponse<void>(
+        status: true,
+        message: 'Password reset link has been sent to your email address. Please check your inbox.',
+        data: null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ ForgotPassword API Error: ${e.message}');
+      return ApiResponse<void>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ ForgotPassword Unknown Error: $e');
+      return ApiResponse<void>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Reset Password - Reset password with token
+  /// TODO: Replace with real API call when backend is ready
+  /// Expected API: POST /user/reset-password
+  /// Body: { 
+  ///   "token": "reset_token_from_email",
+  ///   "password": "new_password",
+  ///   "password_confirmation": "new_password"
+  /// }
+  /// Response: { "status": true, "message": "Password reset successfully" }
+  Future<ApiResponse<void>> resetPassword({
+    required String token,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    try {
+      // TODO: Replace this mock implementation with real API call
+      // Uncomment the code below and remove the mock implementation
+      
+      /*
+      final response = await _apiService.post(
+        '/user/reset-password',
+        body: {
+          'token': token,
+          'password': password,
+          'password_confirmation': passwordConfirmation,
+        },
+      );
+
+      return ApiResponse<void>(
+        status: response['status'] ?? false,
+        message: response['message'] ?? '',
+        data: null,
+      );
+      */
+
+      // MOCK IMPLEMENTATION - Simulates API call with delay
+      debugPrint('🔵 [MOCK] Reset Password Request with token: ${token.substring(0, 20)}...');
+      await Future.delayed(const Duration(seconds: 2)); // Simulate network delay
+
+      // Simulate token validation
+      if (token.isEmpty || !token.startsWith('demo_reset_token_')) {
+        return ApiResponse<void>(
+          status: false,
+          message: 'Invalid or expired reset token. Please request a new password reset link.',
+          data: null,
+        );
+      }
+
+      // Simulate password validation
+      if (password.length < 6) {
+        return ApiResponse<void>(
+          status: false,
+          message: 'Password must be at least 6 characters long.',
+          data: null,
+        );
+      }
+
+      if (password != passwordConfirmation) {
+        return ApiResponse<void>(
+          status: false,
+          message: 'Passwords do not match.',
+          data: null,
+        );
+      }
+
+      // Simulate success response
+      return ApiResponse<void>(
+        status: true,
+        message: 'Your password has been reset successfully. You can now login with your new password.',
+        data: null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ ResetPassword API Error: ${e.message}');
+      return ApiResponse<void>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ ResetPassword Unknown Error: $e');
+      return ApiResponse<void>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
 }

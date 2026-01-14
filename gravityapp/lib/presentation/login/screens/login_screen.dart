@@ -13,6 +13,7 @@ class LoginScreen extends GetView<LoginController> {
     ///Get.put(LoginController());
     final size = MediaQuery.of(context).size;
     final isSmallScreen = size.width < 600;
+    final statusBarHeight = MediaQuery.of(context).padding.top;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
@@ -36,7 +37,12 @@ class LoginScreen extends GetView<LoginController> {
                   bottomRight: Radius.circular(40),
                 ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: statusBarHeight + 56,
+                bottom: 48,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -92,6 +98,8 @@ class LoginScreen extends GetView<LoginController> {
                             _buildEmailField(),
                             const SizedBox(height: 16),
                             _buildPasswordField(),
+                            const SizedBox(height: 12),
+                            _buildForgotPasswordLink(),
                             const SizedBox(height: 24),
                             _buildLoginButton(),
                             const SizedBox(height: 24),
@@ -377,6 +385,23 @@ class LoginScreen extends GetView<LoginController> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildForgotPasswordLink() {
+    final controller = this.controller;
+    return Align(
+      alignment: Alignment.centerRight,
+      child: GestureDetector(
+        onTap: controller.navigateToForgotPassword,
+        child: Text(
+          'Forgot Password?',
+          style: AppTextStyles.textSm.copyWith(
+            color: const Color(0xFF00B8A9),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
     );
   }
 

@@ -47,9 +47,25 @@ class LoginController extends GetxController {
 
   @override
   void onClose() {
-    // Dispose controllers - dispose() is safe to call even if already disposed
-    emailController.dispose();
-    passwordController.dispose();
+    // Dispose controllers after a delay to ensure widget tree has finished updating
+    // This prevents "TextEditingController was used after being disposed" errors
+    // Use a post-frame callback to ensure disposal happens after all widgets have updated
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Dispose controllers safely after the frame completes
+      // TextEditingController doesn't have a 'disposed' getter, so we use try-catch
+      try {
+        emailController.dispose();
+      } catch (e) {
+        // Controller may already be disposed, ignore the error
+        debugPrint('⚠️ Error disposing emailController (may already be disposed): $e');
+      }
+      try {
+        passwordController.dispose();
+      } catch (e) {
+        // Controller may already be disposed, ignore the error
+        debugPrint('⚠️ Error disposing passwordController (may already be disposed): $e');
+      }
+    });
     super.onClose();
   }
 
@@ -292,6 +308,18 @@ class LoginController extends GetxController {
         // First-time setup should only be marked when goals are saved in goal_settings_controller
         // This ensures: Google Sign up → Google Login → Goal Settings (first time) → Dashboard (subsequent)
         
+        // Verify role was saved correctly (google_auth_service saves it, but let's ensure it's correct)
+        final savedRole = PreferencesService.getUserType();
+        debugPrint('🔍 Google Login - Saved role: $savedRole');
+        debugPrint('🔍 Google Login - Selected role: ${selectedRole.value}');
+        
+        // If role wasn't saved or doesn't match, save it again
+        if (savedRole == null || savedRole.isEmpty) {
+          final roleString = selectedRole.value == UserType.coach ? 'coach' : 'customer';
+          await PreferencesService.saveUserType(roleString);
+          debugPrint('⚠️ Role was missing, saved selected role: $roleString');
+        }
+        
         final token = result['token'] as String;
         await _checkUserDataAndNavigate(token);
       } else {
@@ -356,6 +384,11 @@ class LoginController extends GetxController {
   /// Navigate to sign up
   void navigateToSignUp() {
     Get.toNamed(AppRoutes.signup);
+  }
+
+  /// Navigate to forgot password
+  void navigateToForgotPassword() {
+    Get.toNamed(AppRoutes.forgotPassword);
   }
 
   /// Check consent and goals data availability and navigate accordingly

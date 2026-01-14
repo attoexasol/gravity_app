@@ -262,42 +262,46 @@ class CommunityController extends GetxController {
     if (!isCurrentUserComment(comment)) return;
 
     Get.bottomSheet(
-      Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFF0A2342).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(2),
-              ),
+      Builder(
+        builder: (BuildContext bottomSheetContext) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'Comment Actions',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0A2342),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Edit button
-                GestureDetector(
-                  onTap: () {
-                    Get.back();
-                    openEditComment(postId, comment);
-                  },
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A2342).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Comment Actions',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0A2342),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    // Edit button
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(bottomSheetContext).pop();
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          openEditComment(postId, comment);
+                        });
+                      },
                   child: Container(
                     width: 100,
                     padding: const EdgeInsets.symmetric(vertical: 20),
@@ -325,12 +329,14 @@ class CommunityController extends GetxController {
                     ),
                   ),
                 ),
-                // Delete button
-                GestureDetector(
-                  onTap: () {
-                    Get.back();
-                    confirmDeleteComment(postId, comment.id);
-                  },
+                    // Delete button
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(bottomSheetContext).pop();
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          confirmDeleteComment(postId, comment.id);
+                        });
+                      },
                   child: Container(
                     width: 100,
                     padding: const EdgeInsets.symmetric(vertical: 20),
@@ -358,11 +364,13 @@ class CommunityController extends GetxController {
                     ),
                   ),
                 ),
+                  ],
+                ),
+                const SizedBox(height: 24),
               ],
             ),
-            const SizedBox(height: 24),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -2643,41 +2651,49 @@ class CommunityController extends GetxController {
   /// Show delete comment confirmation dialog
   void confirmDeleteComment(int postId, int commentId) {
     Get.dialog(
-      AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Delete Comment',
-          style: TextStyle(
-            color: Color(0xFF0A2342),
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: const Text(
-          'Are you sure you want to delete this comment? This action cannot be undone.',
-          style: TextStyle(color: Color(0xFF0A2342)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Color(0xFF0A2342)),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Get.back();
-              deleteComment(postId, commentId);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE53935),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+      Builder(
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text(
+              'Delete Comment',
+              style: TextStyle(
+                color: Color(0xFF0A2342),
+                fontWeight: FontWeight.bold,
               ),
             ),
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+            content: const Text(
+              'Are you sure you want to delete this comment? This action cannot be undone.',
+              style: TextStyle(color: Color(0xFF0A2342)),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Color(0xFF0A2342)),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    deleteComment(postId, commentId);
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE53935),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Delete', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -71,7 +71,20 @@ class GoogleAuthService {
         await PreferencesService.saveAuthToken(token);
         await PreferencesService.saveUserEmail(user.email ?? '');
         await PreferencesService.saveUserName(user.displayName ?? '');
-        await PreferencesService.saveUserType(role);
+        
+        // Use role from backend response if available, otherwise use the selected role
+        // Backend role is the source of truth as it reflects the actual user account
+        String finalRole = role.toLowerCase(); // Default to selected role
+        if (response.data != null && response.data!.role.isNotEmpty) {
+          // Backend returned a role - use it (convert to lowercase for consistency)
+          finalRole = response.data!.role.toLowerCase();
+          debugPrint('✅ Using role from backend response: $finalRole');
+        } else {
+          // No role in backend response - use selected role
+          debugPrint('⚠️ No role in backend response, using selected role: $finalRole');
+        }
+        await PreferencesService.saveUserType(finalRole);
+        debugPrint('✅ User type saved: $finalRole');
 
         if (user.photoURL != null) {
           PreferencesService.getStorage().write(

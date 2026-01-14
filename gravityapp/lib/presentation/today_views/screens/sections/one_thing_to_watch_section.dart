@@ -41,7 +41,7 @@ class OneThingToWatchSection extends StatelessWidget {
           ),
           SizedBox(height: 12.h),
           Text(
-            "Movement dropped off completely today, which may affect energy and appetite.",
+            "Step dropped off completely today, which may affect energy and appetite.",
             style: ResponsiveTextStyles.textSm.copyWith(
               color: const Color(0xFF0A2342),
               height: 1.6,
