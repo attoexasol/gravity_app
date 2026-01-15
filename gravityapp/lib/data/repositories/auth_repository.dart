@@ -430,11 +430,97 @@ class AuthRepository {
     }
   }
 
-  /// Forgot Password - Request password reset link
+  /// Send OTP - Send one-time password to email
+  /// API: POST /send-email-otp
+  /// Body: { "email": "user@example.com" }
+  /// Response: { "status": true, "message": "OTP sent to your email" }
+  Future<ApiResponse<void>> sendOtp({required String email}) async {
+    try {
+      final response = await _apiService.post(
+        '/send-email-otp',
+        body: {'email': email},
+      );
+
+      return ApiResponse<void>(
+        status: response['status'] ?? false,
+        message: response['message'] ?? 'OTP sent to your email',
+        data: null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ SendOTP API Error: ${e.message} (Status: ${e.statusCode})');
+      
+      // Provide user-friendly message for email not found scenarios
+      String errorMessage = e.message;
+      if (e.statusCode == 404) {
+        errorMessage = 'The email address you entered is not registered with any account. Please check your email address and try again.';
+      } else if (e.statusCode == 422) {
+        // Validation error - check if it's email-related
+        final messageLower = e.message.toLowerCase();
+        if (messageLower.contains('email')) {
+          errorMessage = 'The email address you entered is invalid or not associated with any account. Please check your email and try again.';
+        }
+      }
+      
+      return ApiResponse<void>(
+        status: false,
+        message: errorMessage,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ SendOTP Unknown Error: $e');
+      return ApiResponse<void>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Verify OTP - Verify one-time password
+  /// API: POST /verify-email-otp
+  /// Body: { "email": "user@example.com", "otp": "123456" }
+  /// Response: { "status": true, "message": "Email OTP verified successfully" }
+  Future<ApiResponse<void>> verifyOtp({
+    required String email,
+    required String otp,
+  }) async {
+    try {
+      final response = await _apiService.post(
+        '/verify-email-otp',
+        body: {
+          'email': email,
+          'otp': otp,
+        },
+      );
+
+      return ApiResponse<void>(
+        status: response['status'] ?? false,
+        message: response['message'] ?? 'Email OTP verified successfully',
+        data: null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ VerifyOTP API Error: ${e.message}');
+      return ApiResponse<void>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ VerifyOTP Unknown Error: $e');
+      return ApiResponse<void>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Forgot Password - Request password reset link (DEPRECATED - Use sendOtp instead)
   /// TODO: Replace with real API call when backend is ready
   /// Expected API: POST /user/forgot-password
   /// Body: { "email": "user@example.com" }
   /// Response: { "status": true, "message": "Password reset link sent to your email" }
+  @Deprecated('Use sendOtp instead')
   Future<ApiResponse<void>> forgotPassword({required String email}) async {
     try {
       // TODO: Replace this mock implementation with real API call
@@ -480,29 +566,24 @@ class AuthRepository {
     }
   }
 
-  /// Reset Password - Reset password with token
-  /// TODO: Replace with real API call when backend is ready
-  /// Expected API: POST /user/reset-password
+  /// Reset Password - Reset password with email (after OTP verification)
+  /// API: POST /forget-password
   /// Body: { 
-  ///   "token": "reset_token_from_email",
+  ///   "email": "user@example.com",
   ///   "password": "new_password",
   ///   "password_confirmation": "new_password"
   /// }
-  /// Response: { "status": true, "message": "Password reset successfully" }
+  /// Response: { "status": true, "message": "Password has been reset successfully." }
   Future<ApiResponse<void>> resetPassword({
-    required String token,
+    required String email,
     required String password,
     required String passwordConfirmation,
   }) async {
     try {
-      // TODO: Replace this mock implementation with real API call
-      // Uncomment the code below and remove the mock implementation
-      
-      /*
       final response = await _apiService.post(
-        '/user/reset-password',
+        '/forget-password',
         body: {
-          'token': token,
+          'email': email,
           'password': password,
           'password_confirmation': passwordConfirmation,
         },
@@ -510,45 +591,7 @@ class AuthRepository {
 
       return ApiResponse<void>(
         status: response['status'] ?? false,
-        message: response['message'] ?? '',
-        data: null,
-      );
-      */
-
-      // MOCK IMPLEMENTATION - Simulates API call with delay
-      debugPrint('🔵 [MOCK] Reset Password Request with token: ${token.substring(0, 20)}...');
-      await Future.delayed(const Duration(seconds: 2)); // Simulate network delay
-
-      // Simulate token validation
-      if (token.isEmpty || !token.startsWith('demo_reset_token_')) {
-        return ApiResponse<void>(
-          status: false,
-          message: 'Invalid or expired reset token. Please request a new password reset link.',
-          data: null,
-        );
-      }
-
-      // Simulate password validation
-      if (password.length < 6) {
-        return ApiResponse<void>(
-          status: false,
-          message: 'Password must be at least 6 characters long.',
-          data: null,
-        );
-      }
-
-      if (password != passwordConfirmation) {
-        return ApiResponse<void>(
-          status: false,
-          message: 'Passwords do not match.',
-          data: null,
-        );
-      }
-
-      // Simulate success response
-      return ApiResponse<void>(
-        status: true,
-        message: 'Your password has been reset successfully. You can now login with your new password.',
+        message: response['message'] ?? 'Password has been reset successfully.',
         data: null,
       );
     } on ApiException catch (e) {

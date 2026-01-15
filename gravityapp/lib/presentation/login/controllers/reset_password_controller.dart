@@ -18,17 +18,34 @@ class ResetPasswordController extends GetxController {
   final RxBool isPasswordVisible = false.obs;
   final RxBool isConfirmPasswordVisible = false.obs;
 
-  // Token from route parameters
-  String? resetToken;
+  // Observable for error message
+  final RxString errorMessage = ''.obs;
+
+  // Email from route parameters (after OTP verification)
+  String? email;
 
   @override
   void onInit() {
     super.onInit();
     passwordController = TextEditingController();
     confirmPasswordController = TextEditingController();
-    // Get token from route parameters
-    resetToken = Get.parameters['token'];
-    debugPrint('🔑 Reset token: ${resetToken ?? "Not provided"}');
+    
+    // Get email from route parameters
+    email = Get.parameters['email'];
+    debugPrint('📧 Reset password for email: ${email ?? "Not provided"}');
+    
+    // Clear error when user starts typing in password fields
+    passwordController.addListener(() {
+      if (errorMessage.value.isNotEmpty) {
+        errorMessage.value = '';
+      }
+    });
+    
+    confirmPasswordController.addListener(() {
+      if (errorMessage.value.isNotEmpty) {
+        errorMessage.value = '';
+      }
+    });
   }
 
   @override
@@ -106,11 +123,11 @@ class ResetPasswordController extends GetxController {
   Future<void> handleResetPassword() async {
     if (isClosed) return;
 
-    // Validate token
-    if (resetToken == null || resetToken!.isEmpty) {
+    // Validate email
+    if (email == null || email!.isEmpty) {
       _safeSnackbar(
         title: 'Error',
-        message: 'Invalid reset token. Please request a new password reset link.',
+        message: 'Email not found. Please start over.',
         backgroundColor: Get.theme.colorScheme.error,
         colorText: Get.theme.colorScheme.onError,
         duration: const Duration(seconds: 4),
@@ -121,26 +138,30 @@ class ResetPasswordController extends GetxController {
     final password = passwordController.text;
     final confirmPassword = confirmPasswordController.text;
 
+    // Clear previous error
+    errorMessage.value = '';
+
     // Validate inputs
     final passwordError = validatePassword(password);
     final confirmPasswordError = validateConfirmPassword(confirmPassword);
 
     if (passwordError != null || confirmPasswordError != null) {
-      _safeSnackbar(
-        title: 'Validation Error',
-        message: passwordError ?? confirmPasswordError ?? 'Please check your inputs',
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-      );
+      // Display error message in UI - prioritize password mismatch
+      if (confirmPasswordError != null && confirmPasswordError.contains('match')) {
+        errorMessage.value = 'The passwords do not match. Please re-enter them correctly.';
+      } else {
+        errorMessage.value = passwordError ?? confirmPasswordError ?? 'Please check your inputs';
+      }
       return;
     }
 
     try {
       isLoading.value = true;
+      errorMessage.value = ''; // Clear error when starting new request
 
       // Call API to reset password
       final response = await _authRepository.resetPassword(
-        token: resetToken!,
+        email: email!,
         password: password,
         passwordConfirmation: confirmPassword,
       );
@@ -148,6 +169,9 @@ class ResetPasswordController extends GetxController {
       if (isClosed) return;
 
       if (response.isSuccess) {
+        // Clear any error message
+        errorMessage.value = '';
+        
         _safeSnackbar(
           title: 'Success',
           message: response.message,
@@ -162,22 +186,17 @@ class ResetPasswordController extends GetxController {
           Get.offAllNamed(AppRoutes.login);
         }
       } else {
-        _safeSnackbar(
-          title: 'Error',
-          message: response.message,
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-          duration: const Duration(seconds: 4),
-        );
+        // Display error message in UI
+        final message = response.message.toLowerCase();
+        if (message.contains('password') && message.contains('match')) {
+          errorMessage.value = 'The passwords do not match. Please re-enter them correctly.';
+        } else {
+          errorMessage.value = response.message;
+        }
       }
     } catch (e) {
       if (!isClosed) {
-        _safeSnackbar(
-          title: 'Error',
-          message: 'An unexpected error occurred. Please try again.',
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-        );
+        errorMessage.value = 'An unexpected error occurred. Please try again.';
       }
       debugPrint('❌ Reset Password Error: $e');
     } finally {

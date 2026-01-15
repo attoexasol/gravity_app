@@ -5,8 +5,10 @@ import '../../presentation/consent/screens/consent_screen.dart';
 import '../../presentation/goal_settings/screens/goal_settings_screen.dart';
 import '../../presentation/login/screens/login_screen.dart';
 import '../../presentation/login/screens/forgot_password_screen.dart';
+import '../../presentation/login/screens/otp_verification_screen.dart';
 import '../../presentation/login/screens/reset_password_screen.dart';
 import '../../presentation/login/controllers/forgot_password_controller.dart';
+import '../../presentation/login/controllers/otp_verification_controller.dart';
 import '../../presentation/login/controllers/reset_password_controller.dart';
 import '../../presentation/signup/screens/signup_screen.dart';
 import '../../presentation/settings/screens/settings_page.dart';
@@ -55,6 +57,17 @@ class AppPages {
       page: () => const ForgotPasswordScreen(),
       binding: BindingsBuilder(() {
         Get.lazyPut(() => ForgotPasswordController());
+      }),
+      transition: Transition.rightToLeft,
+      transitionDuration: const Duration(milliseconds: 300),
+    ),
+
+    // OTP Verification
+    GetPage(
+      name: AppRoutes.otpVerification,
+      page: () => const OtpVerificationScreen(),
+      binding: BindingsBuilder(() {
+        Get.lazyPut(() => OtpVerificationController());
       }),
       transition: Transition.rightToLeft,
       transitionDuration: const Duration(milliseconds: 300),

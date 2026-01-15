@@ -31,6 +31,10 @@ class LoginController extends GetxController {
   // Observable for loading state
   final RxBool isLoading = false.obs;
 
+  // Observable for error messages - separate for email and password
+  final RxString emailErrorMessage = ''.obs;
+  final RxString passwordErrorMessage = ''.obs;
+
   // Observable for password visibility
   final RxBool isPasswordVisible = false.obs;
 
@@ -43,6 +47,19 @@ class LoginController extends GetxController {
 
     // emailController = TextEditingController(text: "");
     // passwordController = TextEditingController(text: "");
+    
+    // Clear error when user starts typing
+    emailController.addListener(() {
+      if (emailErrorMessage.value.isNotEmpty) {
+        emailErrorMessage.value = '';
+      }
+    });
+    
+    passwordController.addListener(() {
+      if (passwordErrorMessage.value.isNotEmpty) {
+        passwordErrorMessage.value = '';
+      }
+    });
   }
 
   @override
@@ -142,22 +159,32 @@ class LoginController extends GetxController {
     // Check if controller is still mounted before accessing controllers
     if (isClosed) return;
 
+    // Clear previous errors
+    emailErrorMessage.value = '';
+    passwordErrorMessage.value = '';
+
     // Validate inputs
     final email = emailController.text.trim();
     final password = passwordController.text;
 
-    if (validateEmail(email) != null || validatePassword(password) != null) {
-      _safeSnackbar(
-        title: 'Validation Error',
-        message: 'Please check your email and password',
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-      );
+    final emailError = validateEmail(email);
+    final passwordError = validatePassword(password);
+
+    if (emailError != null || passwordError != null) {
+      if (emailError != null) {
+        emailErrorMessage.value = emailError;
+      }
+      if (passwordError != null) {
+        passwordErrorMessage.value = passwordError;
+      }
       return;
     }
 
     try {
       isLoading.value = true;
+      // Clear errors when starting new request
+      emailErrorMessage.value = '';
+      passwordErrorMessage.value = '';
 
       // Call login API
       final result = await _authRepository.login(
@@ -261,26 +288,21 @@ class LoginController extends GetxController {
         //   duration: const Duration(seconds: 2),
         // );
 
+        // Clear any error messages
+        emailErrorMessage.value = '';
+        passwordErrorMessage.value = '';
+        
         // Check consent and goals data availability
         await _checkUserDataAndNavigate(token);
       } else {
-        // Show error message
-        _safeSnackbar(
-          title: 'Login Failed',
-          message: response.message,
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-          duration: const Duration(seconds: 4),
-        );
+        // Determine which field has the error and display appropriate message
+        _setFieldSpecificError(response.message);
       }
     } catch (e) {
-      _safeSnackbar(
-        title: 'Login Failed',
-        message:
-            'An unexpected error occurred. Please check your connection and try again.',
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-      );
+      if (!isClosed) {
+        // For unexpected errors, show on password field as default
+        passwordErrorMessage.value = 'An unexpected error occurred. Please check your connection and try again.';
+      }
       debugPrint('❌ Login Error: $e');
     } finally {
       isLoading.value = false;
@@ -437,5 +459,107 @@ class LoginController extends GetxController {
         }
       }
     }
+  }
+
+  /// Set field-specific error messages based on the API response
+  /// Maps email-related errors to emailErrorMessage
+  /// Maps password-related errors to passwordErrorMessage
+  void _setFieldSpecificError(String? originalMessage) {
+    // Clear both errors first
+    emailErrorMessage.value = '';
+    passwordErrorMessage.value = '';
+
+    if (originalMessage == null || originalMessage.isEmpty) {
+      // Default to password error if message is empty
+      passwordErrorMessage.value = 'Wrong password';
+      return;
+    }
+
+    final message = originalMessage.toLowerCase();
+
+    // PRIORITY 1: Check for messages that mention BOTH email AND password
+    // These are ambiguous - default to password error since email format is validated client-side
+    if (message.contains('email') && message.contains('password')) {
+      // Generic "Invalid email or password" type messages
+      // Since email format is validated client-side, assume password is wrong
+      passwordErrorMessage.value = 'Wrong password';
+      return;
+    }
+
+    // PRIORITY 2: Check for explicit password-only errors (password mentioned but NOT email)
+    // These are clear password errors
+    if (message.contains('password') && !message.contains('email')) {
+      if (message.contains('incorrect') || 
+          message.contains('wrong') ||
+          message.contains('invalid') ||
+          message.contains('not match') ||
+          message.contains('does not match') ||
+          message.contains('mismatch')) {
+        passwordErrorMessage.value = 'Wrong password';
+        return;
+      }
+      if (message.contains('required') || message.contains('missing')) {
+        passwordErrorMessage.value = 'Password is required. Please enter your password.';
+        return;
+      }
+      // Generic password error
+      passwordErrorMessage.value = 'Password incorrect';
+      return;
+    }
+
+    // PRIORITY 3: Check for explicit email-only errors (email mentioned but NOT password)
+    // Only trigger if password is NOT mentioned in the message
+    if (message.contains('email') && !message.contains('password')) {
+      if (message.contains('not found') || 
+          message.contains('does not exist') ||
+          message.contains('not registered')) {
+        emailErrorMessage.value = 'Email not found';
+        return;
+      }
+      if (message.contains('invalid') || message.contains('incorrect')) {
+        emailErrorMessage.value = 'Invalid email address';
+        return;
+      }
+      // Generic email error
+      emailErrorMessage.value = 'Invalid email address';
+      return;
+    }
+
+    // PRIORITY 4: Check for user/account not found - this is an email error
+    // Only if password is NOT mentioned in the message
+    if (!message.contains('password') &&
+        (message.contains('user not found') || 
+         message.contains('account not found') ||
+         message.contains('no account found') ||
+         message.contains('user does not exist'))) {
+      emailErrorMessage.value = 'Email not found';
+      return;
+    }
+
+    // PRIORITY 5: Check for generic authentication/credential errors
+    // These are ambiguous, but since email format is validated client-side,
+    // we'll default to password error for these
+    if (message.contains('credentials') || 
+        message.contains('authentication failed') ||
+        message.contains('unauthorized') ||
+        message.contains('login failed') ||
+        message.contains('invalid credentials')) {
+      // Default to password error since email validation happens client-side
+      passwordErrorMessage.value = 'Wrong password';
+      return;
+    }
+
+    // PRIORITY 6: Check for "incorrect" without email/username context - assume password
+    if (message.contains('incorrect') && 
+        !message.contains('email') && 
+        !message.contains('username') &&
+        !message.contains('user')) {
+      passwordErrorMessage.value = 'Wrong password';
+      return;
+    }
+
+    // PRIORITY 7: For any other errors, default to password error
+    // (since email format is validated client-side, most API errors are password-related)
+    passwordErrorMessage.value = 'Wrong password';
   }
 }

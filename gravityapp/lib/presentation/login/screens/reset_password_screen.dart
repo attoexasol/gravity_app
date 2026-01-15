@@ -204,9 +204,13 @@ class ResetPasswordScreen extends GetView<ResetPasswordController> {
               hintStyle: AppTextStyles.textBase.copyWith(
                 color: const Color(0xFF0A2342).withOpacity(0.3),
               ),
-              prefixIcon: const Icon(
-                Icons.lock_outline,
-                color: Color(0xFF00B8A9),
+              prefixIcon: Icon(
+                controller.errorMessage.value.isNotEmpty
+                    ? Icons.error_outline
+                    : Icons.lock_outline,
+                color: controller.errorMessage.value.isNotEmpty
+                    ? Colors.red
+                    : const Color(0xFF00B8A9),
               ),
               suffixIcon: IconButton(
                 icon: Icon(
@@ -222,20 +226,37 @@ class ResetPasswordScreen extends GetView<ResetPasswordController> {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(
-                  color: const Color(0xFF0A2342).withOpacity(0.1),
+                  color: controller.errorMessage.value.isNotEmpty
+                      ? Colors.red
+                      : const Color(0xFF0A2342).withOpacity(0.1),
                   width: 2,
                 ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(
-                  color: const Color(0xFF0A2342).withOpacity(0.1),
+                  color: controller.errorMessage.value.isNotEmpty
+                      ? Colors.red
+                      : const Color(0xFF0A2342).withOpacity(0.1),
                   width: 2,
                 ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFF00B8A9), width: 2),
+                borderSide: BorderSide(
+                  color: controller.errorMessage.value.isNotEmpty
+                      ? Colors.red
+                      : const Color(0xFF00B8A9),
+                  width: 2,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.red, width: 2),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.red, width: 2),
               ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
@@ -243,6 +264,34 @@ class ResetPasswordScreen extends GetView<ResetPasswordController> {
               ),
             ),
           ),
+        ),
+        // Error message display
+        Obx(
+          () => controller.errorMessage.value.isNotEmpty
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 8, left: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          controller.errorMessage.value,
+                          style: AppTextStyles.textSm.copyWith(
+                            color: Colors.red,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
       ],
     );

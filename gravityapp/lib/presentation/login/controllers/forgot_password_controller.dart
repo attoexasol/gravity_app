@@ -13,13 +13,20 @@ class ForgotPasswordController extends GetxController {
   // Observable for loading state
   final RxBool isLoading = false.obs;
 
-  // Observable for success state
-  final RxBool isSuccess = false.obs;
+  // Observable for error message
+  final RxString errorMessage = ''.obs;
 
   @override
   void onInit() {
     super.onInit();
     emailController = TextEditingController();
+    
+    // Clear error when user starts typing
+    emailController.addListener(() {
+      if (errorMessage.value.isNotEmpty) {
+        errorMessage.value = '';
+      }
+    });
   }
 
   @override
@@ -72,58 +79,57 @@ class ForgotPasswordController extends GetxController {
     return null;
   }
 
-  /// Handle forgot password request
+  /// Handle forgot password request - Send OTP
   Future<void> handleForgotPassword() async {
     if (isClosed) return;
 
     final email = emailController.text.trim();
 
+    // Clear previous error
+    errorMessage.value = '';
+
     // Validate email
     if (validateEmail(email) != null) {
-      _safeSnackbar(
-        title: 'Validation Error',
-        message: 'Please enter a valid email address',
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-      );
+      errorMessage.value = 'Please enter a valid email address';
       return;
     }
 
     try {
       isLoading.value = true;
-      isSuccess.value = false;
+      errorMessage.value = ''; // Clear error when starting new request
 
-      // Call API to request password reset
-      final response = await _authRepository.forgotPassword(email: email);
+      // Call API to send OTP
+      final response = await _authRepository.sendOtp(email: email);
 
       if (isClosed) return;
 
       if (response.isSuccess) {
-        isSuccess.value = true;
+        // Clear any error message
+        errorMessage.value = '';
+        
         _safeSnackbar(
           title: 'Success',
           message: response.message,
           backgroundColor: const Color(0xFF00B8A9),
           colorText: Colors.white,
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 2),
         );
+
+        // Navigate to OTP verification screen after a short delay
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!isClosed) {
+          Get.toNamed(
+            AppRoutes.otpVerification,
+            parameters: {'email': email},
+          );
+        }
       } else {
-        _safeSnackbar(
-          title: 'Error',
-          message: response.message,
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-          duration: const Duration(seconds: 4),
-        );
+        // Display error message in UI
+        errorMessage.value = _getUserFriendlyErrorMessage(response.message);
       }
     } catch (e) {
       if (!isClosed) {
-        _safeSnackbar(
-          title: 'Error',
-          message: 'An unexpected error occurred. Please try again.',
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-        );
+        errorMessage.value = 'An unexpected error occurred. Please try again.';
       }
       debugPrint('❌ Forgot Password Error: $e');
     } finally {
@@ -133,20 +139,42 @@ class ForgotPasswordController extends GetxController {
     }
   }
 
+  /// Get user-friendly error message for email-related errors
+  String _getUserFriendlyErrorMessage(String? originalMessage) {
+    if (originalMessage == null || originalMessage.isEmpty) {
+      return 'The email address you entered is invalid or not associated with any account. Please check your email and try again.';
+    }
+
+    final message = originalMessage.toLowerCase();
+
+    // Check for common error patterns indicating invalid/unregistered email
+    if (message.contains('email') && 
+        (message.contains('not found') || 
+         message.contains('not exist') || 
+         message.contains('not registered') ||
+         message.contains('not associated') ||
+         message.contains('invalid') ||
+         message.contains('does not exist'))) {
+      return 'The email address you entered is not registered with any account. Please check your email address and try again, or sign up if you don\'t have an account.';
+    }
+
+    if (message.contains('user not found') || 
+        message.contains('account not found') ||
+        message.contains('no account found')) {
+      return 'No account found with this email address. Please verify your email address or sign up to create a new account.';
+    }
+
+    if (message.contains('validation') && message.contains('email')) {
+      return 'The email address format is invalid. Please enter a valid email address and try again.';
+    }
+
+    // For other errors, return the original message or a generic helpful message
+    return originalMessage;
+  }
+
   /// Navigate back to login
   void navigateToLogin() {
     Get.back();
-  }
-
-  /// Navigate to reset password (for demo purposes - in real app, this would be via deep link)
-  void navigateToResetPassword({String? token}) {
-    // In a real app, the token would come from the email link
-    // For demo, we'll use a mock token
-    final resetToken = token ?? 'demo_reset_token_${DateTime.now().millisecondsSinceEpoch}';
-    Get.toNamed(
-      AppRoutes.resetPassword,
-      parameters: {'token': resetToken},
-    );
   }
 }
 

@@ -268,47 +268,98 @@ class LoginScreen extends GetView<LoginController> {
           ),
         ),
         const SizedBox(height: 8),
-        TextField(
-          controller: controller.emailController,
-          keyboardType: TextInputType.emailAddress,
-          style: AppTextStyles.textBase.copyWith(
-            color: const Color(0xFF0A2342), // Dark text color
-          ),
-          cursorColor: const Color(0xFF0A2342), // Dark cursor
-          decoration: InputDecoration(
-            hintText: 'your.email@example.com',
-            hintStyle: AppTextStyles.textBase.copyWith(
-              color: const Color(0xFF0A2342).withOpacity(0.3),
+        Obx(
+          () => TextField(
+            controller: controller.emailController,
+            keyboardType: TextInputType.emailAddress,
+            style: AppTextStyles.textBase.copyWith(
+              color: const Color(0xFF0A2342), // Dark text color
             ),
-            prefixIcon: const Icon(
-              Icons.mail_outline,
-              color: Color(0xFF00B8A9),
-            ),
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(
-                color: const Color(0xFF0A2342).withOpacity(0.1),
-                width: 2,
+            cursorColor: const Color(0xFF0A2342), // Dark cursor
+            decoration: InputDecoration(
+              hintText: 'your.email@example.com',
+              hintStyle: AppTextStyles.textBase.copyWith(
+                color: const Color(0xFF0A2342).withOpacity(0.3),
+              ),
+              prefixIcon: Icon(
+                controller.emailErrorMessage.value.isNotEmpty
+                    ? Icons.error_outline
+                    : Icons.mail_outline,
+                color: controller.emailErrorMessage.value.isNotEmpty
+                    ? Colors.red
+                    : const Color(0xFF00B8A9),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(
+                  color: controller.emailErrorMessage.value.isNotEmpty
+                      ? Colors.red
+                      : const Color(0xFF0A2342).withOpacity(0.1),
+                  width: 2,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(
+                  color: controller.emailErrorMessage.value.isNotEmpty
+                      ? Colors.red
+                      : const Color(0xFF0A2342).withOpacity(0.1),
+                  width: 2,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(
+                  color: controller.emailErrorMessage.value.isNotEmpty
+                      ? Colors.red
+                      : const Color(0xFF00B8A9),
+                  width: 2,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.red, width: 2),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.red, width: 2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
               ),
             ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(
-                color: const Color(0xFF0A2342).withOpacity(0.1),
-                width: 2,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(color: Color(0xFF00B8A9), width: 2),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
-            ),
           ),
+        ),
+        // Error message display for email
+        Obx(
+          () => controller.emailErrorMessage.value.isNotEmpty
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 8, left: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          controller.emailErrorMessage.value,
+                          style: AppTextStyles.textSm.copyWith(
+                            color: Colors.red,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
       ],
     );
@@ -341,9 +392,13 @@ class LoginScreen extends GetView<LoginController> {
               hintStyle: AppTextStyles.textBase.copyWith(
                 color: const Color(0xFF0A2342).withOpacity(0.3),
               ),
-              prefixIcon: const Icon(
-                Icons.lock_outline,
-                color: Color(0xFF00B8A9),
+              prefixIcon: Icon(
+                controller.passwordErrorMessage.value.isNotEmpty
+                    ? Icons.error_outline
+                    : Icons.lock_outline,
+                color: controller.passwordErrorMessage.value.isNotEmpty
+                    ? Colors.red
+                    : const Color(0xFF00B8A9),
               ),
               suffixIcon: IconButton(
                 icon: Icon(
@@ -359,23 +414,37 @@ class LoginScreen extends GetView<LoginController> {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(
-                  color: const Color(0xFF0A2342).withOpacity(0.1),
+                  color: controller.passwordErrorMessage.value.isNotEmpty
+                      ? Colors.red
+                      : const Color(0xFF0A2342).withOpacity(0.1),
                   width: 2,
                 ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(
-                  color: const Color(0xFF0A2342).withOpacity(0.1),
+                  color: controller.passwordErrorMessage.value.isNotEmpty
+                      ? Colors.red
+                      : const Color(0xFF0A2342).withOpacity(0.1),
                   width: 2,
                 ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(
-                  color: Color(0xFF00B8A9),
+                borderSide: BorderSide(
+                  color: controller.passwordErrorMessage.value.isNotEmpty
+                      ? Colors.red
+                      : const Color(0xFF00B8A9),
                   width: 2,
                 ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.red, width: 2),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Colors.red, width: 2),
               ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
@@ -383,6 +452,34 @@ class LoginScreen extends GetView<LoginController> {
               ),
             ),
           ),
+        ),
+        // Error message display for password
+        Obx(
+          () => controller.passwordErrorMessage.value.isNotEmpty
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 8, left: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          controller.passwordErrorMessage.value,
+                          style: AppTextStyles.textSm.copyWith(
+                            color: Colors.red,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
       ],
     );
