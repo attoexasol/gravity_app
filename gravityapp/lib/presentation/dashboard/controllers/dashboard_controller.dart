@@ -326,7 +326,7 @@ class DashboardController extends GetxController {
       final currentHydration = waterIntake.value > 0 ? waterIntake.value : null;
 
       // Log the data being sent to API
-      Get.printInfo(info: '📤 Preparing to call /create_user_gravity API:');
+      Get.printInfo(info: '📤 Preparing to ${todayEntryId.value != null ? "update" : "create"} gravity entry:');
       Get.printInfo(info: '   Data Source: $dataSource');
       Get.printInfo(info: '   Weight: $currentWeight kg');
       Get.printInfo(info: '   Steps: $currentSteps');
@@ -338,25 +338,17 @@ class DashboardController extends GetxController {
 
       if (todayEntryId.value != null) {
         // Update existing entry
-        // TODO: Temporarily commented out - update_user_gravity API backend not implemented yet
-        Get.printInfo(info: '⚠️ Update API temporarily disabled - entry exists (ID: ${todayEntryId.value}) but update skipped');
-        // response = await _gravityRepository.updateUserGravity(
-        //   id: todayEntryId.value!,
-        //   apiToken: apiToken,
-        //   weight: currentWeight,
-        //   steps: currentSteps > 0 ? currentSteps : null,
-        //   sleepHours: currentSleepHours > 0 ? currentSleepHours : null,
-        //   hydrationLiters: currentHydration,
-        //   nutration: 'good',
-        //   dataSource: dataSource,
-        //   date: todayStr,
-        // );
-        
-        // Create mock response to prevent errors - use existing entry data
-        response = ApiResponse<UserGravityEntry>(
-          status: true,
-          message: 'Update skipped (API temporarily disabled)',
-          data: todayEntry.value, // Keep existing entry data
+        Get.printInfo(info: '🔄 Updating existing entry (ID: ${todayEntryId.value})');
+        response = await _gravityRepository.updateUserGravity(
+          id: todayEntryId.value!,
+          apiToken: apiToken,
+          weight: currentWeight,
+          steps: currentSteps > 0 ? currentSteps : null,
+          sleepHours: currentSleepHours > 0 ? currentSleepHours : null,
+          hydrationLiters: currentHydration,
+          nutration: 'good',
+          dataSource: dataSource,
+          date: todayStr,
         );
       } else {
         // Create new entry

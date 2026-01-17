@@ -140,18 +140,18 @@ class HealthSyncService {
             ]
           : [
               // HealthKit supported types (all at once for iOS)
+              // Use SLEEP_ASLEEP only to avoid double counting with SLEEP_IN_BED
               HealthDataType.STEPS,
-              HealthDataType.SLEEP_IN_BED,
               HealthDataType.SLEEP_ASLEEP,
               HealthDataType.WEIGHT,
               HealthDataType.WATER,
             ];
 
       // Sleep types for Android (requested separately as optional)
-      final sleepTypes = [
-        HealthDataType.SLEEP_IN_BED,
-        HealthDataType.SLEEP_ASLEEP,
-      ];
+      // Android uses SLEEP_SESSION, iOS uses SLEEP_ASLEEP
+      final sleepTypes = (!kIsWeb && Platform.isAndroid)
+          ? [HealthDataType.SLEEP_SESSION]
+          : [HealthDataType.SLEEP_ASLEEP];
 
       print('🔵 Requesting $platformName permissions...');
 
@@ -347,56 +347,65 @@ class HealthSyncService {
         print('⚠️ Error fetching steps: $e');
       }
 
-      // Fetch Sleep Hours (from yesterday evening to now to catch overnight sleep)
+      // Fetch Sleep Hours (from yesterday 18:00 to today 12:00 to catch overnight sleep)
       double sleepHours = 0.0;
       try {
-        // Health Connect (Android) and HealthKit (iOS) both support sleep data
-        final sleepTypes = [
-          HealthDataType.SLEEP_IN_BED,
-          HealthDataType.SLEEP_ASLEEP,
-          HealthDataType.SLEEP_AWAKE,
-        ];
-        print('🔵 Querying sleep data from ${Platform.isIOS ? 'HealthKit' : 'Health Connect'}...');
-        print('   Time range: ${yesterdayEvening.toString()} to ${now.toString()}');
+        // Calculate sleep window: yesterday at 18:00 (6 PM) to today at 12:00 (noon)
+        final sleepStart = DateTime(now.year, now.month, now.day - 1, 18);
+        final sleepEnd = DateTime(now.year, now.month, now.day, 12);
+        
+        // Platform-specific sleep types
+        // Android: Use SLEEP_SESSION only
+        // iOS: Use SLEEP_ASLEEP only (avoid double counting with SLEEP_IN_BED)
+        final sleepTypes = (!kIsWeb && Platform.isAndroid)
+            ? [HealthDataType.SLEEP_SESSION]
+            : [HealthDataType.SLEEP_ASLEEP];
+        
+        final platformName = Platform.isIOS ? 'HealthKit' : 'Health Connect';
+        print('🔵 Querying sleep data from $platformName...');
+        print('   Time range: ${sleepStart.toString()} to ${sleepEnd.toString()}');
+        print('   Sleep types: ${sleepTypes.map((t) => t.toString()).join(", ")}');
+        
         // Query sleep data (health package handles timezone conversion)
         final sleepData = await _health!.getHealthDataFromTypes(
           types: sleepTypes,
-          startTime: yesterdayEvening,
-          endTime: now,
+          startTime: sleepStart,
+          endTime: sleepEnd,
         );
+        
         print('🔵 Sleep data query returned ${sleepData.length} data points');
         
         if (sleepData.isNotEmpty) {
-          // Calculate total sleep in hours for today
-          // Group by sleep sessions and calculate total
+          // Debug: Print raw sleep records
+          print('📋 Raw sleep records:');
+          for (var data in sleepData) {
+            print('   - Type: ${data.type.toString()}');
+            print('     From: ${data.dateFrom.toString()}');
+            print('     To: ${data.dateTo.toString()}');
+            final duration = data.dateTo.difference(data.dateFrom).inMinutes / 60.0;
+            print('     Duration: ${duration.toStringAsFixed(2)}h');
+          }
+          
+          // Calculate total sleep in hours
+          // Android: Sum all SLEEP_SESSION durations directly
+          // iOS: Sum only SLEEP_ASLEEP segments (already filtered by sleepTypes)
           for (var data in sleepData) {
             final start = data.dateFrom;
             final end = data.dateTo;
             final duration = end.difference(start).inMinutes / 60.0;
-            print('   - Sleep entry: ${data.type.toString()} from ${start.toString()} to ${end.toString()} (${duration.toStringAsFixed(2)}h)');
             
-            // Only count sleep that ended today or is still ongoing
-            if (end.isAfter(todayStart) || end.isAtSameMomentAs(todayStart)) {
-              final sleepStart = start.isBefore(todayStart)
-                  ? todayStart
-                  : start;
-              final sleepDuration = end.difference(sleepStart).inMinutes / 60.0;
-              // Only count actual sleep (not awake time)
-              if (data.type != HealthDataType.SLEEP_AWAKE) {
-                sleepHours += sleepDuration;
-                print('     ✓ Counted ${sleepDuration.toStringAsFixed(2)}h (total: ${sleepHours.toStringAsFixed(2)}h)');
-              } else {
-                print('     ✗ Skipped (awake time)');
-              }
-            } else {
-              print('     ✗ Skipped (ended before today)');
-            }
+            // For Android (SLEEP_SESSION), sum all sessions directly
+            // For iOS (SLEEP_ASLEEP), sum all asleep segments directly
+            // Both are already filtered to the correct type, so we can sum all
+            sleepHours += duration;
+            print('   ✓ Added ${duration.toStringAsFixed(2)}h (total: ${sleepHours.toStringAsFixed(2)}h)');
           }
-          print('📊 Today\'s sleep: ${sleepHours.toStringAsFixed(1)}h');
+          
+          print('📊 Total sleep: ${sleepHours.toStringAsFixed(1)}h (from ${sleepData.length} ${sleepData.length == 1 ? 'session' : 'sessions'})');
         } else {
-          final platformName = kIsWeb ? 'Web' : (Platform.isIOS ? 'HealthKit' : 'Health Connect');
           print('⚠️ No sleep data found in $platformName');
           print('   💡 Make sure sleep is tracked in Google Fit/Health Connect app');
+          print('   💡 Sleep window: yesterday 6 PM to today 12 PM');
         }
       } catch (e, stackTrace) {
         print('⚠️ Error fetching sleep: $e');
