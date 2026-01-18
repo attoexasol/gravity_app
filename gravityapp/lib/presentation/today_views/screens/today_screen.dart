@@ -3,7 +3,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import '../controllers/today_controller.dart';
 import 'sections/today_header.dart';
-import 'sections/todays_summary_section.dart';
 import 'sections/pillar_status_section.dart';
 import 'sections/weight_journey_section.dart';
 import 'sections/wins_today_section.dart';
@@ -34,9 +33,6 @@ class TodayScreen extends GetView<TodayController> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         SizedBox(height: 24.h),
-                        // Today's Summary
-                        TodaysSummarySection(),
-                        SizedBox(height: 16.h),
                         // Pillar Status
                         PillarStatusSection(controller: controller),
                         SizedBox(height: 16.h),

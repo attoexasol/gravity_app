@@ -51,6 +51,7 @@ class ProgressRingsSection extends StatelessWidget {
                   label: "Steps",
                   icon: Icons.directions_walk_outlined,
                   color: const Color(0xFF00B8A9),
+                  customValue: controller.healthMetrics.value.steps.toString(),
                 ),
                 // Sleep
                 ProgressRing(
