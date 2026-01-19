@@ -1708,7 +1708,8 @@ Future<void> saveProfileImage() async {
     }
   }
 
-  /// Handle logout - calls API, clears all storage data and navigates to login
+  /// Handle logout - calls API, clears auth data and navigates to login
+  /// Preserves onboarding status to prevent it from showing again
   Future<void> handleLogout() async {
     final confirmed = await Get.dialog<bool>(
       _buildLogoutDialog(),
@@ -1730,8 +1731,9 @@ Future<void> saveProfileImage() async {
           }
         }
 
-        // Clear all storage data (token, user data, preferences, etc.)
-        await PreferencesService.clearAll();
+        // Clear authentication data while preserving onboarding status
+        // Use clearAuthData() instead of clearAll() to safely preserve onboarding
+        await PreferencesService.clearAuthData();
 
         // Delete AI Coach controller to prevent state reuse after logout
         if (Get.isRegistered<AiCoachController>()) {
@@ -1745,7 +1747,8 @@ Future<void> saveProfileImage() async {
 
         // Even if API call fails, clear local data and logout
         try {
-          await PreferencesService.clearAll();
+          // Use clearAuthData() to preserve onboarding
+          await PreferencesService.clearAuthData();
           Get.offAllNamed('/login');
         } catch (clearError) {
           debugPrint('❌ Error clearing storage: $clearError');

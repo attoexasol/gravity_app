@@ -48,11 +48,9 @@ void main() async {
   // Initialize storage
   await PreferencesService.init();
 
-  // SESSION-BASED AUTHENTICATION: Clear token on app startup
-  // This ensures users must log in again every time the app is opened
-  await PreferencesService.clearAuthToken();
-  await PreferencesService.clearUserData();
-  debugPrint('🔒 Session-based auth: Token cleared on app startup');
+  // PERSISTENT AUTHENTICATION: Token persists across app sessions
+  // Users remain logged in until they explicitly log out
+  debugPrint('🔐 Persistent auth: Checking authentication state on app startup');
 
   // Lock orientation to portrait for consistency (not applicable on web)
   if (!kIsWeb) {
@@ -92,26 +90,55 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     
     // Optional: Log lifecycle changes for debugging
-    // Note: We don't clear token here because clearing on background
-    // would log users out when they just switch apps temporarily.
-    // Token is cleared on app startup (in main()) which is more reliable.
+    // Note: With persistent authentication, tokens are preserved across app sessions
+    // Users remain logged in when they close and reopen the app
     if (kDebugMode) {
       debugPrint('📱 App lifecycle state changed: $state');
     }
   }
 
   /// Get initial route based on authentication and onboarding state
-  /// Note: With session-based auth, token is cleared on startup
-  /// Onboarding should only be shown once - on first launch
+  /// Flow:
+  /// - First launch: Onboarding → Login → Home
+  /// - User logged in (token exists): Home (skip onboarding and login)
+  /// - User logged out (no token) but onboarding completed: Login
+  /// - First time user (onboarding not completed): Onboarding
   String _getInitialRoute() {
-    // Check if onboarding has been completed
+    // Check if user is authenticated (has valid token)
+    final isAuthenticated = PreferencesService.isAuthenticated();
+    final token = PreferencesService.getAuthToken();
+    
+    // Check onboarding status
     final isOnboardingCompleted = PreferencesService.isOnboardingCompleted();
     
+    if (kDebugMode) {
+      debugPrint('🔍 Initial Route Decision:');
+      debugPrint('   - Has Token: ${token != null && token.isNotEmpty}');
+      debugPrint('   - Token Value: ${token != null ? (token.isEmpty ? "empty" : "${token.substring(0, token.length > 10 ? 10 : token.length)}...") : "null"}');
+      debugPrint('   - Is Authenticated: $isAuthenticated');
+      debugPrint('   - Onboarding Completed: $isOnboardingCompleted');
+    }
+    
+    // If authenticated, go directly to home
+    if (isAuthenticated) {
+      if (kDebugMode) {
+        debugPrint('✅ User is authenticated → Navigating to Home');
+      }
+      return AppRoutes.home;
+    }
+    
+    // Not authenticated - check onboarding status
     if (isOnboardingCompleted) {
-      // Onboarding completed - navigate directly to login
+      // Onboarding completed but not logged in - navigate to login
+      if (kDebugMode) {
+        debugPrint('📝 Onboarding completed but not authenticated → Navigating to Login');
+      }
       return AppRoutes.login;
     } else {
       // First time user - show onboarding
+      if (kDebugMode) {
+        debugPrint('🆕 First time user → Navigating to Onboarding');
+      }
       return AppRoutes.onboarding;
     }
   }

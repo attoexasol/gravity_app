@@ -180,6 +180,7 @@ class MainLayoutController extends GetxController {
   }
 
   /// Handle logout
+  /// Clears authentication data while preserving onboarding status
   Future<void> handleLogout() async {
     final confirmed = await Get.dialog<bool>(
       _buildLogoutDialog(),
@@ -187,9 +188,9 @@ class MainLayoutController extends GetxController {
     );
 
     if (confirmed == true) {
-      // Clear user data and auth tokens
-      await PreferencesService.clearAuthToken();
-      await PreferencesService.clearUserData(); // Clear email and name
+      // Clear authentication data (token and user data) while preserving onboarding
+      // This ensures onboarding is never shown again after first completion
+      await PreferencesService.clearAuthData();
 
       // Delete AI Coach controller to prevent state reuse after logout
       if (Get.isRegistered<AiCoachController>()) {

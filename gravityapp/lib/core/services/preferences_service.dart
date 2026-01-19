@@ -41,6 +41,13 @@ class PreferencesService {
     return _storage.read(_authTokenKey);
   }
 
+  /// Check if user is authenticated (has a valid token)
+  /// Returns true if token exists and is not empty
+  static bool isAuthenticated() {
+    final token = getAuthToken();
+    return token != null && token.isNotEmpty;
+  }
+
   static Future<void> clearAuthToken() async {
     await _storage.remove(_authTokenKey);
   }
@@ -89,22 +96,70 @@ class PreferencesService {
     await _storage.remove(_userTypeKey);
   }
 
+  /// Clear authentication data (token and user data) while preserving onboarding status
+  /// This is the recommended method for logout as it safely preserves onboarding
+  /// and first-time setup status without using erase() which can be fragile
+  static Future<void> clearAuthData() async {
+    // Clear auth token
+    await clearAuthToken();
+    
+    // Clear user data
+    await clearUserData();
+    
+    if (kDebugMode) {
+      debugPrint('✅ Auth data cleared (onboarding preserved)');
+    }
+  }
+
   // Clear all storage data (for complete logout)
   // Note: This preserves onboarding and first-time setup status as they should persist across logouts
+  // WARNING: This method uses erase() which clears everything. Use clearAuthData() for safer logout.
   static Future<void> clearAll() async {
-    // Save onboarding and first-time setup status before clearing
-    final onboardingCompleted = isOnboardingCompleted();
-    final firstTimeSetupCompleted = isFirstTimeSetupCompleted();
-    
-    // Clear all storage data
-    await _storage.erase();
-    
-    // Restore onboarding and first-time setup status after clearing
-    if (onboardingCompleted) {
-      await setOnboardingCompleted(true);
-    }
-    if (firstTimeSetupCompleted) {
-      await setFirstTimeSetupCompleted(true);
+    try {
+      // Save onboarding and first-time setup status before clearing
+      final onboardingCompleted = isOnboardingCompleted();
+      final firstTimeSetupCompleted = isFirstTimeSetupCompleted();
+      
+      if (kDebugMode) {
+        debugPrint('🔍 Saving onboarding status before clear: $onboardingCompleted');
+        debugPrint('🔍 Saving first-time setup status before clear: $firstTimeSetupCompleted');
+      }
+      
+      // Clear all storage data
+      await _storage.erase();
+      
+      // Restore onboarding and first-time setup status after clearing
+      if (onboardingCompleted) {
+        await setOnboardingCompleted(true);
+        if (kDebugMode) {
+          debugPrint('✅ Onboarding status restored after clear');
+        }
+      }
+      if (firstTimeSetupCompleted) {
+        await setFirstTimeSetupCompleted(true);
+        if (kDebugMode) {
+          debugPrint('✅ First-time setup status restored after clear');
+        }
+      }
+      
+      // Verify restoration was successful
+      if (kDebugMode) {
+        final verifyOnboarding = isOnboardingCompleted();
+        final verifySetup = isFirstTimeSetupCompleted();
+        if (onboardingCompleted != verifyOnboarding) {
+          debugPrint('⚠️ WARNING: Onboarding status restoration may have failed!');
+          debugPrint('   Expected: $onboardingCompleted, Got: $verifyOnboarding');
+        }
+        if (firstTimeSetupCompleted != verifySetup) {
+          debugPrint('⚠️ WARNING: First-time setup status restoration may have failed!');
+          debugPrint('   Expected: $firstTimeSetupCompleted, Got: $verifySetup');
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error in clearAll(): $e');
+      // If erase() fails, fall back to selective clearing
+      await clearAuthData();
+      rethrow;
     }
   }
 
