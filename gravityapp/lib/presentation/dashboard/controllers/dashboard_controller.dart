@@ -72,6 +72,9 @@ class DashboardController extends GetxController {
     super.onInit();
     _loadGoals(); // Load goals first to initialize weight
     
+    // Listen for goal changes in storage (when updated from settings)
+    _setupGoalsListener();
+    
     // Load today's entry from DB
     loadTodayFromDb();
     
@@ -175,7 +178,10 @@ class DashboardController extends GetxController {
         debugPrint('📱 Dashboard: App paused');
       },
       onResumed: () {
-        debugPrint('📱 Dashboard: App resumed - syncing health data');
+        debugPrint('📱 Dashboard: App resumed - syncing health data and reloading goals');
+        // Reload goals when app resumes (in case they were updated in settings)
+        _loadGoals();
+        
         final currentMetrics = _healthService.getMetrics();
         // Sync if health service is initialized and not already syncing
         if (currentMetrics.syncStatus != SyncStatus.syncing && 
@@ -389,35 +395,50 @@ class DashboardController extends GetxController {
     }
   }
   
+  /// Setup listener for goal changes
+  /// Real-time updates are handled via direct method calls from SettingsController
+  /// This method is kept for app resume scenarios
+  void _setupGoalsListener() {
+    // No periodic checking needed - real-time updates via notifyGoalsChanged()
+  }
+  
+  /// Public method to be called when goals are updated in settings
+  /// This provides real-time goal updates without polling
+  void notifyGoalsChanged() {
+    debugPrint('🔄 Goals changed notification received - reloading immediately...');
+    _loadGoals();
+  }
+
   /// Load goals from storage
+  /// This method is called on init and when goals are updated in settings
   void _loadGoals() {
     try {
       final savedGoals = PreferencesService.getStorage().read('userGoals');
       if (savedGoals != null) {
         final goalsMap = jsonDecode(savedGoals) as Map<String, dynamic>;
         
-        // Load target weight
-        final targetWeightStr = goalsMap['targetWeight']?.toString() ?? '75';
-        weightGoal.value = double.tryParse(targetWeightStr) ?? 75.0;
+        // Load target weight (use targetWeight from goals)
+        final targetWeightStr = goalsMap['targetWeight']?.toString() ?? '70';
+        weightGoal.value = double.tryParse(targetWeightStr) ?? 70.0;
         
-        // Load step goal
-        final stepGoalStr = goalsMap['stepGoal']?.toString() ?? '10000';
-        stepGoal.value = int.tryParse(stepGoalStr) ?? 10000;
+        // Load step goal (match settings default of 12000)
+        final stepGoalStr = goalsMap['stepGoal']?.toString() ?? '12000';
+        stepGoal.value = int.tryParse(stepGoalStr) ?? 12000;
         
-        // Load water intake goal (remove 'L' suffix if present)
-        final waterStr = goalsMap['waterIntake']?.toString() ?? '2.5';
+        // Load water intake goal (remove 'L' suffix if present, match settings default of 3)
+        final waterStr = goalsMap['waterIntake']?.toString() ?? '3';
         final waterValue = waterStr.replaceAll('L', '').replaceAll('l', '').trim();
-        waterGoal.value = double.tryParse(waterValue) ?? 2.5;
+        waterGoal.value = double.tryParse(waterValue) ?? 3.0;
         
         // Load sleep goal (handle ranges like "7-8" by taking average)
-        final sleepStr = goalsMap['sleepHours']?.toString() ?? '8';
+        final sleepStr = goalsMap['sleepHours']?.toString() ?? '7-8';
         if (sleepStr.contains('-')) {
           final parts = sleepStr.split('-');
-          final start = double.tryParse(parts[0].trim()) ?? 8.0;
+          final start = double.tryParse(parts[0].trim()) ?? 7.0;
           final end = parts.length > 1 ? (double.tryParse(parts[1].trim()) ?? 8.0) : start;
           sleepGoal.value = (start + end) / 2;
         } else {
-          sleepGoal.value = double.tryParse(sleepStr) ?? 8.0;
+          sleepGoal.value = double.tryParse(sleepStr) ?? 7.5;
         }
         
         // Initialize weight and previousWeight from currentWeight if available
@@ -426,14 +447,31 @@ class DashboardController extends GetxController {
         if (currentWeightStr != null) {
           final currentWeight = double.tryParse(currentWeightStr);
           if (currentWeight != null && currentWeight > 0) {
-            weight.value = currentWeight;
-            previousWeight.value = currentWeight;
-            print('📊 Weight initialized from goals: $currentWeight kg');
+            // Only update if weight is still 0 (not set from HealthKit)
+            if (weight.value == 0) {
+              weight.value = currentWeight;
+              previousWeight.value = currentWeight;
+              debugPrint('📊 Weight initialized from goals: $currentWeight kg');
+            }
           }
         }
+        
+        debugPrint('✅ Goals loaded: Steps=$stepGoal, Water=$waterGoal, Sleep=$sleepGoal, TargetWeight=$weightGoal');
+      } else {
+        // Use consistent defaults if no goals are saved
+        weightGoal.value = 70.0;
+        stepGoal.value = 12000;
+        waterGoal.value = 3.0;
+        sleepGoal.value = 7.5;
+        debugPrint('⚠️ No goals found in storage, using defaults');
       }
     } catch (e) {
       Get.printError(info: 'Error loading goals: $e');
+      // Use safe defaults on error
+      weightGoal.value = 70.0;
+      stepGoal.value = 12000;
+      waterGoal.value = 3.0;
+      sleepGoal.value = 7.5;
     }
   }
 
@@ -609,20 +647,80 @@ class DashboardController extends GetxController {
 
   double get weightChange => previousWeight.value - weight.value;
 
+  /// Calculate overall progress percentage
+  /// Steps, Sleep, Water: (current / goal) * 100, capped at 100%
+  /// Weight: Progress toward target weight (0% if above target, 100% if at/below target)
   double get overallProgress {
+    // Steps progress: percentage of goal achieved, capped at 100%
     final stepsProgress = stepGoal.value > 0 
-        ? (healthMetrics.value.steps / stepGoal.value) * 100 
+        ? ((healthMetrics.value.steps / stepGoal.value) * 100).clamp(0.0, 100.0)
         : 0;
+    
+    // Sleep progress: percentage of goal achieved, capped at 100%
     final sleepProgress = sleepGoal.value > 0 
-        ? (healthMetrics.value.sleepHours / sleepGoal.value) * 100 
+        ? ((healthMetrics.value.sleepHours / sleepGoal.value) * 100).clamp(0.0, 100.0)
         : 0;
+    
+    // Water progress: percentage of goal achieved, capped at 100%
     final waterProgress = waterGoal.value > 0 
-        ? (waterIntake.value / waterGoal.value) * 100 
+        ? ((waterIntake.value / waterGoal.value) * 100).clamp(0.0, 100.0)
         : 0;
-    final weightProgress = weightGoal.value > 0 
-        ? (1 - (weight.value - weightGoal.value) / weightGoal.value) * 100 
-        : 0;
-    return (stepsProgress + sleepProgress + waterProgress + weightProgress) / 4;
+    
+    // Weight progress: Calculate based on current weight vs target weight
+    // If we have both current and target weight, calculate progress
+    // Progress = 100% if at or below target, decreasing as weight increases above target
+    double weightProgress = 0;
+    if (weight.value > 0 && weightGoal.value > 0) {
+      // Get current weight from goals for comparison
+      final savedGoals = PreferencesService.getStorage().read('userGoals');
+      double? startingWeight;
+      if (savedGoals != null) {
+        try {
+          final goalsMap = jsonDecode(savedGoals) as Map<String, dynamic>;
+          final currentWeightStr = goalsMap['currentWeight']?.toString();
+          if (currentWeightStr != null) {
+            startingWeight = double.tryParse(currentWeightStr);
+          }
+        } catch (e) {
+          // Ignore parsing errors
+        }
+      }
+      
+      // If we have starting weight, calculate progress toward target
+      if (startingWeight != null && startingWeight > 0) {
+        final totalWeightToLose = startingWeight - weightGoal.value;
+        final weightLost = startingWeight - weight.value;
+        
+        if (totalWeightToLose > 0) {
+          // Weight loss goal: progress = (weight lost / total to lose) * 100
+          weightProgress = ((weightLost / totalWeightToLose) * 100).clamp(0.0, 100.0);
+        } else if (totalWeightToLose < 0) {
+          // Weight gain goal: progress = (weight gained / total to gain) * 100
+          final totalWeightToGain = weightGoal.value - startingWeight;
+          final weightGained = weight.value - startingWeight;
+          weightProgress = ((weightGained / totalWeightToGain) * 100).clamp(0.0, 100.0);
+        } else {
+          // Already at target
+          weightProgress = 100.0;
+        }
+      } else {
+        // Fallback: simple comparison to target
+        // If weight is at or below target, 100% progress
+        // Otherwise, calculate based on how far above target
+        if (weight.value <= weightGoal.value) {
+          weightProgress = 100.0;
+        } else {
+          // Penalize being above target (but don't go negative)
+          final excessWeight = weight.value - weightGoal.value;
+          final maxExcess = weightGoal.value * 0.5; // Consider 50% above target as 0% progress
+          weightProgress = ((1 - (excessWeight / maxExcess)) * 100).clamp(0.0, 100.0);
+        }
+      }
+    }
+    
+    // Average of all four metrics
+    final average = (stepsProgress + sleepProgress + waterProgress + weightProgress) / 4;
+    return average.clamp(0.0, 100.0);
   }
 
   // String get formatLastSync {

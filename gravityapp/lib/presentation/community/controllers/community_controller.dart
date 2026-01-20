@@ -2701,7 +2701,10 @@ class CommunityController extends GetxController {
   /// Create a new post using API
   /// API: POST https://gravity.attoexasolutions.com/api/create_post
   Future<bool> createPost() async {
-    if (newPostText.value.trim().isEmpty) return false;
+    // Allow posts with either text OR image (or both)
+    final hasText = newPostText.value.trim().isNotEmpty;
+    final hasImage = selectedImage.value.isNotEmpty;
+    if (!hasText && !hasImage) return false;
 
     isCreatingPost.value = true;
     createPostError.value = '';

@@ -560,12 +560,14 @@ class _AiCoachScreenState extends State<AiCoachScreen>
 
     return Padding(
       padding: EdgeInsets.only(bottom: 16.h),
-      child: Row(
-        mainAxisAlignment: isUser
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: GestureDetector(
+        onLongPress: () => _showMessageOptions(message),
+        child: Row(
+          mainAxisAlignment: isUser
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // AI avatar
           if (!isUser) ...[
             Container(
@@ -631,35 +633,112 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Image (if present)
+                      // Image (if present) - supports both local file path and network URL
                       if (message.hasImage) ...[
                         GestureDetector(
-                          onTap: () => _showImageFullscreen(message.imagePath!),
+                          onTap: () {
+                            if (message.imagePath != null) {
+                              _showImageFullscreen(message.imagePath!);
+                            } else if (message.imageUrl != null) {
+                              _showImageFullscreenUrl(message.imageUrl!);
+                            }
+                          },
                           child: ClipRRect(
                             borderRadius: BorderRadius.only(
                               topLeft: Radius.circular(20.r),
                               topRight: Radius.circular(20.r),
-                              bottomLeft: message.hasText ? Radius.circular(0) : Radius.circular(isUser ? 20.r : 4.r),
-                              bottomRight: message.hasText ? Radius.circular(0) : Radius.circular(isUser ? 4.r : 20.r),
+                              bottomLeft: (message.hasText || message.hasNutrition) ? Radius.circular(0) : Radius.circular(isUser ? 20.r : 4.r),
+                              bottomRight: (message.hasText || message.hasNutrition) ? Radius.circular(0) : Radius.circular(isUser ? 4.r : 20.r),
                             ),
-                            child: Image.file(
-                              File(message.imagePath!),
-                              width: double.infinity,
-                              height: 200.h,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  width: double.infinity,
-                                  height: 200.h,
-                                  color: Colors.grey[300],
-                                  child: Icon(
-                                    Icons.broken_image,
-                                    color: Colors.grey[600],
-                                    size: 40.sp,
+                            child: message.imagePath != null
+                                ? Image.file(
+                                    File(message.imagePath!),
+                                    width: double.infinity,
+                                    height: 200.h,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        width: double.infinity,
+                                        height: 200.h,
+                                        color: Colors.grey[300],
+                                        child: Icon(
+                                          Icons.broken_image,
+                                          color: Colors.grey[600],
+                                          size: 40.sp,
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : Image.network(
+                                    message.imageUrl!,
+                                    width: double.infinity,
+                                    height: 200.h,
+                                    fit: BoxFit.cover,
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Container(
+                                        width: double.infinity,
+                                        height: 200.h,
+                                        color: Colors.grey[200],
+                                        child: Center(
+                                          child: CircularProgressIndicator(
+                                            value: loadingProgress.expectedTotalBytes != null
+                                                ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                                : null,
+                                            color: const Color(0xFF00B8A9),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        width: double.infinity,
+                                        height: 200.h,
+                                        color: Colors.grey[300],
+                                        child: Icon(
+                                          Icons.broken_image,
+                                          color: Colors.grey[600],
+                                          size: 40.sp,
+                                        ),
+                                      );
+                                    },
                                   ),
-                                );
-                              },
+                          ),
+                        ),
+                      ],
+                      // Nutrition badge (for AI responses with nutrition data)
+                      if (!isUser && message.hasNutrition) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16.w,
+                            vertical: 10.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF00B8A9).withOpacity(0.1),
+                            border: Border(
+                              bottom: BorderSide(
+                                color: const Color(0xFF00B8A9).withOpacity(0.2),
+                                width: 1,
+                              ),
                             ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.local_fire_department,
+                                color: const Color(0xFF00B8A9),
+                                size: 18.sp,
+                              ),
+                              SizedBox(width: 8.w),
+                              Text(
+                                '${message.nutrition} calories',
+                                style: ResponsiveTextStyles.textSm.copyWith(
+                                  color: const Color(0xFF00B8A9),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -703,9 +782,85 @@ class _AiCoachScreenState extends State<AiCoachScreen>
             ),
           ),
         ],
+        ),
       ),
     );
   }
+
+  /// Show message options bottom sheet (long-press menu)
+  void _showMessageOptions(ChatMessage message) async {
+    // Guard: Close any existing bottom sheet first to prevent state conflicts
+    if (Get.isBottomSheetOpen == true) {
+      Get.back();
+      // Wait for the bottom sheet to fully close before opening a new one
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+
+    // Dismiss keyboard before opening bottom sheet
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    Get.bottomSheet(
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20.r),
+            topRight: Radius.circular(20.r),
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag handle
+              Container(
+                margin: EdgeInsets.only(top: 12.h, bottom: 8.h),
+                width: 40.w,
+                height: 4.h,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0A2342).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2.r),
+                ),
+              ),
+              
+              // Delete option
+              ListTile(
+                leading: Icon(
+                  Icons.delete,
+                  color: const Color(0xFFE53935),
+                  size: 24.sp,
+                ),
+                title: Text(
+                  'Delete Message',
+                  style: ResponsiveTextStyles.textSm.copyWith(
+                    color: const Color(0xFFE53935),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: () async {
+                  // Close bottom sheet immediately
+                  Get.back();
+                  
+                  // Wait for bottom sheet to fully close before proceeding
+                  await Future.delayed(const Duration(milliseconds: 200));
+                  
+                  // Delete message (controller handles success/error feedback)
+                  await controller.deleteMessage(message);
+                },
+              ),
+              
+              SizedBox(height: 8.h),
+            ],
+          ),
+        ),
+      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      isDismissible: true,
+      enableDrag: true,
+    );
+  }
+
 
   Widget _buildTypingIndicator() {
     return Padding(
@@ -956,7 +1111,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
         );
   }
 
-  /// Show image in fullscreen
+  /// Show image in fullscreen (local file)
   void _showImageFullscreen(String imagePath) {
     Get.dialog(
       Dialog(
@@ -968,6 +1123,91 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                 child: Image.file(
                   File(imagePath),
                   fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 40.h,
+              right: 20.w,
+              child: InkWell(
+                onTap: () => Get.back(),
+                borderRadius: BorderRadius.circular(20.r),
+                child: Container(
+                  width: 40.w,
+                  height: 40.w,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    color: Colors.white,
+                    size: 24.sp,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Show image in fullscreen (network URL)
+  void _showImageFullscreenUrl(String imageUrl) {
+    Get.dialog(
+      Dialog(
+        backgroundColor: Colors.transparent,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Container(
+                      width: double.infinity,
+                      height: double.infinity,
+                      color: Colors.black,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                              : null,
+                          color: const Color(0xFF00B8A9),
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      width: double.infinity,
+                      height: double.infinity,
+                      color: Colors.black,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.broken_image,
+                              color: Colors.white,
+                              size: 60.sp,
+                            ),
+                            SizedBox(height: 16.h),
+                            Text(
+                              'Failed to load image',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16.sp,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),

@@ -20,6 +20,7 @@ import '../../../data/repositories/goals_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../core/services/api_service.dart';
 import '../../aicoach/controllers/ai_coach_controller.dart';
+import '../../dashboard/controllers/dashboard_controller.dart';
 
 class SettingsController extends GetxController {
   // Services
@@ -1522,6 +1523,10 @@ Future<void> saveProfileImage() async {
 
       if (response.isSuccess) {
         showGoalsEditor.value = false;
+        
+        // Notify DashboardController immediately for real-time updates
+        _notifyDashboardGoalsChanged();
+        
         _safeSnackbar(
           title: 'Success',
           message: 'Goals saved successfully',
@@ -1530,6 +1535,9 @@ Future<void> saveProfileImage() async {
           colorText: Colors.white,
         );
       } else {
+        // Even if API fails, goals are saved locally, so notify dashboard
+        _notifyDashboardGoalsChanged();
+        
         _safeSnackbar(
           title: 'Warning',
           message: 'Goals saved locally but failed to sync with server',
@@ -1549,6 +1557,24 @@ Future<void> saveProfileImage() async {
       );
     } finally {
       isLoadingGoals.value = false;
+    }
+  }
+
+  /// Notify DashboardController that goals have changed
+  /// This provides real-time updates without polling
+  void _notifyDashboardGoalsChanged() {
+    try {
+      // Check if DashboardController is registered and notify it
+      if (Get.isRegistered<DashboardController>()) {
+        final dashboardController = Get.find<DashboardController>();
+        dashboardController.notifyGoalsChanged();
+        debugPrint('✅ Notified DashboardController of goals change');
+      } else {
+        debugPrint('ℹ️ DashboardController not registered, will update on next navigation');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error notifying DashboardController: $e');
+      // Non-critical error - goals are saved, dashboard will update when navigated to
     }
   }
 
@@ -1731,14 +1757,22 @@ Future<void> saveProfileImage() async {
           }
         }
 
+        // Clear AI Coach messages from storage before clearing auth data
+        // This ensures previous user's messages don't show for new user
+        if (Get.isRegistered<AiCoachController>()) {
+          final aiCoachController = Get.find<AiCoachController>();
+          aiCoachController.clearMessages();
+          Get.delete<AiCoachController>(force: true);
+        } else {
+          // If controller doesn't exist, clear messages directly from storage
+          final storage = PreferencesService.getStorage();
+          storage.remove('ai_coach_messages');
+          debugPrint('✅ Cleared AI Coach messages from storage (controller not registered)');
+        }
+
         // Clear authentication data while preserving onboarding status
         // Use clearAuthData() instead of clearAll() to safely preserve onboarding
         await PreferencesService.clearAuthData();
-
-        // Delete AI Coach controller to prevent state reuse after logout
-        if (Get.isRegistered<AiCoachController>()) {
-          Get.delete<AiCoachController>(force: true);
-        }
 
         // Navigate to login screen and clear navigation stack
         Get.offAllNamed('/login');

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/model/today_screen.dart';
 import '../../../../app/routes/app_routes.dart';
+import '../../../../data/repositories/ai_coach_repository.dart';
+import '../../../../core/services/preferences_service.dart';
 
 class TodayController extends GetxController {
   // Weight data
@@ -24,6 +27,14 @@ class TodayController extends GetxController {
   final RxBool showWeighInModal = false.obs;
   final RxBool showGoalsModal = false.obs;
 
+  // Nutrition data
+  final RxInt totalNutrition = 0.obs; // Total daily calories
+  final RxBool isLoadingNutrition = false.obs;
+  final RxString nutritionError = ''.obs;
+
+  // Repository
+  final AiCoachRepository _aiCoachRepository = AiCoachRepository();
+
   // Navigation guard to prevent multiple rapid calls
   bool _isNavigating = false;
 
@@ -37,6 +48,9 @@ class TodayController extends GetxController {
     reflectionController.addListener(() {
       reflection.value = reflectionController.text;
     });
+
+    // Fetch nutrition data on screen load
+    fetchNutritionData();
   }
 
   @override
@@ -51,12 +65,74 @@ class TodayController extends GetxController {
   double get currentLoss => startingWeight.value - currentWeight.value; // 6 kg
   double get progressPercentage => (currentLoss / totalLossGoal) * 100;
 
+  // Format date for API (YY-MM-dd format, e.g., "26-01-19" for January 19, 2026)
+  String _formatDateForApi(DateTime date) {
+    final year = date.year.toString().substring(2); // Last 2 digits of year
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
+  }
+
+  // Fetch nutrition data from API
+  Future<void> fetchNutritionData() async {
+    try {
+      isLoadingNutrition.value = true;
+      nutritionError.value = '';
+
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        nutritionError.value = 'No authentication token';
+        isLoadingNutrition.value = false;
+        return;
+      }
+
+      // Use current date (today)
+      final today = DateTime.now();
+      final dayString = _formatDateForApi(today);
+
+      final response = await _aiCoachRepository.getDayWiseNutrition(
+        apiToken: apiToken,
+        day: dayString,
+      );
+
+      if (response.isSuccess && response.data != null) {
+        final totalNutritionValue = response.data!['total_nutration'] as int? ?? 0;
+        totalNutrition.value = totalNutritionValue;
+        debugPrint('✅ Nutrition data loaded: $totalNutritionValue calories');
+      } else {
+        nutritionError.value = response.message;
+        totalNutrition.value = 0;
+        debugPrint('⚠️ Failed to load nutrition data: ${response.message}');
+      }
+    } catch (e) {
+      nutritionError.value = 'Failed to load nutrition data';
+      totalNutrition.value = 0;
+      debugPrint('❌ Error fetching nutrition data: $e');
+    } finally {
+      isLoadingNutrition.value = false;
+    }
+  }
+
+  // Get nutrition display text
+  String get nutritionDisplayText {
+    if (isLoadingNutrition.value) {
+      return 'Loading...';
+    }
+    if (nutritionError.value.isNotEmpty) {
+      return 'Borderline'; // Fallback to status text on error
+    }
+    if (totalNutrition.value > 0) {
+      return '${totalNutrition.value} cal';
+    }
+    return 'Borderline'; // Default status text
+  }
+
   // Pillars data
   List<Pillar> get pillars => [
     Pillar(
       name: 'Nutrition',
       status: PillarStatus.borderline,
-      detail: 'Borderline',
+      detail: nutritionDisplayText, // Dynamic detail with calorie count
       icon: Icons.restaurant,
     ),
     Pillar(

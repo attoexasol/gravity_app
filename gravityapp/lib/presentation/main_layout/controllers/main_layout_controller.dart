@@ -188,14 +188,22 @@ class MainLayoutController extends GetxController {
     );
 
     if (confirmed == true) {
+      // Clear AI Coach messages from storage before clearing auth data
+      // This ensures previous user's messages don't show for new user
+      if (Get.isRegistered<AiCoachController>()) {
+        final aiCoachController = Get.find<AiCoachController>();
+        aiCoachController.clearMessages();
+        Get.delete<AiCoachController>(force: true);
+      } else {
+        // If controller doesn't exist, clear messages directly from storage
+        final storage = PreferencesService.getStorage();
+        storage.remove('ai_coach_messages');
+        debugPrint('✅ Cleared AI Coach messages from storage (controller not registered)');
+      }
+
       // Clear authentication data (token and user data) while preserving onboarding
       // This ensures onboarding is never shown again after first completion
       await PreferencesService.clearAuthData();
-
-      // Delete AI Coach controller to prevent state reuse after logout
-      if (Get.isRegistered<AiCoachController>()) {
-        Get.delete<AiCoachController>(force: true);
-      }
 
       // TODO: Call logout API if needed
       // await AuthService.logout();

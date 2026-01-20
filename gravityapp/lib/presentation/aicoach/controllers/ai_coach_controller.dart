@@ -71,11 +71,19 @@ class AiCoachController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    // Load saved messages from storage, or show initial greeting if none exist
+    
+    // Validate that stored messages belong to current user
+    // If user ID changed (different user logged in), clear old messages
+    _validateUserMessages();
+    
+    // Load saved messages from storage first (fast, immediate UI)
     _loadMessagesFromStorage();
-    if (messages.isEmpty) {
-      _loadInitialMessage();
-    }
+    
+    // Fetch chat history from server (async, non-blocking)
+    // This ensures messages are restored after reinstall
+    // The greeting will be shown in _fetchChatHistoryFromServer() if no messages exist
+    _fetchChatHistoryFromServer();
+    
     // Jump to bottom immediately after messages are loaded (no animation)
     // This prevents visible scrolling when screen first opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -486,12 +494,30 @@ class AiCoachController extends GetxController {
         // Extract AI reply from response
         final aiReply = response.data!['ai_coach_reply'] as String?;
         
+        // Extract nutrition value if present (image mode response)
+        int? nutrition;
+        final nutritionValue = response.data!['nutrition'];
+        if (nutritionValue != null) {
+          // Handle both int and string types from API
+          if (nutritionValue is int) {
+            nutrition = nutritionValue;
+          } else if (nutritionValue is String) {
+            nutrition = int.tryParse(nutritionValue);
+          } else if (nutritionValue is num) {
+            nutrition = nutritionValue.toInt();
+          }
+          if (nutrition != null) {
+            debugPrint('📊 Nutrition value received: $nutrition calories');
+          }
+        }
+        
         if (aiReply != null && aiReply.isNotEmpty) {
           final aiResponse = ChatMessage(
             id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
             text: aiReply,
             sender: MessageSender.ai,
             timestamp: DateTime.now(),
+            nutrition: nutrition, // Store nutrition value in message
           );
 
           messages.add(aiResponse);
@@ -558,9 +584,11 @@ class AiCoachController extends GetxController {
       final messagesJson = messages.map((message) => {
         'id': message.id,
         'text': message.text,
-        'imagePath': message.imagePath, // Save image path
+        'imagePath': message.imagePath, // Save local image path
+        'imageUrl': message.imageUrl, // Save network image URL
         'sender': message.sender == MessageSender.user ? 'user' : 'ai',
         'timestamp': message.timestamp.toIso8601String(),
+        'nutrition': message.nutrition, // Save nutrition value if present
       }).toList();
       
       storage.write(_messagesStorageKey, jsonEncode(messagesJson));
@@ -587,13 +615,28 @@ class AiCoachController extends GetxController {
                 : MessageSender.ai;
             final timestamp = DateTime.parse(messageData['timestamp'] as String);
             
+            // Extract nutrition value (may be int, string, or null)
+            int? nutrition;
+            final nutritionValue = messageData['nutrition'];
+            if (nutritionValue != null) {
+              if (nutritionValue is int) {
+                nutrition = nutritionValue;
+              } else if (nutritionValue is String) {
+                nutrition = int.tryParse(nutritionValue);
+              } else if (nutritionValue is num) {
+                nutrition = nutritionValue.toInt();
+              }
+            }
+            
             messages.add(
               ChatMessage(
                 id: messageData['id'] as String,
                 text: messageData['text'] as String?,
                 imagePath: messageData['imagePath'] as String?,
+                imageUrl: messageData['imageUrl'] as String?,
                 sender: sender,
                 timestamp: timestamp,
+                nutrition: nutrition, // Load nutrition value from storage
               ),
             );
           }
@@ -648,11 +691,346 @@ class AiCoachController extends GetxController {
     });
   }
 
+  /// Fetch chat history from server
+  /// This is called on controller init to restore messages after reinstall
+  /// Merges server messages with local messages intelligently
+  Future<void> _fetchChatHistoryFromServer() async {
+    try {
+      // Get auth token
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        debugPrint('⚠️ No auth token available, skipping server fetch');
+        return;
+      }
+
+      debugPrint('🔄 Fetching chat history from server...');
+      
+      final response = await _aiCoachRepository.getChatHistory(
+        apiToken: apiToken,
+      );
+
+      if (isClosed) return;
+
+      if (response.isSuccess && response.data != null && response.data!.isNotEmpty) {
+        debugPrint('✅ Received ${response.data!.length} messages from server');
+        
+        // Convert server messages to ChatMessage objects
+        final serverMessages = <ChatMessage>[];
+        
+        for (final messageData in response.data!) {
+          try {
+            // Parse timestamp (server sends UTC, convert to local time for consistency)
+            final createdAtStr = messageData['created_at'] as String?;
+            DateTime? timestamp;
+            if (createdAtStr != null) {
+              final parsed = DateTime.tryParse(createdAtStr);
+              if (parsed != null) {
+                // Server timestamps are in UTC, convert to local time for display consistency
+                timestamp = parsed.toLocal();
+              }
+            }
+            timestamp ??= DateTime.now();
+
+            // Extract nutrition value (handle API typo: "nutration" instead of "nutrition")
+            int? nutrition;
+            final nutritionValue = messageData['nutration'] ?? messageData['nutrition'];
+            if (nutritionValue != null) {
+              if (nutritionValue is int) {
+                nutrition = nutritionValue;
+              } else if (nutritionValue is String) {
+                nutrition = int.tryParse(nutritionValue);
+              } else if (nutritionValue is num) {
+                nutrition = nutritionValue.toInt();
+              }
+            }
+
+            // Get user message, AI message, and image URL
+            final userMessage = messageData['user_message'] as String?;
+            final aiMessage = messageData['ai_message'] as String?;
+            final imageUrl = messageData['image'] as String?; // API returns "image" field
+            final serverId = messageData['id'];
+
+            // For image-only conversations: user_message is null but image exists
+            // The image should be associated with the user message, not the AI message
+            // Create user message if text is present OR if image exists (image-only conversation)
+            if ((userMessage != null && userMessage.isNotEmpty) || (imageUrl != null && userMessage == null)) {
+              final userMessageId = 'server_${serverId}_user';
+              
+              // Check if message already exists (avoid duplicates)
+              final userExists = messages.any((m) => m.id == userMessageId);
+              if (!userExists) {
+                // User message timestamp: slightly before AI message to maintain conversation flow
+                final userTimestamp = timestamp.subtract(const Duration(seconds: 1));
+                
+                serverMessages.add(
+                  ChatMessage(
+                    id: userMessageId,
+                    text: userMessage, // Can be null for image-only messages
+                    imageUrl: imageUrl, // Image URL goes to user message (the image they sent)
+                    sender: MessageSender.user,
+                    timestamp: userTimestamp,
+                  ),
+                );
+                if (userMessage != null && userMessage.isNotEmpty) {
+                  debugPrint('📥 Added user message from server: ${userMessage.length > 50 ? "${userMessage.substring(0, 50)}..." : userMessage}');
+                } else if (imageUrl != null) {
+                  debugPrint('📥 Added user image message from server (image-only)');
+                }
+              }
+            }
+
+            // Create AI message if present (AI message should NOT have the image URL)
+            if (aiMessage != null && aiMessage.isNotEmpty) {
+              final aiMessageId = 'server_${serverId}_ai';
+              
+              // Check if message already exists (avoid duplicates)
+              final aiExists = messages.any((m) => m.id == aiMessageId);
+              if (!aiExists) {
+                serverMessages.add(
+                  ChatMessage(
+                    id: aiMessageId,
+                    text: aiMessage,
+                    // Note: imageUrl is NOT added to AI message - it belongs to the user message
+                    sender: MessageSender.ai,
+                    timestamp: timestamp,
+                    nutrition: nutrition,
+                  ),
+                );
+                debugPrint('📥 Added AI message from server: ${aiMessage.length > 50 ? "${aiMessage.substring(0, 50)}..." : aiMessage}');
+              }
+            }
+          } catch (e) {
+            debugPrint('⚠️ Error parsing server message: $e');
+          }
+        }
+
+        if (serverMessages.isNotEmpty) {
+          // Merge server messages with existing local messages
+          // Strategy: 
+          // 1. Remove local messages that match server messages (by content and approximate time)
+          // 2. Add server messages that don't exist locally
+          final existingIds = messages.map((m) => m.id).toSet();
+          
+          // Find and remove local messages that match server messages
+          // This prevents duplicates when the same message exists with different IDs
+          final messagesToRemove = <ChatMessage>[];
+          for (final serverMsg in serverMessages) {
+            // Check if a local message matches this server message
+            for (final localMsg in messages) {
+              // Skip if local message is already a server message
+              if (localMsg.id.startsWith('server_')) continue;
+              
+              // Match by: same sender, same text (or both null/empty), same image (path or URL), and timestamp within 5 minutes
+              final timeDiff = (localMsg.timestamp.difference(serverMsg.timestamp).abs().inMinutes);
+              final textMatches = (localMsg.text ?? '') == (serverMsg.text ?? '');
+              final senderMatches = localMsg.sender == serverMsg.sender;
+              
+              // For image messages: match if both have images (either path or URL)
+              final imageMatches = (localMsg.hasImage && serverMsg.hasImage) || 
+                                   (!localMsg.hasImage && !serverMsg.hasImage);
+              
+              if (senderMatches && textMatches && imageMatches && timeDiff <= 5) {
+                messagesToRemove.add(localMsg);
+                debugPrint('🔄 Removing duplicate local message: ${localMsg.id} (matches server: ${serverMsg.id})');
+                break; // Found match, move to next server message
+              }
+            }
+          }
+          
+          // Remove duplicate local messages
+          for (final msg in messagesToRemove) {
+            messages.remove(msg);
+          }
+          
+          // Add server messages that don't exist locally
+          final newMessages = serverMessages.where((m) => !existingIds.contains(m.id)).toList();
+          
+          if (newMessages.isNotEmpty || messagesToRemove.isNotEmpty) {
+            // Add new messages from server
+            messages.addAll(newMessages);
+            
+            // Sort all messages by timestamp (oldest first, newest last)
+            messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+            
+            // Save merged messages to storage
+            _saveMessagesToStorage();
+            
+            debugPrint('✅ Merged ${newMessages.length} new messages from server');
+            if (messagesToRemove.isNotEmpty) {
+              debugPrint('🗑️ Removed ${messagesToRemove.length} duplicate local messages');
+            }
+            debugPrint('📊 Total messages: ${messages.length}');
+            
+            // Scroll to bottom to show latest messages
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _scrollToBottom();
+            });
+          } else {
+            debugPrint('ℹ️ All server messages already exist locally');
+          }
+        } else {
+          debugPrint('ℹ️ No valid messages found in server response');
+        }
+      } else {
+        debugPrint('⚠️ Failed to fetch chat history: ${response.message}');
+        // Don't show error to user - local messages are still available
+      }
+      
+      // Show initial greeting ONLY if no messages exist after server fetch completes
+      // This ensures greeting doesn't show when real messages are being loaded
+      if (messages.isEmpty) {
+        _loadInitialMessage();
+        _saveMessagesToStorage(); // Save greeting to storage
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottom();
+        });
+      }
+    } catch (e) {
+      debugPrint('❌ Error fetching chat history from server: $e');
+      // Don't show error to user - local messages are still available
+      
+      // Show greeting if no messages exist even after error
+      if (messages.isEmpty) {
+        _loadInitialMessage();
+        _saveMessagesToStorage();
+      }
+    }
+  }
+
+  /// Validate that stored messages belong to current user
+  /// Clears messages if user ID has changed (different user logged in)
+  void _validateUserMessages() {
+    try {
+      final currentUserId = PreferencesService.getUserId();
+      final storage = PreferencesService.getStorage();
+      final lastUserId = storage.read('ai_coach_last_user_id');
+      
+      // If user ID exists and has changed, clear old messages
+      if (currentUserId != null) {
+        if (lastUserId != null && lastUserId != currentUserId) {
+          debugPrint('🔄 User ID changed from $lastUserId to $currentUserId - clearing old messages');
+          storage.remove(_messagesStorageKey);
+          messages.clear();
+        }
+        // Save current user ID for next validation
+        storage.write('ai_coach_last_user_id', currentUserId);
+      } else if (lastUserId != null) {
+        // Current user ID is null but we have a stored user ID - clear messages
+        debugPrint('🔄 User logged out - clearing messages');
+        storage.remove(_messagesStorageKey);
+        storage.remove('ai_coach_last_user_id');
+        messages.clear();
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error validating user messages: $e');
+      // On error, clear messages to be safe
+      final storage = PreferencesService.getStorage();
+      storage.remove(_messagesStorageKey);
+      messages.clear();
+    }
+  }
+
+  /// Extract server message ID from local message ID
+  /// Server messages have IDs like "server_4_user" or "server_4_ai"
+  /// Returns the numeric ID (e.g., 4) or null if not a server message
+  int? _extractServerMessageId(String messageId) {
+    try {
+      if (messageId.startsWith('server_')) {
+        // Extract ID from "server_4_user" or "server_4_ai"
+        final parts = messageId.split('_');
+        if (parts.length >= 2) {
+          final idStr = parts[1];
+          return int.tryParse(idStr);
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('⚠️ Error extracting server message ID: $e');
+      return null;
+    }
+  }
+
+  /// Delete a message (both from server and local storage)
+  /// Shows confirmation dialog before deleting
+  Future<void> deleteMessage(ChatMessage message) async {
+    try {
+      // Extract server message ID if this is a server message
+      final serverId = _extractServerMessageId(message.id);
+      
+      // If it's a server message, delete from server first
+      if (serverId != null) {
+        final apiToken = PreferencesService.getAuthToken();
+        if (apiToken != null && apiToken.isNotEmpty) {
+          debugPrint('🔄 Deleting message from server (ID: $serverId)...');
+          
+          final response = await _aiCoachRepository.deleteMessage(
+            apiToken: apiToken,
+            messageId: serverId,
+          );
+
+          if (!response.isSuccess) {
+            debugPrint('⚠️ Failed to delete message from server: ${response.message}');
+            // Still delete locally even if server deletion fails
+            // This ensures UI is updated even if network is down
+          } else {
+            debugPrint('✅ Message deleted from server successfully');
+          }
+        } else {
+          debugPrint('⚠️ No auth token available, deleting locally only');
+        }
+      } else {
+        debugPrint('ℹ️ Local message (not from server), deleting locally only');
+      }
+
+      // For server messages, remove both the user and AI messages with the same server ID
+      // This ensures the entire conversation pair is removed from the UI
+      if (serverId != null) {
+        final userMessageId = 'server_${serverId}_user';
+        final aiMessageId = 'server_${serverId}_ai';
+        
+        final removedCount = messages.length;
+        messages.removeWhere((m) => m.id == userMessageId || m.id == aiMessageId);
+        final newCount = messages.length;
+        final deletedCount = removedCount - newCount;
+        
+        debugPrint('🗑️ Removed $deletedCount message(s) from UI (user + AI pair for server ID: $serverId)');
+      } else {
+        // For local messages, just remove the specific message
+        messages.removeWhere((m) => m.id == message.id);
+        debugPrint('🗑️ Removed local message from UI');
+      }
+      
+      // Save updated messages to storage
+      _saveMessagesToStorage();
+      
+      debugPrint('✅ Message(s) deleted successfully');
+      
+      // Scroll to maintain position (don't jump to bottom)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (messagesScrollController.hasClients) {
+          final position = messagesScrollController.position;
+          final currentScroll = position.pixels;
+          final maxScroll = position.maxScrollExtent;
+          
+          // If we're near the bottom, stay at bottom
+          // Otherwise, maintain current scroll position
+          if (currentScroll >= maxScroll - 100) {
+            _scrollToBottom();
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint('❌ Error deleting message: $e');
+      rethrow;
+    }
+  }
+
   /// Clear all messages from storage (useful for logout or reset)
   void clearMessages() {
     messages.clear();
     final storage = PreferencesService.getStorage();
     storage.remove(_messagesStorageKey);
+    storage.remove('ai_coach_last_user_id'); // Also clear user ID tracking
     debugPrint('✅ Cleared AI Coach messages from storage');
   }
 
@@ -688,9 +1066,11 @@ class AiCoachController extends GetxController {
   // Removed _getAiResponse - now using API instead of mock responses
 
   String formatTime(DateTime dateTime) {
-    final hour = dateTime.hour > 12 ? dateTime.hour - 12 : dateTime.hour;
-    final minute = dateTime.minute.toString().padLeft(2, '0');
-    final period = dateTime.hour >= 12 ? 'PM' : 'AM';
+    // Ensure we're working with local time for display
+    final localTime = dateTime.isUtc ? dateTime.toLocal() : dateTime;
+    final hour = localTime.hour == 0 ? 12 : (localTime.hour > 12 ? localTime.hour - 12 : localTime.hour);
+    final minute = localTime.minute.toString().padLeft(2, '0');
+    final period = localTime.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$minute $period';
   }
 }

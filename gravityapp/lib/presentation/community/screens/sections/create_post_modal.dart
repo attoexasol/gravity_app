@@ -447,7 +447,10 @@ class _PostButton extends StatelessWidget {
         ),
       ),
       child: Obx(() {
-        final canPost = controller.newPostText.value.trim().isNotEmpty;
+        // Enable button if either text is entered OR an image is selected
+        final hasText = controller.newPostText.value.trim().isNotEmpty;
+        final hasImage = controller.selectedImage.value.isNotEmpty;
+        final canPost = hasText || hasImage;
         final isCreating = controller.isCreatingPost.value;
 
         return GestureDetector(

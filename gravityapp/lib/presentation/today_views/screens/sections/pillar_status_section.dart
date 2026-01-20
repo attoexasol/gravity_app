@@ -40,7 +40,7 @@ class PillarStatusSection extends StatelessWidget {
             ),
           ),
           SizedBox(height: 16.h),
-          Column(
+          Obx(() => Column(
                 children: controller.pillars.map((pillar) {
                   final statusColor = controller.getPillarColor(pillar.status);
                   final statusIcon = controller.getPillarStatusIcon(pillar.status);
@@ -69,18 +69,29 @@ class PillarStatusSection extends StatelessWidget {
                             ),
                           ),
                         ),
-                        Text(
-                          pillar.detail,
-                          style: ResponsiveTextStyles.textSm.copyWith(
-                            color: statusColor,
-                            fontWeight: FontWeight.w500,
+                        // For Nutrition pillar, show loading indicator if loading
+                        if (pillar.name == 'Nutrition' && controller.isLoadingNutrition.value)
+                          SizedBox(
+                            width: 16.w,
+                            height: 16.w,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                            ),
+                          )
+                        else
+                          Text(
+                            pillar.detail,
+                            style: ResponsiveTextStyles.textSm.copyWith(
+                              color: statusColor,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   );
                 }).toList(),
-          ),
+          )),
         ],
       ),
     );
