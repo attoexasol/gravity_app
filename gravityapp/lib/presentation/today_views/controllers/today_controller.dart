@@ -96,12 +96,20 @@ class TodayController extends GetxController {
       );
 
       if (response.isSuccess && response.data != null) {
+        // API successfully returned data
+        // The repository defaults total_nutration to 0 if null, so we always get a number
         final totalNutritionValue = response.data!['total_nutration'] as int? ?? 0;
+        
+        // If API succeeds, we have valid data (even if it's 0 calories)
+        // Clear error FIRST to ensure UI updates correctly
+        nutritionError.value = '';
+        // Then set the value
         totalNutrition.value = totalNutritionValue;
-        debugPrint('✅ Nutrition data loaded: $totalNutritionValue calories');
+        debugPrint('✅ Nutrition data loaded: $totalNutritionValue calories (error cleared)');
       } else {
-        nutritionError.value = response.message;
+        // API failed or returned error - no data available
         totalNutrition.value = 0;
+        nutritionError.value = response.message.isNotEmpty ? response.message : 'Failed to load nutrition data';
         debugPrint('⚠️ Failed to load nutrition data: ${response.message}');
       }
     } catch (e) {
@@ -118,13 +126,15 @@ class TodayController extends GetxController {
     if (isLoadingNutrition.value) {
       return 'Loading...';
     }
+    // If there's an error (no data, failed to load, etc.), show "Borderline"
     if (nutritionError.value.isNotEmpty) {
-      return 'Borderline'; // Fallback to status text on error
+      return 'Borderline';
     }
-    if (totalNutrition.value > 0) {
-      return '${totalNutrition.value} cal';
-    }
-    return 'Borderline'; // Default status text
+    // If we have valid data (including 0 calories), show the calories
+    // Note: If totalNutrition is 0 and there's no error, it means the API
+    // successfully returned 0 calories (user logged 0 calories)
+    // If there's an error, we already returned "Borderline" above
+    return '${totalNutrition.value} cal';
   }
 
   // Pillars data

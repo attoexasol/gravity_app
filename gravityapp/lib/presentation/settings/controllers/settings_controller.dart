@@ -192,18 +192,31 @@ class SettingsController extends GetxController {
 
   /// Close profile image modal
   void closeProfileImageModal() {
+    // Reset processing flag first to allow modal to close
+    isProcessingImage.value = false;
+    
     try {
       Get.closeCurrentSnackbar();
     } catch (e) {
       debugPrint('⚠️ Error closing snackbar: $e');
     }
     try {
-      Get.back();
+      // Use Navigator directly for more reliable closing
+      final context = Get.context;
+      if (context != null && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      } else {
+        Get.back();
+      }
     } catch (e) {
       debugPrint('⚠️ Error navigating back: $e');
       final context = Get.context;
       if (context != null) {
-        Navigator.of(context).pop();
+        try {
+          Navigator.of(context).pop();
+        } catch (e2) {
+          debugPrint('⚠️ Navigator.pop() also failed: $e2');
+        }
       }
     }
     tempImagePath.value = null;
@@ -355,8 +368,13 @@ Future<void> saveProfileImage() async {
       }
 
       await _uploadProfileImageBytes(resizedBytes);
+      
+      // Close modal immediately after upload completes
       closeProfileImageModal();
-
+      
+      // Show success message after a small delay to ensure modal is closed
+      await Future.delayed(const Duration(milliseconds: 100));
+      
       _safeSnackbar(
         title: 'Success',
         message: 'Profile image updated successfully',
@@ -430,7 +448,11 @@ Future<void> saveProfileImage() async {
         profileImagePath: profileImageUrl,
       );
 
+      // Close modal immediately after upload completes
       closeProfileImageModal();
+      
+      // Show success message after a small delay to ensure modal is closed
+      await Future.delayed(const Duration(milliseconds: 100));
 
       _safeSnackbar(
         title: 'Success',
@@ -452,7 +474,11 @@ Future<void> saveProfileImage() async {
         profileImagePath: imagePathToUpload,
       );
 
+      // Close modal immediately even if upload failed
       closeProfileImageModal();
+      
+      // Show warning message after a small delay to ensure modal is closed
+      await Future.delayed(const Duration(milliseconds: 100));
 
       _safeSnackbar(
         title: 'Warning',
@@ -468,15 +494,24 @@ Future<void> saveProfileImage() async {
     debugPrint('❌ Profile image error: $e');
     debugPrint('$stackTrace');
 
-    _safeSnackbar(
-      title: 'Error',
-      message: 'Failed to save profile image. Please try again.',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: Colors.red.withOpacity(0.8),
-      colorText: Colors.white,
-    );
+    // Close modal even on error
+    closeProfileImageModal();
+    
+    // Show error message after a small delay to ensure modal is closed
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _safeSnackbar(
+        title: 'Error',
+        message: 'Failed to save profile image. Please try again.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.withOpacity(0.8),
+        colorText: Colors.white,
+      );
+    });
   } finally {
-    isProcessingImage.value = false;
+    // Ensure processing flag is reset (closeProfileImageModal already does this, but double-check)
+    if (isProcessingImage.value) {
+      isProcessingImage.value = false;
+    }
   }
 }
 

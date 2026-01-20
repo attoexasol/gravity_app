@@ -65,8 +65,8 @@ class AiCoachController extends GetxController {
     ),
   ];
 
-  // Storage key for AI coach messages
-  static const String _messagesStorageKey = 'ai_coach_messages';
+  // Storage key for deleted message IDs (to prevent re-adding on restart)
+  static const String _deletedMessagesStorageKey = 'ai_coach_deleted_messages';
 
   @override
   void onInit() {
@@ -76,11 +76,8 @@ class AiCoachController extends GetxController {
     // If user ID changed (different user logged in), clear old messages
     _validateUserMessages();
     
-    // Load saved messages from storage first (fast, immediate UI)
-    _loadMessagesFromStorage();
-    
-    // Fetch chat history from server (async, non-blocking)
-    // This ensures messages are restored after reinstall
+    // Fetch chat history from server
+    // Messages are only stored on the server, not locally
     // The greeting will be shown in _fetchChatHistoryFromServer() if no messages exist
     _fetchChatHistoryFromServer();
     
@@ -420,7 +417,6 @@ class AiCoachController extends GetxController {
 
     if (isClosed) return;
     messages.add(userMessage);
-    _saveMessagesToStorage(); // Save to local storage
     _scrollToBottom(); // Scroll to show most recent message
 
     // Clear input and image (after storing reference)
@@ -475,7 +471,6 @@ class AiCoachController extends GetxController {
             timestamp: DateTime.now(),
           );
           messages.add(errorResponse);
-          _saveMessagesToStorage();
           return;
         }
       }
@@ -521,7 +516,6 @@ class AiCoachController extends GetxController {
           );
 
           messages.add(aiResponse);
-          _saveMessagesToStorage();
           _scrollToBottom();
           debugPrint('✅ AI Coach reply added to chat: ${aiReply.length > 50 ? "${aiReply.substring(0, 50)}..." : aiReply}');
         } else {
@@ -533,7 +527,6 @@ class AiCoachController extends GetxController {
             timestamp: DateTime.now(),
           );
           messages.add(errorResponse);
-          _saveMessagesToStorage();
           debugPrint('⚠️ AI Coach reply is empty or missing in response');
         }
       } else {
@@ -551,7 +544,6 @@ class AiCoachController extends GetxController {
           timestamp: DateTime.now(),
         );
         messages.add(errorResponse);
-        _saveMessagesToStorage();
         debugPrint('❌ AI Coach API error: ${errorMessage.value}');
       }
     } catch (e) {
@@ -568,7 +560,6 @@ class AiCoachController extends GetxController {
         timestamp: DateTime.now(),
       );
       messages.add(errorResponse);
-      _saveMessagesToStorage();
     } finally {
       if (isClosed) return;
       isTyping.value = false;
@@ -577,85 +568,6 @@ class AiCoachController extends GetxController {
     }
   }
 
-  /// Save messages to local storage
-  void _saveMessagesToStorage() {
-    try {
-      final storage = PreferencesService.getStorage();
-      final messagesJson = messages.map((message) => {
-        'id': message.id,
-        'text': message.text,
-        'imagePath': message.imagePath, // Save local image path
-        'imageUrl': message.imageUrl, // Save network image URL
-        'sender': message.sender == MessageSender.user ? 'user' : 'ai',
-        'timestamp': message.timestamp.toIso8601String(),
-        'nutrition': message.nutrition, // Save nutrition value if present
-      }).toList();
-      
-      storage.write(_messagesStorageKey, jsonEncode(messagesJson));
-      debugPrint('✅ Saved ${messages.length} AI Coach messages to storage');
-    } catch (e) {
-      debugPrint('⚠️ Error saving AI Coach messages to storage: $e');
-    }
-  }
-
-  /// Load messages from local storage
-  void _loadMessagesFromStorage() {
-    try {
-      final storage = PreferencesService.getStorage();
-      final messagesJsonString = storage.read(_messagesStorageKey) as String?;
-      
-      if (messagesJsonString != null && messagesJsonString.isNotEmpty) {
-        final messagesJson = jsonDecode(messagesJsonString) as List<dynamic>;
-        messages.clear();
-        
-        for (final messageData in messagesJson) {
-          if (messageData is Map<String, dynamic>) {
-            final sender = messageData['sender'] == 'user' 
-                ? MessageSender.user 
-                : MessageSender.ai;
-            final timestamp = DateTime.parse(messageData['timestamp'] as String);
-            
-            // Extract nutrition value (may be int, string, or null)
-            int? nutrition;
-            final nutritionValue = messageData['nutrition'];
-            if (nutritionValue != null) {
-              if (nutritionValue is int) {
-                nutrition = nutritionValue;
-              } else if (nutritionValue is String) {
-                nutrition = int.tryParse(nutritionValue);
-              } else if (nutritionValue is num) {
-                nutrition = nutritionValue.toInt();
-              }
-            }
-            
-            messages.add(
-              ChatMessage(
-                id: messageData['id'] as String,
-                text: messageData['text'] as String?,
-                imagePath: messageData['imagePath'] as String?,
-                imageUrl: messageData['imageUrl'] as String?,
-                sender: sender,
-                timestamp: timestamp,
-                nutrition: nutrition, // Load nutrition value from storage
-              ),
-            );
-          }
-        }
-        
-        // Sort messages by timestamp (oldest first, newest last) to ensure chronological order
-        messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-        
-        messages.refresh();
-        debugPrint('✅ Loaded ${messages.length} AI Coach messages from storage');
-      } else {
-        debugPrint('ℹ️ No saved AI Coach messages found in storage');
-      }
-    } catch (e) {
-      debugPrint('⚠️ Error loading AI Coach messages from storage: $e');
-      // If loading fails, ensure messages list is empty so initial message can be shown
-      messages.clear();
-    }
-  }
 
   /// Jump to bottom immediately (no animation) - used when screen first opens
   void _jumpToBottom() {
@@ -748,7 +660,31 @@ class AiCoachController extends GetxController {
             final userMessage = messageData['user_message'] as String?;
             final aiMessage = messageData['ai_message'] as String?;
             final imageUrl = messageData['image'] as String?; // API returns "image" field
-            final serverId = messageData['id'];
+            final serverIdRaw = messageData['id'];
+            
+            // Normalize serverId to int (handles cases where JSON returns num/double)
+            int? serverId;
+            if (serverIdRaw != null) {
+              if (serverIdRaw is int) {
+                serverId = serverIdRaw;
+              } else if (serverIdRaw is num) {
+                serverId = serverIdRaw.toInt();
+              } else if (serverIdRaw is String) {
+                serverId = int.tryParse(serverIdRaw);
+              }
+            }
+
+            // Skip this message if it was deleted locally (even if server still has it)
+            if (serverId != null && _isMessageDeleted(serverId)) {
+              debugPrint('⏭️ Skipping deleted server message (ID: $serverId, raw: $serverIdRaw, type: ${serverIdRaw.runtimeType})');
+              continue; // Skip to next message in the loop
+            }
+            
+            // If serverId is null after normalization, skip this message
+            if (serverId == null) {
+              debugPrint('⚠️ Skipping message with invalid server ID: $serverIdRaw');
+              continue;
+            }
 
             // For image-only conversations: user_message is null but image exists
             // The image should be associated with the user message, not the AI message
@@ -780,6 +716,7 @@ class AiCoachController extends GetxController {
             }
 
             // Create AI message if present (AI message should NOT have the image URL)
+            // Note: We already checked if serverId is deleted above, so we can proceed
             if (aiMessage != null && aiMessage.isNotEmpty) {
               final aiMessageId = 'server_${serverId}_ai';
               
@@ -852,9 +789,6 @@ class AiCoachController extends GetxController {
             // Sort all messages by timestamp (oldest first, newest last)
             messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
             
-            // Save merged messages to storage
-            _saveMessagesToStorage();
-            
             debugPrint('✅ Merged ${newMessages.length} new messages from server');
             if (messagesToRemove.isNotEmpty) {
               debugPrint('🗑️ Removed ${messagesToRemove.length} duplicate local messages');
@@ -880,19 +814,17 @@ class AiCoachController extends GetxController {
       // This ensures greeting doesn't show when real messages are being loaded
       if (messages.isEmpty) {
         _loadInitialMessage();
-        _saveMessagesToStorage(); // Save greeting to storage
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _scrollToBottom();
         });
       }
     } catch (e) {
       debugPrint('❌ Error fetching chat history from server: $e');
-      // Don't show error to user - local messages are still available
+      // Don't show error to user
       
       // Show greeting if no messages exist even after error
       if (messages.isEmpty) {
         _loadInitialMessage();
-        _saveMessagesToStorage();
       }
     }
   }
@@ -909,7 +841,7 @@ class AiCoachController extends GetxController {
       if (currentUserId != null) {
         if (lastUserId != null && lastUserId != currentUserId) {
           debugPrint('🔄 User ID changed from $lastUserId to $currentUserId - clearing old messages');
-          storage.remove(_messagesStorageKey);
+          storage.remove(_deletedMessagesStorageKey); // Clear deleted messages for old user
           messages.clear();
         }
         // Save current user ID for next validation
@@ -917,7 +849,7 @@ class AiCoachController extends GetxController {
       } else if (lastUserId != null) {
         // Current user ID is null but we have a stored user ID - clear messages
         debugPrint('🔄 User logged out - clearing messages');
-        storage.remove(_messagesStorageKey);
+        storage.remove(_deletedMessagesStorageKey); // Clear deleted messages
         storage.remove('ai_coach_last_user_id');
         messages.clear();
       }
@@ -925,7 +857,7 @@ class AiCoachController extends GetxController {
       debugPrint('⚠️ Error validating user messages: $e');
       // On error, clear messages to be safe
       final storage = PreferencesService.getStorage();
-      storage.remove(_messagesStorageKey);
+      storage.remove(_deletedMessagesStorageKey); // Clear deleted messages
       messages.clear();
     }
   }
@@ -950,17 +882,175 @@ class AiCoachController extends GetxController {
     }
   }
 
+  /// Find matching server message for a local message
+  /// Matches by content, sender, and timestamp (within 10 minutes for better matching)
+  /// Returns the server ID if a match is found, null otherwise
+  /// Note: When a local message is synced to server, it gets a server ID
+  /// This method finds that server ID by matching content and timestamp
+  int? _findMatchingServerMessageId(ChatMessage localMessage) {
+    try {
+      // Track the best match (closest timestamp)
+      int? bestMatchServerId;
+      int bestMatchTimeDiff = 999999; // Large number for comparison
+      
+      for (final msg in messages) {
+        // Only check server messages
+        if (!msg.id.startsWith('server_')) continue;
+        
+        final serverId = _extractServerMessageId(msg.id);
+        if (serverId == null) continue;
+        
+        // Match by: same sender, same text (or both null/empty), same image, and timestamp within 10 minutes
+        // Increased from 5 to 10 minutes to handle timezone/server time differences
+        final timeDiff = (localMessage.timestamp.difference(msg.timestamp).abs().inMinutes);
+        final textMatches = (localMessage.text ?? '') == (msg.text ?? '');
+        final senderMatches = localMessage.sender == msg.sender;
+        
+        // For image messages: match if both have images (either path or URL)
+        // Note: local messages have imagePath, server messages have imageUrl
+        final imageMatches = (localMessage.hasImage && msg.hasImage) || 
+                             (!localMessage.hasImage && !msg.hasImage);
+        
+        if (senderMatches && textMatches && imageMatches && timeDiff <= 10) {
+          // If this is a better match (closer timestamp), use it
+          if (timeDiff < bestMatchTimeDiff) {
+            bestMatchServerId = serverId;
+            bestMatchTimeDiff = timeDiff;
+          }
+        }
+      }
+      
+      if (bestMatchServerId != null) {
+        debugPrint('🔗 Found matching server message (server ID: $bestMatchServerId, time diff: ${bestMatchTimeDiff}min) for local message: ${localMessage.id}');
+      }
+      
+      return bestMatchServerId;
+    } catch (e) {
+      debugPrint('⚠️ Error finding matching server message: $e');
+      return null;
+    }
+  }
+
+  /// Fetch recent messages from server and find matching server ID for a local message
+  /// This is used when deleting a local message that might not be in the current messages list
+  /// Returns the server ID if a match is found, null otherwise
+  Future<int?> _findMatchingServerMessageIdFromServer(ChatMessage localMessage) async {
+    try {
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        return null;
+      }
+
+      debugPrint('🔍 Fetching recent messages from server to find match for local message: ${localMessage.id}');
+      
+      final response = await _aiCoachRepository.getChatHistory(
+        apiToken: apiToken,
+      );
+
+      if (!response.isSuccess || response.data == null || response.data!.isEmpty) {
+        return null;
+      }
+
+      // Track the best match (closest timestamp)
+      int? bestMatchServerId;
+      int bestMatchTimeDiff = 999999;
+
+      for (final messageData in response.data!) {
+        try {
+          final userMessage = messageData['user_message'] as String?;
+          final imageUrl = messageData['image'] as String?;
+          final serverIdRaw = messageData['id'];
+          
+          // Normalize serverId
+          int? serverId;
+          if (serverIdRaw != null) {
+            if (serverIdRaw is int) {
+              serverId = serverIdRaw;
+            } else if (serverIdRaw is num) {
+              serverId = serverIdRaw.toInt();
+            } else if (serverIdRaw is String) {
+              serverId = int.tryParse(serverIdRaw);
+            }
+          }
+          
+          if (serverId == null) continue;
+
+          // Parse timestamp
+          final createdAtStr = messageData['created_at'] as String?;
+          DateTime? timestamp;
+          if (createdAtStr != null) {
+            final parsed = DateTime.tryParse(createdAtStr);
+            if (parsed != null) {
+              timestamp = parsed.toLocal();
+            }
+          }
+          timestamp ??= DateTime.now();
+
+          // Match by: same sender (user), same text, same image, and timestamp within 10 minutes
+          if (localMessage.sender == MessageSender.user) {
+            final timeDiff = (localMessage.timestamp.difference(timestamp).abs().inMinutes);
+            final textMatches = (localMessage.text ?? '') == (userMessage ?? '');
+            
+            // For image messages: match if both have images
+            final imageMatches = (localMessage.hasImage && imageUrl != null) || 
+                                 (!localMessage.hasImage && imageUrl == null);
+            
+            if (textMatches && imageMatches && timeDiff <= 10) {
+              if (timeDiff < bestMatchTimeDiff) {
+                bestMatchServerId = serverId;
+                bestMatchTimeDiff = timeDiff;
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Error parsing server message during match search: $e');
+        }
+      }
+
+      if (bestMatchServerId != null) {
+        debugPrint('🔗 Found matching server message from server (server ID: $bestMatchServerId, time diff: ${bestMatchTimeDiff}min) for local message: ${localMessage.id}');
+      } else {
+        debugPrint('❌ No matching server message found for local message: ${localMessage.id}');
+      }
+
+      return bestMatchServerId;
+    } catch (e) {
+      debugPrint('⚠️ Error fetching messages from server to find match: $e');
+      return null;
+    }
+  }
+
   /// Delete a message (both from server and local storage)
   /// Shows confirmation dialog before deleting
   Future<void> deleteMessage(ChatMessage message) async {
     try {
       // Extract server message ID if this is a server message
-      final serverId = _extractServerMessageId(message.id);
+      int? serverId = _extractServerMessageId(message.id);
+      bool serverDeletionAttempted = false;
+      bool serverDeletionSuccess = false;
       
-      // If it's a server message, delete from server first
+      // If this is a local message, check if there's a matching server message
+      // (local messages that were synced to server will have a server version)
+      if (serverId == null) {
+        // First, try to find match in current messages list
+        serverId = _findMatchingServerMessageId(message);
+        
+        // If no match found locally, fetch from server to find match
+        if (serverId == null) {
+          debugPrint('🔍 No local match found, fetching from server to find match...');
+          serverId = await _findMatchingServerMessageIdFromServer(message);
+        }
+        
+        if (serverId != null) {
+          debugPrint('🔗 Local message has matching server message (ID: $serverId), will delete from server');
+        }
+      }
+      
+      // Delete from server if we have a server ID
       if (serverId != null) {
         final apiToken = PreferencesService.getAuthToken();
         if (apiToken != null && apiToken.isNotEmpty) {
+          serverDeletionAttempted = true;
           debugPrint('🔄 Deleting message from server (ID: $serverId)...');
           
           final response = await _aiCoachRepository.deleteMessage(
@@ -972,14 +1062,23 @@ class AiCoachController extends GetxController {
             debugPrint('⚠️ Failed to delete message from server: ${response.message}');
             // Still delete locally even if server deletion fails
             // This ensures UI is updated even if network is down
+            serverDeletionSuccess = false;
           } else {
             debugPrint('✅ Message deleted from server successfully');
+            serverDeletionSuccess = true;
           }
         } else {
-          debugPrint('⚠️ No auth token available, deleting locally only');
+          debugPrint('⚠️ No auth token available, cannot delete from server');
         }
       } else {
-        debugPrint('ℹ️ Local message (not from server), deleting locally only');
+        // Check if this is truly a local-only message (not sent to server yet)
+        // If the message was sent recently (within last 5 minutes), it might be on server
+        final messageAge = DateTime.now().difference(message.timestamp).inMinutes;
+        if (messageAge < 5 && message.sender == MessageSender.user) {
+          debugPrint('⚠️ Local message might be on server (sent ${messageAge}min ago), but no match found');
+        } else {
+          debugPrint('ℹ️ Local message (not synced to server or too old), deleting locally only');
+        }
       }
 
       // For server messages, remove both the user and AI messages with the same server ID
@@ -989,21 +1088,45 @@ class AiCoachController extends GetxController {
         final aiMessageId = 'server_${serverId}_ai';
         
         final removedCount = messages.length;
-        messages.removeWhere((m) => m.id == userMessageId || m.id == aiMessageId);
+        // Remove server messages AND the original local message (if it exists)
+        messages.removeWhere((m) => 
+          m.id == userMessageId || 
+          m.id == aiMessageId || 
+          m.id == message.id
+        );
         final newCount = messages.length;
         final deletedCount = removedCount - newCount;
         
-        debugPrint('🗑️ Removed $deletedCount message(s) from UI (user + AI pair for server ID: $serverId)');
+        debugPrint('🗑️ Removed $deletedCount message(s) from UI (server ID: $serverId, original ID: ${message.id})');
+        
+        // Track deleted server message IDs to prevent re-adding on restart
+        _addToDeletedMessages(serverId);
+        
+        // Also track the local message ID if it was different
+        if (message.id != userMessageId && message.id != aiMessageId) {
+          _addToDeletedMessages(message.id);
+        }
+        
+        // Only show success if server deletion was successful or attempted
+        if (serverDeletionAttempted) {
+          if (serverDeletionSuccess) {
+            debugPrint('✅ Message(s) deleted successfully from server and UI');
+          } else {
+            debugPrint('⚠️ Message removed from UI, but server deletion failed');
+          }
+        } else {
+          debugPrint('✅ Message(s) deleted successfully from UI');
+        }
       } else {
-        // For local messages, just remove the specific message
+        // For local messages with no server match, just remove the specific message
         messages.removeWhere((m) => m.id == message.id);
         debugPrint('🗑️ Removed local message from UI');
+        
+        // Track deleted local message ID to prevent re-adding on restart
+        _addToDeletedMessages(message.id);
+        
+        debugPrint('✅ Local message deleted successfully (not on server)');
       }
-      
-      // Save updated messages to storage
-      _saveMessagesToStorage();
-      
-      debugPrint('✅ Message(s) deleted successfully');
       
       // Scroll to maintain position (don't jump to bottom)
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1025,13 +1148,114 @@ class AiCoachController extends GetxController {
     }
   }
 
-  /// Clear all messages from storage (useful for logout or reset)
+  /// Track deleted message IDs to prevent re-adding on restart
+  /// For server messages: stores the numeric server ID (normalized to int)
+  /// For local messages: stores the full message ID (as String)
+  void _addToDeletedMessages(dynamic messageId) {
+    try {
+      final storage = PreferencesService.getStorage();
+      final deletedIdsJson = storage.read(_deletedMessagesStorageKey) as String?;
+      
+      Set<dynamic> deletedIds;
+      if (deletedIdsJson != null && deletedIdsJson.isNotEmpty) {
+        final decoded = jsonDecode(deletedIdsJson) as List<dynamic>;
+        deletedIds = decoded.toSet();
+      } else {
+        deletedIds = <dynamic>{};
+      }
+      
+      // Normalize the ID before adding:
+      // - If it's a number (server ID), convert to int
+      // - If it's a String (local message ID), keep as String
+      dynamic normalizedId;
+      if (messageId is num) {
+        normalizedId = messageId.toInt();
+      } else {
+        normalizedId = messageId;
+      }
+      
+      // Add the normalized deleted ID
+      deletedIds.add(normalizedId);
+      
+      // Save updated deleted IDs list
+      storage.write(_deletedMessagesStorageKey, jsonEncode(deletedIds.toList()));
+      debugPrint('📝 Tracked deleted message ID: $normalizedId (original: $messageId, type: ${messageId.runtimeType})');
+    } catch (e) {
+      debugPrint('⚠️ Error tracking deleted message ID: $e');
+    }
+  }
+
+  /// Check if a message ID is in the deleted messages list
+  /// Returns true if the message should be excluded
+  bool _isMessageDeleted(dynamic messageId) {
+    try {
+      // If messageId is null, it's not deleted
+      if (messageId == null) {
+        return false;
+      }
+      
+      final storage = PreferencesService.getStorage();
+      final deletedIdsJson = storage.read(_deletedMessagesStorageKey) as String?;
+      
+      if (deletedIdsJson == null || deletedIdsJson.isEmpty) {
+        return false;
+      }
+      
+      final decoded = jsonDecode(deletedIdsJson) as List<dynamic>;
+      final deletedIds = decoded.toSet();
+      
+      // Normalize the messageId to match how it was stored
+      dynamic normalizedId;
+      if (messageId is num) {
+        normalizedId = messageId.toInt();
+      } else {
+        normalizedId = messageId;
+      }
+      
+      // Check if the normalized ID is in the deleted list
+      if (deletedIds.contains(normalizedId)) {
+        debugPrint('✅ Found deleted message ID: $normalizedId (original: $messageId, type: ${messageId.runtimeType})');
+        return true;
+      }
+      
+      // For server messages with String IDs (like "server_4_user"), extract the numeric ID
+      if (messageId is String && messageId.startsWith('server_')) {
+        final serverId = _extractServerMessageId(messageId);
+        if (serverId != null) {
+          // Check if the extracted numeric ID is in the deleted list
+          // Also normalize any stored IDs for comparison
+          for (final deletedId in deletedIds) {
+            int? deletedIntId;
+            if (deletedId is int) {
+              deletedIntId = deletedId;
+            } else if (deletedId is num) {
+              deletedIntId = deletedId.toInt();
+            } else if (deletedId is String) {
+              deletedIntId = int.tryParse(deletedId);
+            }
+            
+            if (deletedIntId != null && deletedIntId == serverId) {
+              debugPrint('✅ Found deleted server message ID: $serverId (from string: $messageId)');
+              return true;
+            }
+          }
+        }
+      }
+      
+      return false;
+    } catch (e) {
+      debugPrint('⚠️ Error checking deleted message ID: $e');
+      return false;
+    }
+  }
+
+  /// Clear all messages (useful for logout or reset)
   void clearMessages() {
     messages.clear();
     final storage = PreferencesService.getStorage();
-    storage.remove(_messagesStorageKey);
-    storage.remove('ai_coach_last_user_id'); // Also clear user ID tracking
-    debugPrint('✅ Cleared AI Coach messages from storage');
+    storage.remove(_deletedMessagesStorageKey); // Clear deleted messages tracking
+    storage.remove('ai_coach_last_user_id'); // Clear user ID tracking
+    debugPrint('✅ Cleared AI Coach messages');
   }
 
   void handleQuickAction(String label) {

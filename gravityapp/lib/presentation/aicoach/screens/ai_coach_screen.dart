@@ -844,8 +844,115 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                   // Wait for bottom sheet to fully close before proceeding
                   await Future.delayed(const Duration(milliseconds: 200));
                   
-                  // Delete message (controller handles success/error feedback)
-                  await controller.deleteMessage(message);
+                  // Show confirmation dialog before deleting
+                  final shouldDelete = await Get.dialog<bool>(
+                    Dialog(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20.r),
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.all(24.w),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Warning icon
+                            Container(
+                              width: 60.w,
+                              height: 60.w,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE53935).withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.delete_outline,
+                                color: const Color(0xFFE53935),
+                                size: 32.sp,
+                              ),
+                            ),
+                            SizedBox(height: 20.h),
+                            
+                            // Title
+                            Text(
+                              'Delete Message?',
+                              style: ResponsiveTextStyles.textLg.copyWith(
+                                color: const Color(0xFF0A2342),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(height: 12.h),
+                            
+                            // Message
+                            Text(
+                              'This action cannot be undone. The message will be permanently deleted.',
+                              textAlign: TextAlign.center,
+                              style: ResponsiveTextStyles.textSm.copyWith(
+                                color: const Color(0xFF0A2342).withOpacity(0.7),
+                                height: 1.5,
+                              ),
+                            ),
+                            SizedBox(height: 24.h),
+                            
+                            // Buttons
+                            Row(
+                              children: [
+                                // Cancel button
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () => Get.back(result: false),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: EdgeInsets.symmetric(vertical: 14.h),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12.r),
+                                      ),
+                                      side: BorderSide(
+                                        color: const Color(0xFF0A2342).withOpacity(0.2),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Cancel',
+                                      style: ResponsiveTextStyles.textSm.copyWith(
+                                        color: const Color(0xFF0A2342),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 12.w),
+                                
+                                // Delete button
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () => Get.back(result: true),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: EdgeInsets.symmetric(vertical: 14.h),
+                                      backgroundColor: const Color(0xFFE53935),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12.r),
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    child: Text(
+                                      'Delete',
+                                      style: ResponsiveTextStyles.textSm.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    barrierDismissible: true,
+                  );
+                  
+                  // Only delete if user confirmed
+                  if (shouldDelete == true) {
+                    await controller.deleteMessage(message);
+                  }
                 },
               ),
               
