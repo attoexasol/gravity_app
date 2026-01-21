@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import '../../../../data/model/today_screen.dart';
 import '../../../../app/routes/app_routes.dart';
 import '../../../../data/repositories/ai_coach_repository.dart';
+import '../../../../data/repositories/user_gravity_repository.dart';
+import '../../../../data/model/user_gravity_entry.dart';
 import '../../../../core/services/preferences_service.dart';
 
 class TodayController extends GetxController {
@@ -32,8 +34,17 @@ class TodayController extends GetxController {
   final RxBool isLoadingNutrition = false.obs;
   final RxString nutritionError = ''.obs;
 
-  // Repository
+  // Pillar data (Hydration, Sleep, Steps)
+  final RxDouble hydrationLiters = 0.0.obs; // Hydration in liters
+  final RxDouble sleepHours = 0.0.obs; // Sleep hours
+  final RxInt steps = 0.obs; // Steps count
+  final RxBool isLoadingPillars = false.obs;
+  final RxString pillarsError = ''.obs;
+  final Rx<int?> todayGravityEntryId = Rx<int?>(null); // Today's entry ID
+
+  // Repositories
   final AiCoachRepository _aiCoachRepository = AiCoachRepository();
+  final UserGravityRepository _gravityRepository = UserGravityRepository();
 
   // Navigation guard to prevent multiple rapid calls
   bool _isNavigating = false;
@@ -51,6 +62,9 @@ class TodayController extends GetxController {
 
     // Fetch nutrition data on screen load
     fetchNutritionData();
+    
+    // Fetch pillar data (Hydration, Sleep, Steps) on screen load
+    fetchPillarData();
   }
 
   @override
@@ -68,6 +82,14 @@ class TodayController extends GetxController {
   // Format date for API (YY-MM-dd format, e.g., "26-01-19" for January 19, 2026)
   String _formatDateForApi(DateTime date) {
     final year = date.year.toString().substring(2); // Last 2 digits of year
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
+  }
+
+  // Format date for User Gravity API (yyyy-MM-dd format)
+  String _formatDateForGravityApi(DateTime date) {
+    final year = date.year.toString();
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
     return '$year-$month-$day';
@@ -137,7 +159,186 @@ class TodayController extends GetxController {
     return '${totalNutrition.value} cal';
   }
 
-  // Pillars data
+  /// Fetch today's gravity entry using single_user_gravity API
+  /// First gets all entries to find today's ID, then calls single_user_gravity
+  Future<void> fetchPillarData() async {
+    try {
+      isLoadingPillars.value = true;
+      pillarsError.value = '';
+
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        pillarsError.value = 'No authentication token';
+        isLoadingPillars.value = false;
+        return;
+      }
+
+      // First, get all entries to find today's entry ID
+      final todayStr = _formatDateForGravityApi(DateTime.now());
+      debugPrint('🔍 Fetching pillar data for date: $todayStr');
+
+      final allEntriesResponse = await _gravityRepository.getAllUserGravity(
+        apiToken: apiToken,
+      );
+
+      if (!allEntriesResponse.isSuccess || allEntriesResponse.data == null) {
+        pillarsError.value = allEntriesResponse.message.isNotEmpty 
+            ? allEntriesResponse.message 
+            : 'Failed to load pillar data';
+        debugPrint('⚠️ Failed to get all entries: ${allEntriesResponse.message}');
+        isLoadingPillars.value = false;
+        return;
+      }
+
+      // Find today's entry
+      final todayEntry = allEntriesResponse.data!.firstWhere(
+        (entry) => entry.date == todayStr,
+        orElse: () => UserGravityEntry(date: ''),
+      );
+
+      if (todayEntry.date.isEmpty || todayEntry.id == null) {
+        debugPrint('ℹ️ No entry found for today');
+        // Reset to default values
+        hydrationLiters.value = 0.0;
+        sleepHours.value = 0.0;
+        steps.value = 0;
+        isLoadingPillars.value = false;
+        return;
+      }
+
+      // Now call single_user_gravity API with today's entry ID
+      final entryId = todayEntry.id;
+      todayGravityEntryId.value = entryId;
+      debugPrint('📞 Calling single_user_gravity API with ID: $entryId');
+
+      final singleEntryResponse = await _gravityRepository.getSingleUserGravity(
+        id: entryId!,
+      );
+
+      if (singleEntryResponse.isSuccess && singleEntryResponse.data != null) {
+        final entry = singleEntryResponse.data!;
+        
+        // Update pillar data from API response
+        hydrationLiters.value = entry.hydrationLiters ?? 0.0;
+        sleepHours.value = entry.sleepHours ?? 0.0;
+        steps.value = entry.steps ?? 0;
+        
+        pillarsError.value = ''; // Clear any previous errors
+        debugPrint('✅ Pillar data loaded from single_user_gravity:');
+        debugPrint('   - Hydration: ${hydrationLiters.value}L');
+        debugPrint('   - Sleep: ${sleepHours.value}h');
+        debugPrint('   - Steps: ${steps.value}');
+      } else {
+        pillarsError.value = singleEntryResponse.message.isNotEmpty 
+            ? singleEntryResponse.message 
+            : 'Failed to load pillar data';
+        debugPrint('⚠️ Failed to get single entry: ${singleEntryResponse.message}');
+        // Use data from allEntriesResponse as fallback
+        hydrationLiters.value = todayEntry.hydrationLiters ?? 0.0;
+        sleepHours.value = todayEntry.sleepHours ?? 0.0;
+        steps.value = todayEntry.steps ?? 0;
+      }
+    } catch (e) {
+      pillarsError.value = 'Failed to load pillar data';
+      debugPrint('❌ Error fetching pillar data: $e');
+      // Reset to default values on error
+      hydrationLiters.value = 0.0;
+      sleepHours.value = 0.0;
+      steps.value = 0;
+    } finally {
+      isLoadingPillars.value = false;
+    }
+  }
+
+  // Get hydration display text
+  String get hydrationDisplayText {
+    if (isLoadingPillars.value) {
+      return 'Loading...';
+    }
+    if (pillarsError.value.isNotEmpty) {
+      return 'Borderline';
+    }
+    // Format hydration: show as "X.X L" or "X L" (including 0L)
+    if (hydrationLiters.value % 1 == 0) {
+      return '${hydrationLiters.value.toInt()}L';
+    } else {
+      return '${hydrationLiters.value.toStringAsFixed(1)}L';
+    }
+  }
+
+  // Get sleep display text
+  String get sleepDisplayText {
+    if (isLoadingPillars.value) {
+      return 'Loading...';
+    }
+    if (pillarsError.value.isNotEmpty) {
+      return 'Borderline';
+    }
+    // Format sleep: show as "Xh Ym" (e.g., "6h 45m") or "0h" if 0
+    final hours = sleepHours.value.toInt();
+    final minutes = ((sleepHours.value - hours) * 60).toInt();
+    if (sleepHours.value == 0.0) {
+      return '0h';
+    } else if (minutes > 0) {
+      return 'Logged (${hours}h ${minutes}m)';
+    } else {
+      return 'Logged (${hours}h)';
+    }
+  }
+
+  // Get steps display text
+  String get stepsDisplayText {
+    if (isLoadingPillars.value) {
+      return 'Loading...';
+    }
+    if (pillarsError.value.isNotEmpty) {
+      return 'Missed';
+    }
+    // Format steps: show with comma separator (e.g., "10,500 steps") or "0 steps" if 0
+    if (steps.value == 0) {
+      return '0 steps';
+    }
+    final formattedSteps = steps.value.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+    return '$formattedSteps steps';
+  }
+
+  // Get hydration status
+  PillarStatus get hydrationStatus {
+    if (isLoadingPillars.value || pillarsError.value.isNotEmpty) {
+      return PillarStatus.borderline;
+    }
+    if (hydrationLiters.value > 0) {
+      return PillarStatus.onTrack;
+    }
+    return PillarStatus.borderline;
+  }
+
+  // Get sleep status
+  PillarStatus get sleepStatus {
+    if (isLoadingPillars.value || pillarsError.value.isNotEmpty) {
+      return PillarStatus.borderline;
+    }
+    if (sleepHours.value > 0) {
+      return PillarStatus.logged;
+    }
+    return PillarStatus.borderline;
+  }
+
+  // Get steps status
+  PillarStatus get stepsStatus {
+    if (isLoadingPillars.value || pillarsError.value.isNotEmpty) {
+      return PillarStatus.borderline;
+    }
+    if (steps.value > 0) {
+      return PillarStatus.onTrack;
+    }
+    return PillarStatus.missed;
+  }
+
+  // Pillars data - dynamically updated from API
   List<Pillar> get pillars => [
     Pillar(
       name: 'Nutrition',
@@ -147,20 +348,20 @@ class TodayController extends GetxController {
     ),
     Pillar(
       name: 'Hydration',
-      status: PillarStatus.onTrack,
-      detail: 'On track',
+      status: hydrationStatus, // Dynamic status from API
+      detail: hydrationDisplayText, // Dynamic detail from API (e.g., "0.9L" or "Borderline")
       icon: Icons.water_drop,
     ),
     Pillar(
       name: 'Sleep',
-      status: PillarStatus.logged,
-      detail: 'Logged (6h 45m)',
+      status: sleepStatus, // Dynamic status from API
+      detail: sleepDisplayText, // Dynamic detail from API (e.g., "Logged (7h)" or "Borderline")
       icon: Icons.nightlight_round,
     ),
     Pillar(
       name: 'Steps',
-      status: PillarStatus.missed,
-      detail: 'Missed',
+      status: stepsStatus, // Dynamic status from API
+      detail: stepsDisplayText, // Dynamic detail from API (e.g., "103 steps" or "Missed")
       icon: Icons.directions_walk,
     ),
     Pillar(
