@@ -60,11 +60,11 @@ class WeightJourneySection extends StatelessWidget {
           ),
           SizedBox(height: 16.h),
           Obx(() {
-            final startingWeight = controller.startingWeight.value;
-            final currentWeight = controller.currentWeight.value;
-            final totalLossGoal = startingWeight - controller.goalWeight.value;
-            final currentLoss = startingWeight - currentWeight;
-            final progressPercentage = (currentLoss / totalLossGoal) * 100;
+            final startingWeight = controller.startingWeightFromApi;
+            final currentWeight = controller.currentWeightFromApi;
+            final totalLossGoal = controller.totalLossGoal;
+            final currentLoss = controller.currentLoss;
+            final progressPercentage = controller.progressPercentage;
 
             return Column(
               mainAxisSize: MainAxisSize.min,
@@ -73,13 +73,13 @@ class WeightJourneySection extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Starting: $startingWeight kg',
+                      'Starting: ${startingWeight.toStringAsFixed(1)} kg',
                       style: ResponsiveTextStyles.textXs.copyWith(
                         color: const Color(0xFF0A2342).withOpacity(0.6),
                       ),
                     ),
                     Text(
-                      'Goal: $totalLossGoal kg loss',
+                      'Goal: ${totalLossGoal.toStringAsFixed(1)} kg loss',
                       style: ResponsiveTextStyles.textXs.copyWith(
                         color: const Color(0xFF0A2342).withOpacity(0.6),
                       ),
@@ -126,14 +126,14 @@ class WeightJourneySection extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(
-                      '$currentLoss kg lost',
+                      '${currentLoss.toStringAsFixed(1)} kg lost',
                       style: ResponsiveTextStyles.textLg.copyWith(
                         color: const Color(0xFF00B8A9),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
-                      'Current: $currentWeight kg',
+                      'Current: ${currentWeight.toStringAsFixed(1)} kg',
                       style: ResponsiveTextStyles.textSm.copyWith(
                         color: const Color(0xFF0A2342).withOpacity(0.6),
                       ),

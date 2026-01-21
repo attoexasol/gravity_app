@@ -329,5 +329,51 @@ class UserGravityRepository {
       );
     }
   }
+
+  /// Get date-wise gravity entry
+  /// API: POST https://gravity.attoexasolutions.com/api/date_wise/gravity
+  Future<ApiResponse<Map<String, dynamic>>> getDateWiseGravity({
+    required String apiToken,
+    required String date, // YYYY-MM-DD format
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'api_token': apiToken,
+        'date': date,
+      };
+
+      debugPrint('📤 GET Date-Wise Gravity Request:');
+      debugPrint('   Date: $date');
+
+      final response = await _apiService.post(
+        '/date_wise/gravity',
+        body: body,
+      );
+
+      debugPrint('📥 GET Date-Wise Gravity Response Status: ${response['status']}');
+
+      return ApiResponse<Map<String, dynamic>>(
+        status: response['status'] ?? false,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is Map<String, dynamic>
+            ? response['data'] as Map<String, dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ GetDateWiseGravity API Error: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ GetDateWiseGravity Unknown Error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
 }
 

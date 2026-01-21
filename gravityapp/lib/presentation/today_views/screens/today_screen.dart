@@ -25,35 +25,63 @@ class TodayScreen extends GetView<TodayController> {
               children: [
                 // Header
                 TodayHeader(controller: controller),
-                // Scrollable content
+                // Scrollable content with pull-to-refresh
                 Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(height: 24.h),
-                        // Pillar Status
-                        PillarStatusSection(controller: controller),
-                        SizedBox(height: 16.h),
-                        // Weight Journey
-                        WeightJourneySection(controller: controller),
-                        SizedBox(height: 16.h),
-                        // Wins Today
-                        WinsTodaySection(),
-                        SizedBox(height: 16.h),
-                        // One Thing to Watch
-                        OneThingToWatchSection(),
-                        SizedBox(height: 16.h),
-                        // Reflection
-                        ReflectionSection(controller: controller),
-                        SizedBox(height: 16.h),
-                        // Done Button
-                        DoneButtonSection(controller: controller),
-                        SizedBox(height: 96.h), // Bottom padding
-                      ],
-                    ),
-                  ),
+                  child: Obx(() {
+                    // Show skeleton loader while loading
+                    if (controller.isLoading.value && controller.dateWiseData.value == null) {
+                      return _buildSkeletonLoader();
+                    }
+                    
+                    // Show error state if no data
+                    if (controller.hasError.value && controller.dateWiseData.value == null) {
+                      return _buildErrorState(controller);
+                    }
+                    
+                    // Show content with fade animation
+                    return RefreshIndicator(
+                      onRefresh: controller.onRefresh,
+                      color: const Color(0xFF00B8A9),
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeIn,
+                        builder: (context, opacity, child) {
+                          return Opacity(
+                            opacity: opacity,
+                            child: child,
+                          );
+                        },
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(height: 24.h),
+                              // Pillar Status
+                              PillarStatusSection(controller: controller),
+                              SizedBox(height: 16.h),
+                              // Weight Journey
+                              WeightJourneySection(controller: controller),
+                              SizedBox(height: 16.h),
+                              // Wins Today
+                              WinsTodaySection(),
+                              SizedBox(height: 16.h),
+                              // One Thing to Watch
+                              OneThingToWatchSection(),
+                              SizedBox(height: 16.h),
+                              // Reflection
+                              ReflectionSection(controller: controller),
+                              SizedBox(height: 16.h),
+                              // Done Button
+                              DoneButtonSection(controller: controller),
+                              SizedBox(height: 96.h), // Bottom padding
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
                 ),
               ],
             ),
@@ -62,6 +90,125 @@ class TodayScreen extends GetView<TodayController> {
                 ? LogWeighInModal(controller: controller)
                 : const SizedBox.shrink()),
           ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildSkeletonLoader() {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Column(
+        children: [
+          SizedBox(height: 24.h),
+          _buildSkeletonCard(),
+          SizedBox(height: 16.h),
+          _buildSkeletonCard(),
+          SizedBox(height: 16.h),
+          _buildSkeletonCard(),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildSkeletonCard() {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16.w),
+      padding: EdgeInsets.all(20.r),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20.r),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10.r,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSkeletonLine(width: 120.w),
+          SizedBox(height: 16.h),
+          _buildSkeletonLine(),
+          SizedBox(height: 12.h),
+          _buildSkeletonLine(),
+          SizedBox(height: 12.h),
+          _buildSkeletonLine(width: 200.w),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildSkeletonLine({double? width}) {
+    return Container(
+      width: width ?? double.infinity,
+      height: 16.h,
+      decoration: BoxDecoration(
+        color: Colors.grey[300],
+        borderRadius: BorderRadius.circular(8.r),
+      ),
+    );
+  }
+  
+  Widget _buildErrorState(TodayController controller) {
+    return RefreshIndicator(
+      onRefresh: controller.onRefresh,
+      color: const Color(0xFF00B8A9),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Container(
+          padding: EdgeInsets.all(32.w),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(height: 100.h),
+              Icon(
+                Icons.error_outline,
+                size: 64.sp,
+                color: const Color(0xFF9CA3AF),
+              ),
+              SizedBox(height: 24.h),
+              Text(
+                'No Data Available',
+                style: TextStyle(
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF0A2342),
+                ),
+              ),
+              SizedBox(height: 8.h),
+              Text(
+                controller.errorMessage.value.isNotEmpty
+                    ? controller.errorMessage.value
+                    : 'No data exists for the selected date.',
+                style: TextStyle(
+                  fontSize: 14.sp,
+                  color: const Color(0xFF0A2342).withOpacity(0.6),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 32.h),
+              ElevatedButton(
+                onPressed: () => controller.fetchDateWiseGravity(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00B8A9),
+                  padding: EdgeInsets.symmetric(horizontal: 32.w, vertical: 12.h),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12.r),
+                  ),
+                ),
+                child: Text(
+                  'Retry',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

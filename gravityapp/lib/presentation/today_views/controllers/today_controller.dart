@@ -7,6 +7,8 @@ import '../../../../app/routes/app_routes.dart';
 import '../../../../data/repositories/ai_coach_repository.dart';
 import '../../../../data/repositories/user_gravity_repository.dart';
 import '../../../../data/model/user_gravity_entry.dart';
+import '../../../../data/model/date_wise_gravity_response.dart';
+import '../../../../data/model/api_response.dart';
 import '../../../../core/services/preferences_service.dart';
 
 class TodayController extends GetxController {
@@ -29,6 +31,12 @@ class TodayController extends GetxController {
   final RxBool showWeighInModal = false.obs;
   final RxBool showGoalsModal = false.obs;
 
+  // Date-wise gravity data (from new API)
+  final Rx<DateWiseGravityResponse?> dateWiseData = Rx<DateWiseGravityResponse?>(null);
+  final RxBool isLoading = false.obs;
+  final RxString errorMessage = ''.obs;
+  final RxBool hasError = false.obs;
+  
   // Nutrition data
   final RxInt totalNutrition = 0.obs; // Total daily calories
   final RxBool isLoadingNutrition = false.obs;
@@ -60,10 +68,13 @@ class TodayController extends GetxController {
       reflection.value = reflectionController.text;
     });
 
-    // Fetch nutrition data on screen load
+    // Fetch date-wise gravity data on screen load
+    fetchDateWiseGravity();
+    
+    // Fetch nutrition data on screen load (keep for backward compatibility)
     fetchNutritionData();
     
-    // Fetch pillar data (Hydration, Sleep, Steps) on screen load
+    // Fetch pillar data (Hydration, Sleep, Steps) on screen load (keep for backward compatibility)
     fetchPillarData();
   }
 
@@ -75,9 +86,36 @@ class TodayController extends GetxController {
   }
 
   // Calculated values
-  double get totalLossGoal => startingWeight.value - goalWeight.value; // 13.5 kg
-  double get currentLoss => startingWeight.value - currentWeight.value; // 6 kg
-  double get progressPercentage => (currentLoss / totalLossGoal) * 100;
+  double get totalLossGoal {
+    if (dateWiseData.value?.goalWeightLoss != null) {
+      return dateWiseData.value!.goalWeightLoss!;
+    }
+    return startingWeight.value - goalWeight.value; // 13.5 kg fallback
+  }
+  
+  double get currentLoss {
+    if (dateWiseData.value?.startingWeight != null && dateWiseData.value?.weight != null) {
+      return dateWiseData.value!.startingWeight! - dateWiseData.value!.weight!;
+    }
+    return startingWeight.value - currentWeight.value; // 6 kg fallback
+  }
+  
+  double get progressPercentage {
+    if (totalLossGoal > 0) {
+      return (currentLoss / totalLossGoal * 100).clamp(0.0, 100.0);
+    }
+    return 0.0;
+  }
+  
+  // Get current weight from API or fallback
+  double get currentWeightFromApi {
+    return dateWiseData.value?.weight ?? currentWeight.value;
+  }
+  
+  // Get starting weight from API or fallback
+  double get startingWeightFromApi {
+    return dateWiseData.value?.startingWeight ?? startingWeight.value;
+  }
 
   // Format date for API (YY-MM-dd format, e.g., "26-01-19" for January 19, 2026)
   String _formatDateForApi(DateTime date) {
@@ -93,6 +131,86 @@ class TodayController extends GetxController {
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
     return '$year-$month-$day';
+  }
+
+  /// Fetch date-wise gravity data from new API endpoint
+  Future<void> fetchDateWiseGravity({bool isRefresh = false}) async {
+    try {
+      if (!isRefresh) {
+        isLoading.value = true;
+      }
+      hasError.value = false;
+      errorMessage.value = '';
+
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        hasError.value = true;
+        errorMessage.value = 'No authentication token';
+        isLoading.value = false;
+        return;
+      }
+
+      // Use current date (today) in YYYY-MM-DD format
+      final today = DateTime.now();
+      final dateString = _formatDateForGravityApi(today);
+
+      debugPrint('📤 Fetching date-wise gravity for: $dateString');
+
+      final response = await _gravityRepository.getDateWiseGravity(
+        apiToken: apiToken,
+        date: dateString,
+      );
+
+      if (response.isSuccess && response.data != null) {
+        // Parse the response data
+        final data = DateWiseGravityResponse.fromJson(response.data!);
+        dateWiseData.value = data;
+        
+        // Update reactive variables from API data
+        if (data.weight != null) {
+          currentWeight.value = data.weight!;
+        }
+        if (data.startingWeight != null) {
+          startingWeight.value = data.startingWeight!;
+        }
+        if (data.hydrationLiters != null) {
+          hydrationLiters.value = data.hydrationLiters!;
+        }
+        if (data.sleepHours != null) {
+          sleepHours.value = data.sleepHours!;
+        }
+        if (data.steps != null) {
+          steps.value = data.steps!;
+        }
+        if (data.nutritionCalories != null) {
+          totalNutrition.value = data.nutritionCalories!;
+        }
+        
+        hasError.value = false;
+        errorMessage.value = '';
+        debugPrint('✅ Date-wise gravity data loaded successfully');
+      } else {
+        // No data exists for this date
+        hasError.value = true;
+        errorMessage.value = response.message.isNotEmpty 
+            ? response.message 
+            : 'No data available for this date';
+        dateWiseData.value = null;
+        debugPrint('⚠️ No data found for date: $dateString');
+      }
+    } catch (e) {
+      hasError.value = true;
+      errorMessage.value = 'Failed to load data. Please try again.';
+      dateWiseData.value = null;
+      debugPrint('❌ Error fetching date-wise gravity: $e');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+  
+  /// Pull to refresh handler
+  Future<void> onRefresh() async {
+    await fetchDateWiseGravity(isRefresh: true);
   }
 
   // Fetch nutrition data from API
@@ -305,75 +423,202 @@ class TodayController extends GetxController {
     return '$formattedSteps steps';
   }
 
-  // Get hydration status
+  // Get hydration status (with new color logic: Green/Yellow/Red)
   PillarStatus get hydrationStatus {
-    if (isLoadingPillars.value || pillarsError.value.isNotEmpty) {
+    if (isLoading.value) {
       return PillarStatus.borderline;
     }
-    if (hydrationLiters.value > 0) {
-      return PillarStatus.onTrack;
+    final value = dateWiseData.value?.hydrationLiters ?? hydrationLiters.value;
+    if (value == null || value == 0) {
+      return PillarStatus.missed; // Red - missing or zero
     }
-    return PillarStatus.borderline;
+    // You can add logic here for partial (yellow) vs meets target (green)
+    // For now, if > 0, consider it meets target (green)
+    return PillarStatus.onTrack; // Green - meets target
   }
 
-  // Get sleep status
+  // Get sleep status (with new color logic: Green/Yellow/Red)
   PillarStatus get sleepStatus {
-    if (isLoadingPillars.value || pillarsError.value.isNotEmpty) {
+    if (isLoading.value) {
       return PillarStatus.borderline;
     }
-    if (sleepHours.value > 0) {
-      return PillarStatus.logged;
+    final value = dateWiseData.value?.sleepHours ?? sleepHours.value;
+    if (value == null || value == 0) {
+      return PillarStatus.missed; // Red - missing or zero
     }
-    return PillarStatus.borderline;
+    // You can add logic here for partial (yellow) vs meets target (green)
+    return PillarStatus.onTrack; // Green - meets target
   }
 
-  // Get steps status
+  // Get steps status (with new color logic: Green/Yellow/Red)
   PillarStatus get stepsStatus {
-    if (isLoadingPillars.value || pillarsError.value.isNotEmpty) {
+    if (isLoading.value) {
       return PillarStatus.borderline;
     }
-    if (steps.value > 0) {
-      return PillarStatus.onTrack;
+    final value = dateWiseData.value?.steps ?? steps.value;
+    if (value == null || value == 0) {
+      return PillarStatus.missed; // Red - missing or zero
     }
-    return PillarStatus.missed;
+    // You can add logic here for partial (yellow) vs meets target (green)
+    return PillarStatus.onTrack; // Green - meets target
+  }
+  
+  // Get nutrition status (with new color logic: Green/Yellow/Red)
+  PillarStatus get nutritionStatus {
+    if (isLoading.value || isLoadingNutrition.value) {
+      return PillarStatus.borderline;
+    }
+    final value = dateWiseData.value?.nutritionCalories ?? totalNutrition.value;
+    if (value == null || value == 0) {
+      return PillarStatus.missed; // Red - missing or zero
+    }
+    // You can add logic here for partial (yellow) vs meets target (green)
+    // For now, if > 0, consider it partial (yellow) - can be customized
+    return PillarStatus.borderline; // Yellow - partial
+  }
+  
+  // Get fasting status
+  PillarStatus get fastingStatus {
+    if (isLoading.value) {
+      return PillarStatus.borderline;
+    }
+    final completed = dateWiseData.value?.fastingCompleted ?? false;
+    if (completed) {
+      return PillarStatus.onTrack; // Green - stayed within
+    }
+    return PillarStatus.missed; // Red - didn't stay within
+  }
+  
+  // Get weigh-in status
+  PillarStatus get weighInStatus {
+    if (isLoading.value) {
+      return PillarStatus.borderline;
+    }
+    final hasWeight = dateWiseData.value?.weight != null && dateWiseData.value!.weight! > 0;
+    if (hasWeight) {
+      return PillarStatus.onTrack; // Green - has weight
+    }
+    return PillarStatus.notScheduled; // Gray - not scheduled
+  }
+
+  // Get nutrition display text from API
+  String get nutritionDisplayTextFromApi {
+    if (isLoading.value) {
+      return 'Loading...';
+    }
+    final value = dateWiseData.value?.nutritionCalories ?? totalNutrition.value;
+    if (value == null || value == 0) {
+      return '0 cal';
+    }
+    return '$value cal';
+  }
+  
+  // Get hydration display text from API
+  String get hydrationDisplayTextFromApi {
+    if (isLoading.value) {
+      return 'Loading...';
+    }
+    final value = dateWiseData.value?.hydrationLiters ?? hydrationLiters.value;
+    if (value == null || value == 0) {
+      return '0L';
+    }
+    if (value % 1 == 0) {
+      return '${value.toInt()}L';
+    } else {
+      return '${value.toStringAsFixed(1)}L';
+    }
+  }
+  
+  // Get sleep display text from API
+  String get sleepDisplayTextFromApi {
+    if (isLoading.value) {
+      return 'Loading...';
+    }
+    final value = dateWiseData.value?.sleepHours ?? sleepHours.value;
+    if (value == null || value == 0) {
+      return '0h';
+    }
+    final hours = value.toInt();
+    final minutes = ((value - hours) * 60).toInt();
+    if (minutes > 0) {
+      return '${hours}h ${minutes}m';
+    } else {
+      return '${hours}h';
+    }
+  }
+  
+  // Get steps display text from API
+  String get stepsDisplayTextFromApi {
+    if (isLoading.value) {
+      return 'Loading...';
+    }
+    final value = dateWiseData.value?.steps ?? steps.value;
+    if (value == null || value == 0) {
+      return '0 steps';
+    }
+    return '$value steps';
+  }
+  
+  // Get fasting display text
+  String get fastingDisplayText {
+    if (isLoading.value) {
+      return 'Loading...';
+    }
+    final completed = dateWiseData.value?.fastingCompleted ?? false;
+    if (completed) {
+      return 'Stayed within';
+    }
+    return 'Not within';
+  }
+  
+  // Get weigh-in display text
+  String get weighInDisplayText {
+    if (isLoading.value) {
+      return 'Loading...';
+    }
+    final hasWeight = dateWiseData.value?.weight != null && dateWiseData.value!.weight! > 0;
+    if (hasWeight) {
+      return '${dateWiseData.value!.weight!.toStringAsFixed(1)} kg';
+    }
+    return 'Not scheduled';
   }
 
   // Pillars data - dynamically updated from API
   List<Pillar> get pillars => [
     Pillar(
       name: 'Nutrition',
-      status: PillarStatus.borderline,
-      detail: nutritionDisplayText, // Dynamic detail with calorie count
+      status: nutritionStatus,
+      detail: nutritionDisplayTextFromApi,
       icon: Icons.restaurant,
     ),
     Pillar(
       name: 'Hydration',
-      status: hydrationStatus, // Dynamic status from API
-      detail: hydrationDisplayText, // Dynamic detail from API (e.g., "0.9L" or "Borderline")
+      status: hydrationStatus,
+      detail: hydrationDisplayTextFromApi,
       icon: Icons.water_drop,
     ),
     Pillar(
       name: 'Sleep',
-      status: sleepStatus, // Dynamic status from API
-      detail: sleepDisplayText, // Dynamic detail from API (e.g., "Logged (7h)" or "Borderline")
+      status: sleepStatus,
+      detail: sleepDisplayTextFromApi,
       icon: Icons.nightlight_round,
     ),
     Pillar(
       name: 'Steps',
-      status: stepsStatus, // Dynamic status from API
-      detail: stepsDisplayText, // Dynamic detail from API (e.g., "103 steps" or "Missed")
+      status: stepsStatus,
+      detail: stepsDisplayTextFromApi,
       icon: Icons.directions_walk,
     ),
     Pillar(
       name: 'Fasting window',
-      status: PillarStatus.onTrack,
-      detail: 'Stayed within',
+      status: fastingStatus,
+      detail: fastingDisplayText,
       icon: Icons.favorite,
     ),
     Pillar(
       name: 'Weigh-in',
-      status: PillarStatus.notScheduled,
-      detail: 'Not scheduled',
+      status: weighInStatus,
+      detail: weighInDisplayText,
       icon: Icons.monitor_weight,
     ),
   ];
@@ -385,18 +630,18 @@ class TodayController extends GetxController {
     return formatter.format(now);
   }
 
-  // Get pillar color
+  // Get pillar color (Green/Yellow/Red logic)
   Color getPillarColor(PillarStatus status) {
     switch (status) {
       case PillarStatus.onTrack:
       case PillarStatus.logged:
-        return const Color(0xFF00B8A9);
+        return const Color(0xFF00B8A9); // Green - meets target
       case PillarStatus.borderline:
-        return const Color(0xFFD4AF37);
+        return const Color(0xFFD4AF37); // Yellow - partial
       case PillarStatus.missed:
-        return const Color(0xFFE57373);
+        return const Color(0xFFE57373); // Red - missing or zero
       case PillarStatus.notScheduled:
-        return const Color(0xFF9CA3AF);
+        return const Color(0xFF9CA3AF); // Gray - not scheduled
     }
   }
 

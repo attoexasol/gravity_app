@@ -69,10 +69,8 @@ class PillarStatusSection extends StatelessWidget {
                             ),
                           ),
                         ),
-                        // Show loading indicator for Nutrition or other pillars (Hydration, Sleep, Steps) if loading
-                        if ((pillar.name == 'Nutrition' && controller.isLoadingNutrition.value) ||
-                            ((pillar.name == 'Hydration' || pillar.name == 'Sleep' || pillar.name == 'Steps') && 
-                             controller.isLoadingPillars.value))
+                        // Show loading indicator if loading
+                        if (controller.isLoading.value)
                           SizedBox(
                             width: 16.w,
                             height: 16.w,
