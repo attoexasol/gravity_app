@@ -9,6 +9,7 @@ import '../../../data/repositories/consent_repository.dart';
 import '../../../data/repositories/goals_repository.dart';
 import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/preferences_service.dart';
+import '../../../core/services/token_manager.dart';
 
 enum UserType { customer, coach }
 
@@ -193,7 +194,8 @@ class LoginController extends GetxController {
       );
 
       final response = result['response'] as ApiResponse<UserModel>;
-      final token = result['token'] as String?;
+      final accessToken = result['access_token'] as String? ?? result['token'] as String?;
+      final refreshToken = result['refresh_token'] as String?;
       final userId = result['user_id'] as int?;
       final userName = result['user_name'] as String?;
       final userEmail = result['email'] as String?;
@@ -201,7 +203,7 @@ class LoginController extends GetxController {
       // Check if controller is still mounted before proceeding
       if (isClosed) return;
 
-      if (response.isSuccess && token != null) {
+      if (response.isSuccess && accessToken != null) {
         // Mark onboarding as completed when user successfully logs in
         // This ensures onboarding is only shown once, on first launch
         await PreferencesService.setOnboardingCompleted(true);
@@ -210,8 +212,22 @@ class LoginController extends GetxController {
         // First-time setup should only be marked when goals are saved in goal_settings_controller
         // This ensures: Sign up → Login → Goal Settings (first time) → Dashboard (subsequent)
         
-        // Save token from root level
-        await PreferencesService.saveAuthToken(token);
+        // Save tokens using TokenManager
+        final tokenManager = TokenManager();
+        if (refreshToken != null && refreshToken.isNotEmpty) {
+          await tokenManager.saveTokens(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+          );
+        } else {
+          // If no refresh token provided, save only access token
+          // This handles backward compatibility with APIs that only return access token
+          await tokenManager.updateAccessToken(accessToken);
+          debugPrint('⚠️ No refresh token received from API - only access token saved');
+        }
+        
+        // Also save to PreferencesService for backward compatibility
+        await PreferencesService.saveAuthToken(accessToken);
 
         // Save email from user object (or fallback to request email)
         final emailToSave = userEmail ?? email;

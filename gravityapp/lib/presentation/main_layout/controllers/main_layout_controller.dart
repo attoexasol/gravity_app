@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:gravityapp/data/model/navigation_item.dart';
 import '../../../core/services/preferences_service.dart';
+import '../../../core/services/token_manager.dart';
+import '../../../data/repositories/auth_repository.dart';
 import '../../aicoach/controllers/ai_coach_controller.dart';
 import '../../community/controllers/community_controller.dart';
 import '../../messages/controllers/messages_controllers.dart';
@@ -188,28 +190,47 @@ class MainLayoutController extends GetxController {
     );
 
     if (confirmed == true) {
-      // Clear AI Coach messages from storage before clearing auth data
-      // This ensures previous user's messages don't show for new user
-      if (Get.isRegistered<AiCoachController>()) {
-        final aiCoachController = Get.find<AiCoachController>();
-        aiCoachController.clearMessages();
-        Get.delete<AiCoachController>(force: true);
-      } else {
-        // If controller doesn't exist, clear messages directly from storage
-        final storage = PreferencesService.getStorage();
-        storage.remove('ai_coach_messages');
-        debugPrint('✅ Cleared AI Coach messages from storage (controller not registered)');
+      try {
+        // Clear AI Coach messages from storage before clearing auth data
+        // This ensures previous user's messages don't show for new user
+        if (Get.isRegistered<AiCoachController>()) {
+          final aiCoachController = Get.find<AiCoachController>();
+          aiCoachController.clearMessages();
+          Get.delete<AiCoachController>(force: true);
+        } else {
+          // If controller doesn't exist, clear messages directly from storage
+          final storage = PreferencesService.getStorage();
+          storage.remove('ai_coach_messages');
+          debugPrint('✅ Cleared AI Coach messages from storage (controller not registered)');
+        }
+
+        // Call logout API - this will notify backend and clear tokens
+        final authRepository = AuthRepository();
+        final response = await authRepository.logout();
+
+        if (!response.isSuccess) {
+          debugPrint('⚠️ Logout API call failed: ${response.message}');
+          // Continue with logout even if API call fails
+        }
+
+        // Clear user data while preserving onboarding
+        // Note: Tokens are already cleared by logout() method
+        await PreferencesService.clearUserData();
+
+        // Navigate to login screen and clear navigation stack
+        Get.offAllNamed('/login');
+      } catch (e) {
+        debugPrint('❌ Logout Error: $e');
+        // Even if logout fails, clear local data
+        try {
+          final tokenManager = TokenManager();
+          await tokenManager.clearTokens();
+          await PreferencesService.clearUserData();
+          Get.offAllNamed('/login');
+        } catch (clearError) {
+          debugPrint('❌ Error clearing storage: $clearError');
+        }
       }
-
-      // Clear authentication data (token and user data) while preserving onboarding
-      // This ensures onboarding is never shown again after first completion
-      await PreferencesService.clearAuthData();
-
-      // TODO: Call logout API if needed
-      // await AuthService.logout();
-
-      // Navigate to login screen and clear navigation stack
-      Get.offAllNamed('/login');
     }
   }
 

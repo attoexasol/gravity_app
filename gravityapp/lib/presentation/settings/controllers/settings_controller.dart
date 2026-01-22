@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import '../../../core/services/preferences_service.dart';
+import '../../../core/services/token_manager.dart';
 import '../screens/sections/profile_image_picker_modal.dart';
 import '../../../core/services/health_sync_service.dart'
     show HealthSyncService, HealthPlatform, SyncActivity;
@@ -1779,19 +1780,6 @@ Future<void> saveProfileImage() async {
 
     if (confirmed == true) {
       try {
-        // Get token from storage
-        final token = PreferencesService.getAuthToken();
-
-        // Call logout API if token exists
-        if (token != null && token.isNotEmpty) {
-          final response = await _authRepository.logout(token: token);
-
-          if (!response.isSuccess) {
-            debugPrint('⚠️ Logout API call failed: ${response.message}');
-            // Continue with logout even if API call fails
-          }
-        }
-
         // Clear AI Coach messages from storage before clearing auth data
         // This ensures previous user's messages don't show for new user
         if (Get.isRegistered<AiCoachController>()) {
@@ -1805,9 +1793,18 @@ Future<void> saveProfileImage() async {
           debugPrint('✅ Cleared AI Coach messages from storage (controller not registered)');
         }
 
+        // Call logout API - this will notify backend and clear tokens
+        final response = await _authRepository.logout();
+
+        if (!response.isSuccess) {
+          debugPrint('⚠️ Logout API call failed: ${response.message}');
+          // Continue with logout even if API call fails
+        }
+
         // Clear authentication data while preserving onboarding status
         // Use clearAuthData() instead of clearAll() to safely preserve onboarding
-        await PreferencesService.clearAuthData();
+        // Note: Tokens are already cleared by logout() method, but we clear user data here
+        await PreferencesService.clearUserData();
 
         // Navigate to login screen and clear navigation stack
         Get.offAllNamed('/login');
@@ -1816,8 +1813,11 @@ Future<void> saveProfileImage() async {
 
         // Even if API call fails, clear local data and logout
         try {
+          // Clear tokens using TokenManager
+          final tokenManager = TokenManager();
+          await tokenManager.clearTokens();
           // Use clearAuthData() to preserve onboarding
-          await PreferencesService.clearAuthData();
+          await PreferencesService.clearUserData();
           Get.offAllNamed('/login');
         } catch (clearError) {
           debugPrint('❌ Error clearing storage: $clearError');

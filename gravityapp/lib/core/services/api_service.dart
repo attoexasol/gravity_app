@@ -2,8 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'package:get/get.dart';
+import 'token_manager.dart';
+import '../../app/routes/app_routes.dart';
+import 'preferences_service.dart';
 
-/// API Service - Handles all HTTP requests
+/// API Service - Handles all HTTP requests with automatic token management
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
@@ -15,6 +19,13 @@ class ApiService {
   /// HTTP Client
   final http.Client _client = http.Client();
 
+  /// Token Manager instance
+  final TokenManager _tokenManager = TokenManager();
+
+  /// Flag to prevent multiple simultaneous refresh attempts
+  bool _isRefreshing = false;
+  Completer<void>? _refreshCompleter;
+
   /// Default headers
   Map<String, String> get _defaultHeaders => {
     'Content-Type': 'application/json',
@@ -22,15 +33,60 @@ class ApiService {
     'User-Agent': 'GravityApp/1.0 (Flutter)',
   };
 
-  /// POST request
+  /// Get headers with authentication token
+  Future<Map<String, String>> _getHeaders({
+    Map<String, String>? additionalHeaders,
+    bool includeAuth = true,
+  }) async {
+    final headers = <String, String>{..._defaultHeaders};
+    
+    if (includeAuth) {
+      final accessToken = _tokenManager.getAccessToken();
+      if (accessToken != null && accessToken.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $accessToken';
+      }
+    }
+    
+    if (additionalHeaders != null) {
+      headers.addAll(additionalHeaders);
+    }
+    
+    return headers;
+  }
+
+  /// POST request with automatic token management
   Future<Map<String, dynamic>> post(
       String endpoint, {
         Map<String, dynamic>? body,
         Map<String, String>? headers,
         Duration? timeout,
+        bool requireAuth = true,
       }) async {
+    return _executeWithRetry(
+      () => _postInternal(
+        endpoint: endpoint,
+        body: body,
+        headers: headers,
+        timeout: timeout,
+        requireAuth: requireAuth,
+      ),
+    );
+  }
+
+  /// Internal POST request implementation
+  Future<Map<String, dynamic>> _postInternal({
+    required String endpoint,
+    Map<String, dynamic>? body,
+    Map<String, String>? headers,
+    Duration? timeout,
+    bool requireAuth = true,
+  }) async {
     try {
       final url = Uri.parse('$baseUrl$endpoint');
+      final requestHeaders = await _getHeaders(
+        additionalHeaders: headers,
+        includeAuth: requireAuth,
+      );
 
       debugPrint('🌐 POST Request: $url');
       // Don't print full body if it contains large data (like base64 images)
@@ -52,7 +108,7 @@ class ApiService {
       
       final response = await _client.post(
         url,
-        headers: {..._defaultHeaders, ...?headers},
+        headers: requestHeaders,
         body: jsonBody,
       ).timeout(requestTimeout);
 
@@ -71,19 +127,55 @@ class ApiService {
     }
   }
 
-  /// GET request
+  /// POST request without authentication (for login, signup, refresh token, etc.)
+  Future<Map<String, dynamic>> postWithoutAuth(
+      String endpoint, {
+        Map<String, dynamic>? body,
+        Map<String, String>? headers,
+        Duration? timeout,
+      }) async {
+    return _postInternal(
+      endpoint: endpoint,
+      body: body,
+      headers: headers,
+      timeout: timeout,
+      requireAuth: false,
+    );
+  }
+
+  /// GET request with automatic token management
   Future<Map<String, dynamic>> get(
       String endpoint, {
         Map<String, String>? headers,
+        bool requireAuth = true,
       }) async {
+    return _executeWithRetry(
+      () => _getInternal(
+        endpoint: endpoint,
+        headers: headers,
+        requireAuth: requireAuth,
+      ),
+    );
+  }
+
+  /// Internal GET request implementation
+  Future<Map<String, dynamic>> _getInternal({
+    required String endpoint,
+    Map<String, String>? headers,
+    bool requireAuth = true,
+  }) async {
     try {
       final url = Uri.parse('$baseUrl$endpoint');
+      final requestHeaders = await _getHeaders(
+        additionalHeaders: headers,
+        includeAuth: requireAuth,
+      );
 
       debugPrint('🌐 GET Request: $url');
 
       final response = await _client.get(
         url,
-        headers: {..._defaultHeaders, ...?headers},
+        headers: requestHeaders,
       );
 
       debugPrint('📡 Response Status: ${response.statusCode}');
@@ -137,6 +229,134 @@ class ApiService {
         return 'Authentication failed. Please check your credentials.';
       default:
         return 'Request failed with status $statusCode';
+    }
+  }
+
+  /// Execute request with automatic retry on 401
+  Future<Map<String, dynamic>> _executeWithRetry(
+    Future<Map<String, dynamic>> Function() request,
+  ) async {
+    try {
+      return await request();
+    } on ApiException catch (e) {
+      // Handle 401 Unauthorized - try to refresh token
+      if (e.statusCode == 401) {
+        debugPrint('🔐 Received 401 Unauthorized - Attempting token refresh...');
+        
+        final refreshed = await _refreshTokenIfNeeded();
+        if (refreshed) {
+          // Retry the original request after successful refresh
+          debugPrint('✅ Token refreshed - Retrying original request...');
+          return await request();
+        } else {
+          // Refresh failed - force logout
+          debugPrint('❌ Token refresh failed - Forcing logout...');
+          await _forceLogout();
+          rethrow;
+        }
+      }
+      rethrow;
+    }
+  }
+
+  /// Refresh access token if needed
+  Future<bool> _refreshTokenIfNeeded() async {
+    // Prevent multiple simultaneous refresh attempts
+    if (_isRefreshing) {
+      debugPrint('⏳ Token refresh already in progress - waiting...');
+      // Wait for ongoing refresh to complete
+      if (_refreshCompleter != null) {
+        await _refreshCompleter!.future;
+      }
+      // Check if we now have a valid token
+      return _tokenManager.getAccessToken() != null;
+    }
+
+    _isRefreshing = true;
+    _refreshCompleter = Completer<void>();
+
+    try {
+      final refreshToken = _tokenManager.getRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) {
+        debugPrint('❌ No refresh token available');
+        _isRefreshing = false;
+        _refreshCompleter!.complete();
+        _refreshCompleter = null;
+        return false;
+      }
+
+      debugPrint('🔄 Refreshing access token...');
+      
+      // Call refresh endpoint directly (without auth to avoid circular dependency)
+      final url = Uri.parse('$baseUrl/auth/refresh');
+      final response = await _client.post(
+        url,
+        headers: _defaultHeaders,
+        body: jsonEncode({'refresh_token': refreshToken}),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        try {
+          final responseData = jsonDecode(response.body) as Map<String, dynamic>;
+          final newAccessToken = responseData['access_token'] as String?;
+          final newRefreshToken = responseData['refresh_token'] as String?;
+
+          if (newAccessToken != null && newAccessToken.isNotEmpty) {
+            // Update tokens
+            if (newRefreshToken != null && newRefreshToken.isNotEmpty) {
+              await _tokenManager.saveTokens(
+                accessToken: newAccessToken,
+                refreshToken: newRefreshToken,
+              );
+            } else {
+              // Only access token was refreshed
+              await _tokenManager.updateAccessToken(newAccessToken);
+            }
+            
+            debugPrint('✅ Token refreshed successfully');
+            _isRefreshing = false;
+            _refreshCompleter!.complete();
+            _refreshCompleter = null;
+            return true;
+          }
+        } catch (e) {
+          debugPrint('❌ Error parsing refresh response: $e');
+        }
+      }
+
+      debugPrint('❌ Token refresh failed: Status ${response.statusCode}');
+      _isRefreshing = false;
+      _refreshCompleter!.complete();
+      _refreshCompleter = null;
+      return false;
+    } catch (e) {
+      debugPrint('❌ Token refresh error: $e');
+      _isRefreshing = false;
+      if (_refreshCompleter != null && !_refreshCompleter!.isCompleted) {
+        _refreshCompleter!.complete();
+      }
+      _refreshCompleter = null;
+      return false;
+    }
+  }
+
+  /// Force logout by clearing tokens and navigating to login
+  Future<void> _forceLogout() async {
+    try {
+      // Clear tokens
+      await _tokenManager.clearTokens();
+      
+      // Clear user data
+      await PreferencesService.clearUserData();
+      
+      // Navigate to login screen
+      if (Get.currentRoute != AppRoutes.login) {
+        Get.offAllNamed(AppRoutes.login);
+      }
+      
+      debugPrint('✅ Forced logout completed');
+    } catch (e) {
+      debugPrint('❌ Error during forced logout: $e');
     }
   }
 

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../../core/services/api_service.dart';
 import '../../core/services/preferences_service.dart';
+import '../../core/services/token_manager.dart';
 import '../model/api_response.dart';
 import '../model/user_model.dart';
 
@@ -60,19 +61,21 @@ class AuthRepository {
   }
 
   /// Login user
-  /// Returns a map with 'response' (ApiResponse), 'token' (String?), 'user_id' (int?), 'user_name' (String?), and 'email' (String?)
+  /// Returns a map with 'response' (ApiResponse), 'access_token' (String?), 'refresh_token' (String?), 
+  /// 'token' (String? - for backward compatibility), 'user_id' (int?), 'user_name' (String?), and 'email' (String?)
   Future<Map<String, dynamic>> login({
     required String email,
     required String password,
   }) async {
     try {
-      final response = await _apiService.post(
+      final response = await _apiService.postWithoutAuth(
         '/user/login',
         body: {'email': email, 'password': password},
       );
 
-      // Extract token from root level
-      final token = response['token'] as String?;
+      // Extract tokens - support both new format (access_token/refresh_token) and legacy (token)
+      final accessToken = response['access_token'] as String? ?? response['token'] as String?;
+      final refreshToken = response['refresh_token'] as String?;
 
       // Extract user object from response
       final userData = response['user'] as Map<String, dynamic>?;
@@ -90,7 +93,8 @@ class AuthRepository {
           : null;
 
       debugPrint('🔍 Login Response Debug:');
-      debugPrint('  - Token: ${token != null ? "Present" : "Missing"}');
+      debugPrint('  - Access Token: ${accessToken != null ? "Present" : "Missing"}');
+      debugPrint('  - Refresh Token: ${refreshToken != null ? "Present" : "Missing"}');
       debugPrint('  - User Data: ${userData != null ? "Present" : "Missing"}');
       if (userData != null) {
         debugPrint('  - User ID: $userId');
@@ -106,7 +110,9 @@ class AuthRepository {
 
       return {
         'response': apiResponse,
-        'token': token,
+        'access_token': accessToken,
+        'refresh_token': refreshToken,
+        'token': accessToken, // For backward compatibility
         'user_id': userId,
         'user_name': userName,
         'email': userEmail,
@@ -119,6 +125,8 @@ class AuthRepository {
           message: e.message,
           error: e.errors,
         ),
+        'access_token': null,
+        'refresh_token': null,
         'token': null,
         'user_id': null,
         'user_name': null,
@@ -132,6 +140,8 @@ class AuthRepository {
           message: 'An unexpected error occurred. Please try again.',
           error: e.toString(),
         ),
+        'access_token': null,
+        'refresh_token': null,
         'token': null,
         'user_id': null,
         'user_name': null,
@@ -142,10 +152,11 @@ class AuthRepository {
 
   /// Get user profile
   /// This method can be called after login to get full user information including user_id
+  /// Note: Authorization header is automatically added by ApiService
   Future<ApiResponse<UserModel>> getUserProfile() async {
     try {
-      final token = PreferencesService.getAuthToken();
-      if (token == null || token.isEmpty) {
+      final tokenManager = TokenManager();
+      if (!tokenManager.hasTokens()) {
         throw ApiException(
           message: 'Authentication token not found',
           statusCode: 401,
@@ -154,7 +165,6 @@ class AuthRepository {
 
       final response = await _apiService.get(
         '/user/profile',
-        headers: {'Authorization': 'Bearer $token'},
       );
 
       return ApiResponse<UserModel>(
@@ -228,34 +238,57 @@ class AuthRepository {
   }
 
   /// Logout user
+  /// Notifies backend and clears tokens
   /// Note: Using POST with body since GET requests don't support request bodies in standard HTTP
   /// If the API specifically requires GET, the token would need to be passed as a query parameter
-  Future<ApiResponse<void>> logout({required String token}) async {
+  Future<ApiResponse<void>> logout() async {
     try {
-      // Using POST with token in body as specified in the request format
-      // If API requires GET, we would use: '/user/logout?token=$token'
-      final response = await _apiService.post(
-        '/user/logout',
-        body: {'token': token},
-      );
+      final tokenManager = TokenManager();
+      final accessToken = tokenManager.getAccessToken();
+      final refreshToken = tokenManager.getRefreshToken();
+
+      // Notify backend about logout (send refresh token if available, otherwise access token)
+      final tokenToSend = refreshToken ?? accessToken;
+      
+      if (tokenToSend != null && tokenToSend.isNotEmpty) {
+        try {
+          // Using POST with token in body as specified in the request format
+          // If API requires GET, we would use: '/user/logout?token=$token'
+          final response = await _apiService.post(
+            '/user/logout',
+            body: {'refresh_token': refreshToken ?? accessToken},
+          );
+
+          debugPrint('✅ Logout API call successful');
+        } on ApiException catch (e) {
+          debugPrint('⚠️ Logout API Error: ${e.message}');
+          // Continue with local logout even if API call fails
+        } catch (e) {
+          debugPrint('⚠️ Logout API Unknown Error: $e');
+          // Continue with local logout even if API call fails
+        }
+      }
+
+      // Clear tokens locally
+      await tokenManager.clearTokens();
 
       return ApiResponse<void>(
-        status: response['status'] ?? false,
-        message: response['message'] ?? '',
+        status: true,
+        message: 'Logged out successfully',
         data: null,
       );
-    } on ApiException catch (e) {
-      debugPrint('❌ Logout API Error: ${e.message}');
-      return ApiResponse<void>(
-        status: false,
-        message: e.message,
-        error: e.errors,
-      );
     } catch (e) {
-      debugPrint('❌ Logout Unknown Error: $e');
+      debugPrint('❌ Logout Error: $e');
+      // Even if logout fails, clear tokens locally
+      try {
+        await TokenManager().clearTokens();
+      } catch (clearError) {
+        debugPrint('❌ Error clearing tokens: $clearError');
+      }
+      
       return ApiResponse<void>(
         status: false,
-        message: 'An unexpected error occurred. Please try again.',
+        message: 'An unexpected error occurred during logout.',
         error: e.toString(),
       );
     }
@@ -270,7 +303,7 @@ class AuthRepository {
     required String role,
   }) async {
     try {
-      final response = await _apiService.post(
+      final response = await _apiService.postWithoutAuth(
         '/auth/google', // ✅ backend endpoint
         body: {
           'firebase_token': firebaseToken,
@@ -278,7 +311,9 @@ class AuthRepository {
         },
       );
 
-      final token = response['token'] as String?;
+      // Extract tokens - support both new format (access_token/refresh_token) and legacy (token)
+      final accessToken = response['access_token'] as String? ?? response['token'] as String?;
+      final refreshToken = response['refresh_token'] as String?;
       final userData = response['user'] as Map<String, dynamic>?;
 
       final userId = userData?['user_id'] as int?;
@@ -293,7 +328,9 @@ class AuthRepository {
 
       return {
         'response': apiResponse,
-        'token': token,
+        'access_token': accessToken,
+        'refresh_token': refreshToken,
+        'token': accessToken, // For backward compatibility
         'user_id': userId,
         'user_name': userName,
         'email': userEmail,
@@ -305,6 +342,8 @@ class AuthRepository {
           message: e.message,
           error: e.errors,
         ),
+        'access_token': null,
+        'refresh_token': null,
         'token': null,
         'user_id': null,
         'user_name': null,
@@ -608,6 +647,51 @@ class AuthRepository {
         message: 'An unexpected error occurred. Please try again.',
         error: e.toString(),
       );
+    }
+  }
+
+  /// Refresh access token using refresh token
+  /// Note: This method is kept for backward compatibility but token refresh
+  /// is now handled automatically by ApiService
+  /// API: POST /auth/refresh
+  /// Body: { "refresh_token": "..." }
+  /// Response: { "status": true, "access_token": "...", "refresh_token": "..." }
+  @Deprecated('Token refresh is now handled automatically by ApiService')
+  Future<Map<String, dynamic>> refreshToken({
+    required String refreshToken,
+  }) async {
+    try {
+      // Use postWithoutAuth to avoid infinite loop (refresh endpoint shouldn't require auth)
+      final response = await _apiService.postWithoutAuth(
+        '/auth/refresh',
+        body: {'refresh_token': refreshToken},
+      );
+
+      final newAccessToken = response['access_token'] as String?;
+      final newRefreshToken = response['refresh_token'] as String?;
+
+      return {
+        'success': true,
+        'access_token': newAccessToken,
+        'refresh_token': newRefreshToken,
+      };
+    } on ApiException catch (e) {
+      debugPrint('❌ RefreshToken API Error: ${e.message}');
+      return {
+        'success': false,
+        'access_token': null,
+        'refresh_token': null,
+        'error': e.message,
+        'statusCode': e.statusCode,
+      };
+    } catch (e) {
+      debugPrint('❌ RefreshToken Unknown Error: $e');
+      return {
+        'success': false,
+        'access_token': null,
+        'refresh_token': null,
+        'error': e.toString(),
+      };
     }
   }
 }

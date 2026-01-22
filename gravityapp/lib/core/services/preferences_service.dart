@@ -1,11 +1,12 @@
 import 'package:get_storage/get_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'token_manager.dart';
 
 class PreferencesService {
   static final _storage = GetStorage();
   static const String _onboardingKey = 'onboarding_completed';
   static const String _firstTimeSetupKey = 'first_time_setup_completed';
-  static const String _authTokenKey = 'auth_token';
+  static const String _authTokenKey = 'auth_token'; // Deprecated: Use TokenManager instead
   static const String _userEmailKey = 'user_email';
   static const String _userNameKey = 'user_name';
   static const String _userIdKey = 'user_id';
@@ -43,7 +44,15 @@ class PreferencesService {
 
   /// Check if user is authenticated (has a valid token)
   /// Returns true if token exists and is not empty
+  /// Checks both TokenManager (preferred) and legacy auth_token for backward compatibility
   static bool isAuthenticated() {
+    // First check TokenManager (new system)
+    final tokenManager = TokenManager();
+    if (tokenManager.hasTokens()) {
+      return true;
+    }
+    
+    // Fallback to legacy token check for backward compatibility
     final token = getAuthToken();
     return token != null && token.isNotEmpty;
   }

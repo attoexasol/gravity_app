@@ -5,6 +5,7 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/model/api_response.dart';
 import '../../data/model/user_model.dart';
 import 'preferences_service.dart';
+import 'token_manager.dart';
 
 class GoogleAuthService {
   final AuthRepository _authRepository = AuthRepository();
@@ -55,20 +56,35 @@ class GoogleAuthService {
       debugPrint('   Email: ${user.email}');
 
       final result = await _authRepository.googleSignIn(
-        firebaseToken: firebaseIdToken ?? '',
+firebaseToken: firebaseIdToken ?? '',
         role: role,
       );
 
       final response = result['response'] as ApiResponse<UserModel>;
-      final token = result['token'] as String?;
+      final accessToken = result['access_token'] as String? ?? result['token'] as String?;
+      final refreshToken = result['refresh_token'] as String?;
       final userId = result['user_id'] as int?;
 
-      if (response.isSuccess && token != null) {
+      if (response.isSuccess && accessToken != null) {
         // IMPORTANT: Do NOT mark first-time setup as completed here
         // First-time setup should only be marked when goals are saved in goal_settings_controller
         // This ensures: Google Sign up → Google Login → Goal Settings (first time) → Dashboard (subsequent)
         
-        await PreferencesService.saveAuthToken(token);
+        // Save tokens using TokenManager
+        final tokenManager = TokenManager();
+        if (refreshToken != null && refreshToken.isNotEmpty) {
+          await tokenManager.saveTokens(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+          );
+        } else {
+          // If no refresh token provided, save only access token
+          await tokenManager.updateAccessToken(accessToken);
+          debugPrint('⚠️ No refresh token received from Google Sign-In API - only access token saved');
+        }
+        
+        // Also save to PreferencesService for backward compatibility
+        await PreferencesService.saveAuthToken(accessToken);
         await PreferencesService.saveUserEmail(user.email ?? '');
         await PreferencesService.saveUserName(user.displayName ?? '');
         
@@ -119,7 +135,9 @@ class GoogleAuthService {
 
         return {
           'success': true,
-          'token': token,
+          'token': accessToken, // For backward compatibility
+          'access_token': accessToken,
+          'refresh_token': refreshToken,
           'user': user,
           'response': response,
         };
