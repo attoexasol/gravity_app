@@ -447,7 +447,17 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
                   tooltipRoundedRadius: 0,
                   tooltipPadding: EdgeInsets.zero,
                   getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-                    return [];
+                    // Return tooltip items matching touched spots count (but invisible)
+                    // This is required by fl_chart - count must match
+                    return touchedBarSpots.map((spot) {
+                      return LineTooltipItem(
+                        '',
+                        const TextStyle(
+                          color: Colors.transparent,
+                          fontSize: 0,
+                        ),
+                      );
+                    }).toList();
                   },
                 ),
                 handleBuiltInTouches: true,
