@@ -54,11 +54,13 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
     return topPadding + (normalized * chartContentHeight);
   }
   
-  /// Check if a value is a major tick (multiple of 5) using integer math
+  /// Check if a value is a major tick (whole numbers: 70, 71, 72, 73, 74, 75)
+  /// Major ticks are whole numbers, minor ticks are 0.5 increments
   bool _isMajorTick(double value) {
-    // Round to nearest integer to avoid floating-point precision issues
-    final rounded = value.round();
-    return rounded % 5 == 0;
+    // Check if value is a whole number (no decimal part)
+    // Major ticks: 70, 71, 72, 73, 74, 75
+    // Minor ticks: 70.5, 71.5, 72.5, 73.5, 74.5
+    return value == value.roundToDouble();
   }
 
   @override
@@ -139,7 +141,7 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
 
   @override
   Widget build(BuildContext context) {
-    const double chartHeight = 280.0;
+    const double chartHeight = 380.0; // Increased height for better visibility
     const double yAxisWidth = 52.0;
 
     return Container(
@@ -213,10 +215,9 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
               );
             }
 
-            // Calculate Y-axis bounds with rounding to nearest multiple of 5
-            final yAxisBounds = _calculateYAxisBounds(sortedEntries);
-            final minY = yAxisBounds['min']!;
-            final maxY = yAxisBounds['max']!;
+            // Fixed Y-axis bounds: 70kg to 75kg (no auto-scaling)
+            const double minY = 70.0;
+            const double maxY = 75.0;
 
             // Generate Y-axis labels
             final yAxisLabels = _generateYAxisLabels(minY, maxY);
@@ -238,8 +239,9 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
             final chartWidth = baseWidth.clamp(screenWidth - 32.w - yAxisWidth, double.infinity);
 
             // Define consistent padding used everywhere
+            // Increased bottom padding to ensure dates are placed BELOW grid lines
             const double topPadding = 8.0;
-            const double bottomPadding = 8.0;
+            const double bottomPadding = 40.0; // Increased to place dates below 70kg grid line
             
             return SizedBox(
               height: chartHeight.h,
@@ -299,6 +301,7 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
 
   /// Build fixed Y-axis labels on the left
   /// Uses SINGLE scale function for pixel-perfect alignment with grid lines
+  /// Shows all labels: 70, 71, 72, 73, 74, 75
   Widget _buildFixedYAxis(
     List<double> labels,
     double minY,
@@ -309,18 +312,22 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
     return Padding(
       padding: EdgeInsets.only(top: topPadding, bottom: topPadding),
       child: Stack(
+        clipBehavior: Clip.none,
         children: labels.map((value) {
           // Use SINGLE scale function - exact same calculation as grid lines
           final pixelY = _mapYToPixel(value, minY, maxY, chartHeight, topPadding);
           
+          // Adjust for container padding to align with grid lines
+          final adjustedY = pixelY - topPadding;
+          
           return Positioned(
-            top: pixelY - topPadding, // Adjust for container padding
+            top: adjustedY - 8.h, // Center text vertically on grid line
             right: 0,
             child: Text(
               value.toStringAsFixed(0),
               style: ResponsiveTextStyles.textXs.copyWith(
                 color: const Color(0xFF0A2342).withOpacity(0.6),
-                fontWeight: FontWeight.w500,
+                fontWeight: _isMajorTick(value) ? FontWeight.w600 : FontWeight.w500,
               ),
               textAlign: TextAlign.right,
             ),
@@ -391,7 +398,9 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
               maxX: visibleEndIndex.toDouble(),
               minY: minY,
               maxY: maxY,
-              clipData: const FlClipData.all(),
+              // Allow data points outside the fixed range to be visible
+              // This ensures accurate positioning relative to the fixed scale
+              clipData: const FlClipData.none(),
               borderData: FlBorderData(show: false),
 
               /// Disable fl_chart's grid system - we render manually for perfect alignment
@@ -411,11 +420,11 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
                   sideTitles: SideTitles(showTitles: false), // Hidden - using fixed Y-axis
                 ),
 
-                /// Bottom dates - smart label spacing
+                /// Bottom dates - placed BELOW grid lines with proper spacing
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 36.h,
+                    reservedSize: 50.h, // Increased reserved size to place dates below grid lines
                     interval: _calculateXAxisInterval(sortedEntries.length).toDouble(),
                     getTitlesWidget: (value, meta) {
                       final index = value.toInt();
@@ -432,8 +441,9 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
                         final date = DateTime.parse(entry.date);
                         final shortDate = _formatShortDate(date);
 
+                        // Place dates BELOW the chart area, not overlapping with grid lines
                         return Padding(
-                          padding: EdgeInsets.only(top: 8.h),
+                          padding: EdgeInsets.only(top: 12.h), // Additional padding to separate from grid
                           child: Text(
                             shortDate,
                             style: ResponsiveTextStyles.textXs.copyWith(
@@ -469,9 +479,11 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
                 ),
 
                 /// Weight trend line with highlightable dots
+                /// Smooth curved interpolation for professional fitness app appearance
                 LineChartBarData(
                   spots: chartSpots,
                   isCurved: true,
+                  curveSmoothness: 0.35, // Smooth, slightly curved interpolation (0.0 = straight, 1.0 = very curved)
                   color: const Color(0xFF00B8A9),
                   barWidth: 3,
                   dotData: FlDotData(
@@ -705,66 +717,28 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
     );
   }
 
-  /// Generate Y-axis labels at 5-unit intervals (major ticks only)
-  /// Uses integer math to ensure perfect alignment with grid lines
+  /// Generate Y-axis labels for fixed range (whole numbers only: 70, 71, 72, 73, 74, 75)
+  /// Shows only major grid line labels (whole numbers), not 0.5 increments
   List<double> _generateYAxisLabels(double minY, double maxY) {
+    // For fixed range 70-75kg, show only whole number labels: 70, 71, 72, 73, 74, 75
+    // (0.5 increments are shown as grid lines but not labeled)
     final labels = <double>[];
+    int current = minY.round(); // 70
+    final maxYInt = maxY.round(); // 75
     
-    // Convert to integers for precise calculation
-    final minYInt = minY.round();
-    final maxYInt = maxY.round();
-    
-    // Start from the nearest multiple of 5 >= minY
-    final startTick = ((minYInt + 4) ~/ 5) * 5;
-    
-    // Generate labels at 5-unit intervals using integer math
-    int current = startTick;
     while (current <= maxYInt) {
       labels.add(current.toDouble());
-      current += 5;
+      current += 1;
     }
     
-    return labels;
+    return labels; // [70.0, 71.0, 72.0, 73.0, 74.0, 75.0]
   }
 
-  /// Calculate Y-axis bounds rounded to nearest multiple of 5
-  /// Uses integer math to prevent floating-point precision errors
-  /// Ensures range is always a multiple of 5 for perfect grid alignment
+  /// Fixed Y-axis bounds: Always returns 70kg to 75kg
+  /// This ensures the chart scale remains stable and doesn't auto-adjust
   Map<String, double> _calculateYAxisBounds(List<WeightEntry> entries) {
-    if (entries.isEmpty) {
-      return {'min': 0.0, 'max': 100.0};
-    }
-
-    final weights = entries.map((e) => e.weight).where((w) => w > 0).toList();
-    if (weights.isEmpty) {
-      return {'min': 0.0, 'max': 100.0};
-    }
-
-    final dataMin = weights.reduce((a, b) => a < b ? a : b);
-    final dataMax = weights.reduce((a, b) => a > b ? a : b);
-
-    // Use integer math for precise rounding to nearest multiple of 5
-    // Round min down to nearest multiple of 5, with 5 kg margin
-    final minYInt = ((dataMin - 5).floor() ~/ 5) * 5;
-    final minY = minYInt.toDouble();
-    
-    // Round max up to nearest multiple of 5, with 5 kg margin
-    final maxYInt = ((dataMax + 5).ceil() ~/ 5) * 5;
-    final maxY = maxYInt.toDouble();
-
-    // Ensure minimum range of 10 units (2 major ticks) for readability
-    final range = maxY - minY;
-    if (range < 10) {
-      // Center the range around the data
-      final center = ((dataMin + dataMax) / 2).round();
-      final centerRounded = (center ~/ 5) * 5;
-      return {
-        'min': (centerRounded - 5).toDouble(),
-        'max': (centerRounded + 5).toDouble(),
-      };
-    }
-
-    return {'min': minY, 'max': maxY};
+    // Fixed range: 70kg to 75kg (no auto-scaling)
+    return {'min': 70.0, 'max': 75.0};
   }
 
   /// Get valid sorted entries (oldest to newest)
@@ -814,20 +788,21 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
     return position.clamp(topPadding.h, chartHeight - 28.h);
   }
 
-  /// Generate all grid line values (every 1 kg interval)
+  /// Generate all grid line values (every 0.5 kg interval for fixed 70-75kg range)
   /// Returns list of Y values where grid lines should be drawn
+  /// Includes: 70.0, 70.5, 71.0, 71.5, 72.0, 72.5, 73.0, 73.5, 74.0, 74.5, 75.0 (11 lines, minimum 10)
   List<double> _generateGridLines(double minY, double maxY) {
     final lines = <double>[];
     
-    // Round to integers for precise calculation
-    final minYInt = minY.round();
-    final maxYInt = maxY.round();
+    // For fixed range 70-75kg, generate lines at every 0.5kg interval
+    // This creates 11 grid lines (minimum 10 as required): 70.0, 70.5, 71.0, 71.5, 72.0, 72.5, 73.0, 73.5, 74.0, 74.5, 75.0
+    double current = minY; // 70.0
+    final maxYValue = maxY; // 75.0
+    const interval = 0.5; // 0.5kg intervals
     
-    // Generate lines at every 1 kg interval
-    int current = minYInt;
-    while (current <= maxYInt) {
-      lines.add(current.toDouble());
-      current += 1;
+    while (current <= maxYValue + 0.01) { // Add small epsilon to handle floating point precision
+      lines.add(current);
+      current += interval;
     }
     
     return lines;
@@ -870,28 +845,34 @@ class _GridLinePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..style = PaintingStyle.stroke;
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round; // Rounded line caps for cleaner appearance
 
     for (final value in gridLines) {
       final isMajor = isMajorTick(value);
       final pixelY = _mapYToPixel(value, size);
 
       if (isMajor) {
-        // Major grid line (value % 5 == 0): bold, dark, labeled
+        // Major grid line (whole numbers: 70, 71, 72, 73, 74, 75): BOLD, dark, labeled
         paint
-          ..color = const Color(0xFF0A2342).withOpacity(0.25)
+          ..color = const Color(0xFF0A2342).withOpacity(0.3)
           ..strokeWidth = 2.5;
       } else {
-        // Minor grid line (value % 5 != 0): thin, light, unlabeled
+        // Minor grid line (0.5 increments: 70.5, 71.5, 72.5, 73.5, 74.5): normal/light, unlabeled
         paint
-          ..color = const Color(0xFF0A2342).withOpacity(0.1)
+          ..color = const Color(0xFF0A2342).withOpacity(0.12)
           ..strokeWidth = 1.0;
       }
 
-      // Draw horizontal line across the entire width
+      // Draw horizontal line from exact start (0) to exact end (size.width) for perfect alignment
+      // Ensure endpoints match chart boundaries perfectly - no gaps or overflows
+      final startX = 0.0;
+      final endX = size.width;
+      
+      // Use precise pixel coordinates - ensure lines extend to exact boundaries
       canvas.drawLine(
-        Offset(0, pixelY),
-        Offset(size.width, pixelY),
+        Offset(startX, pixelY),
+        Offset(endX, pixelY),
         paint,
       );
     }
