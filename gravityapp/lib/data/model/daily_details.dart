@@ -1,5 +1,6 @@
 /// Daily Details Data Model
 /// Represents a single day's detailed data
+library;
 
 enum PillarStatus {
   complete,

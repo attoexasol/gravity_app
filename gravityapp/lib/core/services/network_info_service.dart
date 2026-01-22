@@ -1,5 +1,4 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart';
 import '../utils/safe_logger.dart';
 
 /// Network Info Service - Checks device connectivity status

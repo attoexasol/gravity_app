@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'token_manager.dart';
+import 'auth_error_handler.dart';
+import 'session_manager.dart';
 import '../../app/routes/app_routes.dart';
 import 'preferences_service.dart';
 
@@ -22,9 +24,16 @@ class ApiService {
   /// Token Manager instance
   final TokenManager _tokenManager = TokenManager();
 
+  /// Auth Error Handler instance
+  final AuthErrorHandler _authErrorHandler = AuthErrorHandler();
+
   /// Flag to prevent multiple simultaneous refresh attempts
   bool _isRefreshing = false;
   Completer<void>? _refreshCompleter;
+  
+  /// Flag to prevent multiple simultaneous retry attempts
+  int _retryCount = 0;
+  static const int _maxRetries = 1; // Only retry once after refresh
 
   /// Default headers
   Map<String, String> get _defaultHeaders => {
@@ -236,21 +245,61 @@ class ApiService {
   Future<Map<String, dynamic>> _executeWithRetry(
     Future<Map<String, dynamic>> Function() request,
   ) async {
+    // Reset retry count for new request
+    _retryCount = 0;
+    return await _executeWithRetryInternal(request);
+  }
+
+  /// Internal retry logic with retry count tracking
+  Future<Map<String, dynamic>> _executeWithRetryInternal(
+    Future<Map<String, dynamic>> Function() request,
+  ) async {
     try {
       return await request();
     } on ApiException catch (e) {
-      // Handle 401 Unauthorized - try to refresh token
+      // Handle 401 Unauthorized
       if (e.statusCode == 401) {
-        debugPrint('🔐 Received 401 Unauthorized - Attempting token refresh...');
-        
-        final refreshed = await _refreshTokenIfNeeded();
-        if (refreshed) {
-          // Retry the original request after successful refresh
-          debugPrint('✅ Token refreshed - Retrying original request...');
-          return await request();
+        // Parse error body to determine error type
+        Map<String, dynamic>? errorBody;
+        try {
+          if (e.errors is Map) {
+            errorBody = e.errors as Map<String, dynamic>?;
+          }
+        } catch (_) {
+          // Ignore parsing errors
+        }
+
+        // Use AuthErrorHandler to determine if we should refresh or logout
+        final handled = await _authErrorHandler.handle401Error(
+          errorMessage: e.message,
+          statusCode: e.statusCode,
+          errorBody: errorBody,
+        );
+
+        if (handled) {
+          // Error was handled (forced logout) - don't retry
+          rethrow;
+        }
+
+        // Not handled by error handler - try to refresh token
+        if (_retryCount < _maxRetries) {
+          debugPrint('🔐 Received 401 Unauthorized - Attempting token refresh...');
+          _retryCount++;
+          
+          final refreshed = await _refreshTokenIfNeeded();
+          if (refreshed) {
+            // Retry the original request after successful refresh
+            debugPrint('✅ Token refreshed - Retrying original request (attempt $_retryCount)...');
+            return await _executeWithRetryInternal(request);
+          } else {
+            // Refresh failed - force logout
+            debugPrint('❌ Token refresh failed - Forcing logout...');
+            await _forceLogout();
+            rethrow;
+          }
         } else {
-          // Refresh failed - force logout
-          debugPrint('❌ Token refresh failed - Forcing logout...');
+          // Max retries reached - force logout
+          debugPrint('❌ Max retries reached - Forcing logout...');
           await _forceLogout();
           rethrow;
         }
@@ -341,10 +390,15 @@ class ApiService {
   }
 
   /// Force logout by clearing tokens and navigating to login
+  /// Note: This is a fallback - AuthErrorHandler should handle most cases
   Future<void> _forceLogout() async {
     try {
       // Clear tokens
       await _tokenManager.clearTokens();
+      
+      // Clear session
+      final sessionManager = SessionManager();
+      await sessionManager.clearSession();
       
       // Clear user data
       await PreferencesService.clearUserData();

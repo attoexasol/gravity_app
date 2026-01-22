@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gravityapp/data/model/conversation.dart';
 import 'package:gravityapp/data/model/message.dart';
 import '../../../data/repositories/messages_repository.dart';
 import '../../../core/services/preferences_service.dart';
-import '../../../data/model/api_response.dart';
 import '../utils/message_utils.dart';
 
 class MessagesController extends GetxController {

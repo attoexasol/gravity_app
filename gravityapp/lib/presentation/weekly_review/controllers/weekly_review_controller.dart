@@ -39,9 +39,9 @@ class WeeklyReviewController extends GetxController {
 
       final weekEnd = weekStart.add(const Duration(days: 6));
 
-      final formatDate = (DateTime date) {
+      String formatDate(DateTime date) {
         return DateFormat('MMM d').format(date);
-      };
+      }
 
       String label;
       if (i == 0) {

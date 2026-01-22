@@ -429,7 +429,7 @@ class TodayController extends GetxController {
       return PillarStatus.borderline;
     }
     final value = dateWiseData.value?.hydrationLiters ?? hydrationLiters.value;
-    if (value == null || value == 0) {
+    if (value == 0) {
       return PillarStatus.missed; // Red - missing or zero
     }
     // You can add logic here for partial (yellow) vs meets target (green)
@@ -443,7 +443,7 @@ class TodayController extends GetxController {
       return PillarStatus.borderline;
     }
     final value = dateWiseData.value?.sleepHours ?? sleepHours.value;
-    if (value == null || value == 0) {
+    if (value == 0) {
       return PillarStatus.missed; // Red - missing or zero
     }
     // You can add logic here for partial (yellow) vs meets target (green)
@@ -456,7 +456,7 @@ class TodayController extends GetxController {
       return PillarStatus.borderline;
     }
     final value = dateWiseData.value?.steps ?? steps.value;
-    if (value == null || value == 0) {
+    if (value == 0) {
       return PillarStatus.missed; // Red - missing or zero
     }
     // You can add logic here for partial (yellow) vs meets target (green)
@@ -469,7 +469,7 @@ class TodayController extends GetxController {
       return PillarStatus.borderline;
     }
     final value = dateWiseData.value?.nutritionCalories ?? totalNutrition.value;
-    if (value == null || value == 0) {
+    if (value == 0) {
       return PillarStatus.missed; // Red - missing or zero
     }
     // You can add logic here for partial (yellow) vs meets target (green)
@@ -507,7 +507,7 @@ class TodayController extends GetxController {
       return 'Loading...';
     }
     final value = dateWiseData.value?.nutritionCalories ?? totalNutrition.value;
-    if (value == null || value == 0) {
+    if (value == 0) {
       return '0 cal';
     }
     return '$value cal';
@@ -519,7 +519,7 @@ class TodayController extends GetxController {
       return 'Loading...';
     }
     final value = dateWiseData.value?.hydrationLiters ?? hydrationLiters.value;
-    if (value == null || value == 0) {
+    if (value == 0) {
       return '0L';
     }
     if (value % 1 == 0) {
@@ -535,7 +535,7 @@ class TodayController extends GetxController {
       return 'Loading...';
     }
     final value = dateWiseData.value?.sleepHours ?? sleepHours.value;
-    if (value == null || value == 0) {
+    if (value == 0) {
       return '0h';
     }
     final hours = value.toInt();
@@ -553,7 +553,7 @@ class TodayController extends GetxController {
       return 'Loading...';
     }
     final value = dateWiseData.value?.steps ?? steps.value;
-    if (value == null || value == 0) {
+    if (value == 0) {
       return '0 steps';
     }
     return '$value steps';

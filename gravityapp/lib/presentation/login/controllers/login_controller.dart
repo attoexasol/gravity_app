@@ -10,6 +10,8 @@ import '../../../data/repositories/goals_repository.dart';
 import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../core/services/token_manager.dart';
+import '../../../core/services/session_manager.dart';
+import '../../../core/services/device_manager.dart';
 
 enum UserType { customer, coach }
 
@@ -229,6 +231,21 @@ class LoginController extends GetxController {
         // Also save to PreferencesService for backward compatibility
         await PreferencesService.saveAuthToken(accessToken);
 
+        // Initialize session for single-device authentication
+        final deviceManager = DeviceManager();
+        final sessionManager = SessionManager();
+        final deviceId = await deviceManager.getDeviceId();
+        final userIdString = userId?.toString() ?? 
+                           (response.data?.id.toString() ?? '');
+        
+        if (userIdString.isNotEmpty) {
+          await sessionManager.initializeSession(
+            userId: userIdString,
+            deviceId: deviceId,
+          );
+          debugPrint('✅ Session initialized for device: $deviceId');
+        }
+
         // Save email from user object (or fallback to request email)
         final emailToSave = userEmail ?? email;
         await PreferencesService.saveUserEmail(emailToSave);
@@ -309,7 +326,7 @@ class LoginController extends GetxController {
         passwordErrorMessage.value = '';
         
         // Check consent and goals data availability
-        await _checkUserDataAndNavigate(token);
+        await _checkUserDataAndNavigate(accessToken);
       } else {
         // Determine which field has the error and display appropriate message
         _setFieldSpecificError(response.message);

@@ -55,7 +55,7 @@ class AiCoachRepository {
       };
 
       if (isTextMode) {
-        requestBody['message'] = message!;
+        requestBody['message'] = message;
       } else {
         requestBody['image_base64'] = imageBase64!;
       }

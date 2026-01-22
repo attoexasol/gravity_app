@@ -7,7 +7,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
-import '../../../data/model/post.dart';
 import '../../../data/model/comment.dart';
 import '../../../data/model/reply.dart';
 import '../controllers/community_controller.dart';

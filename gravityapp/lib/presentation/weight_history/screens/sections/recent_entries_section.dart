@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 import '../../controllers/weight_history_controller.dart';
 import '../../../../data/model/weight_history.dart';
 import '../../../../app/theme/app_text_styles.dart';

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:gravityapp/data/model/onboarding_slide_model.dart';
 
 import '../../../../app/theme/app_text_styles.dart';
-import '../../controllers/onboarding_controller.dart';
 
 class OnboardingSlide extends StatefulWidget {
   final OnboardingSlideModel slide;

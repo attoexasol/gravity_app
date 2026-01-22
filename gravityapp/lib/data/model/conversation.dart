@@ -1,5 +1,4 @@
 import 'package:gravityapp/data/model/message.dart';
-import 'package:gravityapp/presentation/messages/controllers/messages_controllers.dart';
 
 enum ConversationRole {
   customer,

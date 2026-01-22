@@ -6,6 +6,8 @@ import '../../data/model/api_response.dart';
 import '../../data/model/user_model.dart';
 import 'preferences_service.dart';
 import 'token_manager.dart';
+import 'session_manager.dart';
+import 'device_manager.dart';
 
 class GoogleAuthService {
   final AuthRepository _authRepository = AuthRepository();
@@ -85,6 +87,22 @@ firebaseToken: firebaseIdToken ?? '',
         
         // Also save to PreferencesService for backward compatibility
         await PreferencesService.saveAuthToken(accessToken);
+
+        // Initialize session for single-device authentication
+        final deviceManager = DeviceManager();
+        final sessionManager = SessionManager();
+        final deviceId = await deviceManager.getDeviceId();
+        final userIdString = userId?.toString() ?? 
+                           (response.data?.id.toString() ?? '');
+        
+        if (userIdString.isNotEmpty) {
+          await sessionManager.initializeSession(
+            userId: userIdString,
+            deviceId: deviceId,
+          );
+          debugPrint('✅ Session initialized for Google Sign-In device: $deviceId');
+        }
+
         await PreferencesService.saveUserEmail(user.email ?? '');
         await PreferencesService.saveUserName(user.displayName ?? '');
         

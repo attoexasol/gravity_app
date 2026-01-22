@@ -6,12 +6,15 @@ import 'package:http_parser/http_parser.dart';
 import '../../core/services/api_service.dart';
 import '../../core/services/preferences_service.dart';
 import '../../core/services/token_manager.dart';
+import '../../core/services/device_manager.dart';
+import '../../core/services/session_manager.dart';
 import '../model/api_response.dart';
 import '../model/user_model.dart';
 
 /// Auth Repository - Handles authentication API calls
 class AuthRepository {
   final ApiService _apiService = ApiService();
+  final DeviceManager _deviceManager = DeviceManager();
 
   /// Create new user account
   Future<ApiResponse<UserModel>> createUser({
@@ -63,14 +66,22 @@ class AuthRepository {
   /// Login user
   /// Returns a map with 'response' (ApiResponse), 'access_token' (String?), 'refresh_token' (String?), 
   /// 'token' (String? - for backward compatibility), 'user_id' (int?), 'user_name' (String?), and 'email' (String?)
+  /// Includes device information for single-device authentication
   Future<Map<String, dynamic>> login({
     required String email,
     required String password,
   }) async {
     try {
+      // Get device information
+      final deviceInfo = await _deviceManager.getDeviceInfo();
+      
       final response = await _apiService.postWithoutAuth(
         '/user/login',
-        body: {'email': email, 'password': password},
+        body: {
+          'email': email,
+          'password': password,
+          ...deviceInfo, // Include device_id, platform, app_version
+        },
       );
 
       // Extract tokens - support both new format (access_token/refresh_token) and legacy (token)
@@ -272,6 +283,10 @@ class AuthRepository {
       // Clear tokens locally
       await tokenManager.clearTokens();
 
+      // Clear session
+      final sessionManager = SessionManager();
+      await sessionManager.clearSession();
+
       return ApiResponse<void>(
         status: true,
         message: 'Logged out successfully',
@@ -298,16 +313,21 @@ class AuthRepository {
   /// Sends Google ID token to backend for authentication
   /// Google Sign-In via Firebase
   /// Sends Firebase ID token to backend
+  /// Includes device information for single-device authentication
   Future<Map<String, dynamic>> googleSignIn({
     required String firebaseToken,
     required String role,
   }) async {
     try {
+      // Get device information
+      final deviceInfo = await _deviceManager.getDeviceInfo();
+      
       final response = await _apiService.postWithoutAuth(
         '/auth/google', // ✅ backend endpoint
         body: {
           'firebase_token': firebaseToken,
           'role': role,
+          ...deviceInfo, // Include device_id, platform, app_version
         },
       );
 

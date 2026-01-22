@@ -4,7 +4,6 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:get/get.dart';
-import 'package:flutter/scheduler.dart';
 import '../../messages/controllers/messages_controllers.dart';
 
 import '../../../core/services/health_sync_service.dart';

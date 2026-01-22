@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:flutter/foundation.dart';
 import '../../../../data/model/weight_history.dart';
 import '../../../../data/repositories/user_gravity_repository.dart';
-import '../../../../data/model/api_response.dart';
 import '../../../../core/services/preferences_service.dart';
 import '../../../../app/routes/app_routes.dart';
 
