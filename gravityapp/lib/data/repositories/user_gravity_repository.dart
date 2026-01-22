@@ -375,5 +375,48 @@ class UserGravityRepository {
       );
     }
   }
+
+  /// Get monthly gravity weight data
+  /// API: POST https://gravity.attoexasolutions.com/api/monthly/gravity_weight
+  Future<ApiResponse<Map<String, dynamic>>> getMonthlyGravityWeight({
+    required String apiToken,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'api_token': apiToken,
+      };
+
+      debugPrint('📤 GET Monthly Gravity Weight Request');
+
+      final response = await _apiService.post(
+        '/monthly/gravity_weight',
+        body: body,
+      );
+
+      debugPrint('📥 GET Monthly Gravity Weight Response Status: ${response['status']}');
+
+      return ApiResponse<Map<String, dynamic>>(
+        status: response['status'] ?? false,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is Map<String, dynamic>
+            ? response['data'] as Map<String, dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ GetMonthlyGravityWeight API Error: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ GetMonthlyGravityWeight Unknown Error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
 }
 

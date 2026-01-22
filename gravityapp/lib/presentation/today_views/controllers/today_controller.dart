@@ -24,7 +24,7 @@ class TodayController extends GetxController {
   late final TextEditingController reflectionController;
   late final TextEditingController weightController;
   
-  // Weigh-in modal data
+  // Weight-in modal data
   final Rx<DateTime> selectedDate = DateTime.now().obs;
 
   // Modals
@@ -489,7 +489,7 @@ class TodayController extends GetxController {
     return PillarStatus.missed; // Red - didn't stay within
   }
   
-  // Get weigh-in status
+  // Get weight-in status
   PillarStatus get weighInStatus {
     if (isLoading.value) {
       return PillarStatus.borderline;
@@ -571,7 +571,7 @@ class TodayController extends GetxController {
     return 'Not within';
   }
   
-  // Get weigh-in display text
+  // Get weight-in display text
   String get weighInDisplayText {
     if (isLoading.value) {
       return 'Loading...';
@@ -616,7 +616,7 @@ class TodayController extends GetxController {
       icon: Icons.favorite,
     ),
     Pillar(
-      name: 'Weigh-in',
+      name: 'Weight-in',
       status: weighInStatus,
       detail: weighInDisplayText,
       icon: Icons.monitor_weight,

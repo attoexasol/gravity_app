@@ -202,7 +202,7 @@ class WeightJourneySection extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12.r),
                     ),
                     child: Text(
-                      'Log weigh-in',
+                      'Log weight-in',
                       style: ResponsiveTextStyles.textBase.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w500,

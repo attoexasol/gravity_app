@@ -7,6 +7,7 @@ import 'sections/progress_chart_section.dart';
 import 'sections/estimated_target_date_section.dart';
 import 'sections/recent_entries_section.dart';
 import 'sections/journey_stats_section.dart';
+import '../../../../app/theme/app_text_styles.dart';
 
 class WeightHistoryScreen extends GetView<WeightHistoryController> {
   const WeightHistoryScreen({super.key});
@@ -27,7 +28,10 @@ class WeightHistoryScreen extends GetView<WeightHistoryController> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    SizedBox(height: 24.h),
+                    SizedBox(height: 16.h),
+                    // Disclaimer Banner
+                    _buildDisclaimerBanner(),
+                    SizedBox(height: 16.h),
                     // Progress Chart
                     ProgressChartSection(controller: controller),
                     SizedBox(height: 16.h),
@@ -46,6 +50,40 @@ class WeightHistoryScreen extends GetView<WeightHistoryController> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildDisclaimerBanner() {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16.w),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF9E6), // Light yellow background
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(
+          color: const Color(0xFFD4AF37).withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.info_outline,
+            size: 20.sp,
+            color: const Color(0xFFD4AF37),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Text(
+              'This is an estimate — progress isn\'t always linear',
+              style: ResponsiveTextStyles.textSm.copyWith(
+                color: const Color(0xFF0A2342).withOpacity(0.7),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

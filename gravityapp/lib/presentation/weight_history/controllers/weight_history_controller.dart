@@ -2,47 +2,45 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/foundation.dart';
 import '../../../../data/model/weight_history.dart';
+import '../../../../data/repositories/user_gravity_repository.dart';
+import '../../../../data/model/api_response.dart';
+import '../../../../core/services/preferences_service.dart';
 import '../../../../app/routes/app_routes.dart';
 
 class WeightHistoryController extends GetxController {
-  // Weight data
-  final double goalWeight = 71.5;
-  final double currentWeight = 79.0;
-  final double startingWeight = 85.0;
+  // Repository
+  final UserGravityRepository _gravityRepository = UserGravityRepository();
+
+  // State management
+  final RxList<WeightEntry> _weightHistory = <WeightEntry>[].obs;
+  final RxBool isLoading = false.obs;
+  final RxBool hasError = false.obs;
+  final RxString errorMessage = ''.obs;
+  
+  // Cache management
+  Map<String, dynamic>? _cachedData;
+  DateTime? _lastFetchTime;
+  static const Duration _cacheDuration = Duration(minutes: 5); // Cache for 5 minutes
+
+  // Weight data (calculated from history)
+  double get goalWeight => 71.5; // Can be loaded from goals/settings
+  double get currentWeight {
+    if (_weightHistory.isEmpty) return 79.0; // Fallback
+    return _weightHistory.first.weight; // Latest entry
+  }
+  double get startingWeight {
+    if (_weightHistory.isEmpty) return 85.0; // Fallback
+    return _weightHistory.last.weight; // Oldest entry
+  }
   final double weeklyAverage = 1.6; // kg per week
 
-  // Weight history entries
-  List<WeightEntry> get weightHistory => [
-    WeightEntry(
-      date: '2025-04-16',
-      weight: 85.0,
-      displayDate: 'Apr 16',
-    ),
-    WeightEntry(
-      date: '2025-04-23',
-      weight: 83.5,
-      displayDate: 'Apr 23',
-    ),
-    WeightEntry(
-      date: '2025-04-30',
-      weight: 82.2,
-      displayDate: 'Apr 30',
-    ),
-    WeightEntry(
-      date: '2025-05-07',
-      weight: 80.8,
-      displayDate: 'May 7',
-    ),
-    WeightEntry(
-      date: '2025-05-14',
-      weight: 79.0,
-      displayDate: 'May 14',
-    ),
-  ];
+  // Weight history entries (sorted by date descending - latest first)
+  List<WeightEntry> get weightHistory => _weightHistory.toList();
 
-  // Get reversed entries (latest first)
-  List<WeightEntry> get recentEntries => weightHistory.reversed.toList();
+  // Get recent entries (already sorted descending)
+  List<WeightEntry> get recentEntries => _weightHistory.toList();
 
   // Calculated values
   double get totalLoss => startingWeight - currentWeight;
@@ -58,14 +56,135 @@ class WeightHistoryController extends GetxController {
 
   // Chart data points
   List<FlSpot> get chartSpots {
-    return weightHistory.asMap().entries.map((entry) {
+    if (_weightHistory.isEmpty) return [];
+    // Sort by date ascending for chart (oldest to newest)
+    final sortedHistory = List<WeightEntry>.from(_weightHistory);
+    sortedHistory.sort((a, b) {
+      final dateA = DateTime.parse(a.date);
+      final dateB = DateTime.parse(b.date);
+      return dateA.compareTo(dateB); // Ascending order for chart
+    });
+    return sortedHistory.asMap().entries.map((entry) {
       return FlSpot(entry.key.toDouble(), entry.value.weight);
     }).toList();
   }
 
   // Chart Y-axis domain
-  double get minY => goalWeight - 2;
-  double get maxY => startingWeight + 2;
+  double get minY {
+    if (_weightHistory.isEmpty) return goalWeight - 2;
+    final weights = _weightHistory.map((e) => e.weight).toList();
+    final minWeight = weights.reduce((a, b) => a < b ? a : b);
+    return minWeight - 2;
+  }
+  
+  double get maxY {
+    if (_weightHistory.isEmpty) return startingWeight + 2;
+    final weights = _weightHistory.map((e) => e.weight).toList();
+    final maxWeight = weights.reduce((a, b) => a > b ? a : b);
+    return maxWeight + 2;
+  }
+
+  @override
+  void onInit() {
+    super.onInit();
+    // Fetch weight history when controller initializes
+    fetchWeightHistory();
+  }
+
+  /// Fetch monthly weight data from API
+  Future<void> fetchWeightHistory({bool forceRefresh = false}) async {
+    // Check cache first
+    if (!forceRefresh && _cachedData != null && _lastFetchTime != null) {
+      final timeSinceFetch = DateTime.now().difference(_lastFetchTime!);
+      if (timeSinceFetch < _cacheDuration) {
+        debugPrint('📦 Using cached weight history data');
+        _parseAndSetData(_cachedData!);
+        return;
+      }
+    }
+
+    try {
+      isLoading.value = true;
+      hasError.value = false;
+      errorMessage.value = '';
+
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        hasError.value = true;
+        errorMessage.value = 'No authentication token';
+        isLoading.value = false;
+        return;
+      }
+
+      debugPrint('📤 Fetching monthly weight history...');
+
+      final response = await _gravityRepository.getMonthlyGravityWeight(
+        apiToken: apiToken,
+      );
+
+      if (response.isSuccess && response.data != null) {
+        // Cache the response
+        _cachedData = response.data;
+        _lastFetchTime = DateTime.now();
+        
+        // Parse and set data
+        _parseAndSetData(response.data!);
+        
+        hasError.value = false;
+        errorMessage.value = '';
+        debugPrint('✅ Weight history loaded successfully: ${_weightHistory.length} entries');
+      } else {
+        hasError.value = true;
+        errorMessage.value = response.message.isNotEmpty 
+            ? response.message 
+            : 'Failed to load weight history';
+        debugPrint('⚠️ Failed to load weight history: ${response.message}');
+      }
+    } catch (e) {
+      hasError.value = true;
+      errorMessage.value = 'An unexpected error occurred. Please try again.';
+      debugPrint('❌ Error fetching weight history: $e');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// Parse API response data and convert to WeightEntry list
+  void _parseAndSetData(Map<String, dynamic> data) {
+    try {
+      final List<WeightEntry> entries = [];
+      
+      // API returns: { "YYYY-MM-DD": weightValue, ... }
+      data.forEach((dateStr, weightValue) {
+        try {
+          // Validate date format
+          final date = DateTime.parse(dateStr);
+          final entry = WeightEntry.fromApiData(dateStr, weightValue);
+          entries.add(entry);
+        } catch (e) {
+          debugPrint('⚠️ Skipping invalid entry: $dateStr = $weightValue (Error: $e)');
+        }
+      });
+
+      // Sort by date descending (latest first)
+      entries.sort((a, b) {
+        final dateA = DateTime.parse(a.date);
+        final dateB = DateTime.parse(b.date);
+        return dateB.compareTo(dateA); // Descending order
+      });
+
+      _weightHistory.value = entries;
+    } catch (e) {
+      debugPrint('❌ Error parsing weight history data: $e');
+      hasError.value = true;
+      errorMessage.value = 'Failed to parse weight history data';
+    }
+  }
+
+  /// Retry fetching data
+  Future<void> retry() async {
+    await fetchWeightHistory(forceRefresh: true);
+  }
 
   void onBack() {
     try {

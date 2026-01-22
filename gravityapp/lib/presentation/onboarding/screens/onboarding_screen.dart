@@ -15,6 +15,8 @@ class OnboardingScreen extends GetView<OnboardingController> {
     final isSmallScreen = size.width < 600;
     final isMediumScreen = size.width >= 600 && size.width < 900;
     final isLargeScreen = size.width >= 900;
+    final screenHeight = size.height;
+    final isShortScreen = screenHeight < 700; // Detect short screens
 
     return Scaffold(
       body: Container(
@@ -29,64 +31,89 @@ class OnboardingScreen extends GetView<OnboardingController> {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              // Main Content - Slides
-              Expanded(
-                child: PageView.builder(
-                  controller: controller.pageController,
-                  onPageChanged: controller.onPageChanged,
-                  itemCount: controller.slides.length,
-                  itemBuilder: (context, index) {
-                    return OnboardingSlide(
-                      slide: controller.slides[index],
-                      index: index,
-                      isSmallScreen: isSmallScreen,
-                      isMediumScreen: isMediumScreen,
-                      isLargeScreen: isLargeScreen,
-                    );
-                  },
-                ),
-              ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Column(
+                children: [
+                  // Main Content - Slides (flexible)
+                  Flexible(
+                    flex: isShortScreen ? 2 : 3,
+                    child: PageView.builder(
+                      controller: controller.pageController,
+                      onPageChanged: controller.onPageChanged,
+                      itemCount: controller.slides.length,
+                      itemBuilder: (context, index) {
+                        return OnboardingSlide(
+                          slide: controller.slides[index],
+                          index: index,
+                          isSmallScreen: isSmallScreen,
+                          isMediumScreen: isMediumScreen,
+                          isLargeScreen: isLargeScreen,
+                          isShortScreen: isShortScreen,
+                        );
+                      },
+                    ),
+                  ),
 
-              // Bottom Section
-              Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isLargeScreen ? 64 : (isMediumScreen ? 48 : 24),
-                  vertical: isLargeScreen ? 48 : (isMediumScreen ? 40 : 32),
-                ),
-                child: Column(
-                  children: [
-                    // Progress Dots
-                    Obx(() => Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(
-                        controller.slides.length,
-                            (index) => _buildProgressDot(index),
-                      ),
-                    )),
-                    SizedBox(height: isSmallScreen ? 24 : 32),
+                  // Bottom Section (scrollable to prevent overflow)
+                  Flexible(
+                    flex: isShortScreen ? 1 : 2,
+                    child: SingleChildScrollView(
+                      physics: const ClampingScrollPhysics(),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight * 0.3,
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isLargeScreen ? 64 : (isMediumScreen ? 48 : 24),
+                            vertical: isShortScreen 
+                                ? (isSmallScreen ? 16 : 20)
+                                : (isLargeScreen ? 48 : (isMediumScreen ? 40 : 32)),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Progress Dots
+                              Obx(() => Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(
+                                  controller.slides.length,
+                                      (index) => _buildProgressDot(index),
+                                ),
+                              )),
+                              SizedBox(height: isShortScreen 
+                                  ? (isSmallScreen ? 12 : 16)
+                                  : (isSmallScreen ? 24 : 32)),
 
-                    // Get Started Button
-                    Obx(() => _buildButton()),
+                              // Get Started Button
+                              Obx(() => _buildButton(isSmallScreen, isShortScreen)),
 
-                    const SizedBox(height: 16),
+                              SizedBox(height: isShortScreen ? 12 : 16),
 
-                    // Privacy Notice
-                    Text(
-                      'No data shared without your consent.',
-                      textAlign: TextAlign.center,
-                      style: ResponsiveTextStyles.textSm.copyWith(
-                        color: Colors.white.withOpacity(0.6),
+                              // Privacy Notice
+                              Text(
+                                'No data shared without your consent.',
+                                textAlign: TextAlign.center,
+                                style: ResponsiveTextStyles.textSm.copyWith(
+                                  color: Colors.white.withOpacity(0.6),
+                                  fontSize: isShortScreen ? 12 : null,
+                                ),
+                              ),
+
+                              // Privacy & Data Control Section (only on last slide)
+                              Obx(() => controller.isLastSlide 
+                                  ? _buildPrivacySection(isSmallScreen, isShortScreen) 
+                                  : const SizedBox.shrink()),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-
-                    // Privacy & Data Control Section (only on last slide)
-                    Obx(() => controller.isLastSlide ? _buildPrivacySection() : const SizedBox.shrink()),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -108,7 +135,12 @@ class OnboardingScreen extends GetView<OnboardingController> {
     );
   }
 
-  Widget _buildButton() {
+  Widget _buildButton(bool isSmallScreen, bool isShortScreen) {
+    final buttonPadding = isShortScreen 
+        ? (isSmallScreen ? 12.0 : 14.0)
+        : 16.0;
+    final fontSize = isShortScreen && isSmallScreen ? 14.0 : null;
+    
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 448), // max-w-md
       child: SizedBox(
@@ -121,7 +153,7 @@ class OnboardingScreen extends GetView<OnboardingController> {
             onTap: controller.handleNext,
             borderRadius: BorderRadius.circular(24),
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: EdgeInsets.symmetric(vertical: buttonPadding),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -130,13 +162,14 @@ class OnboardingScreen extends GetView<OnboardingController> {
                     style: ResponsiveTextStyles.textBase.copyWith(
                       fontWeight: FontWeight.w500,
                       color: const Color(0xFF0A2342),
+                      fontSize: fontSize,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(
+                  Icon(
                     Icons.chevron_right,
-                    color: Color(0xFF0A2342),
-                    size: 20,
+                    color: const Color(0xFF0A2342),
+                    size: fontSize != null ? 18 : 20,
                   ),
                 ],
               ),
@@ -147,10 +180,15 @@ class OnboardingScreen extends GetView<OnboardingController> {
     );
   }
 
-  Widget _buildPrivacySection() {
+  Widget _buildPrivacySection(bool isSmallScreen, bool isShortScreen) {
+    final topPadding = isShortScreen ? 16.0 : 24.0;
+    final spacing = isShortScreen ? 8.0 : 12.0;
+    final fontSize = isShortScreen && isSmallScreen ? 12.0 : null;
+    
     return Padding(
-      padding: const EdgeInsets.only(top: 24),
+      padding: EdgeInsets.only(top: topPadding),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           // Section Title
           Text(
@@ -159,23 +197,25 @@ class OnboardingScreen extends GetView<OnboardingController> {
             style: ResponsiveTextStyles.textBase.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w600,
+              fontSize: fontSize != null ? fontSize + 2 : null,
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: spacing),
           
           // Description
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 8 : 16),
             child: Text(
               'Your privacy matters. We ensure your data is encrypted, stored securely, and you have full control over your personal wellness information.',
               textAlign: TextAlign.center,
               style: ResponsiveTextStyles.textSm.copyWith(
                 color: Colors.white.withOpacity(0.8),
-                height: 1.4,
+                height: isShortScreen ? 1.3 : 1.4,
+                fontSize: fontSize,
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: spacing),
           
           // Learn More Link
           GestureDetector(
@@ -189,13 +229,14 @@ class OnboardingScreen extends GetView<OnboardingController> {
                     color: const Color(0xFFD4AF37),
                     fontWeight: FontWeight.w500,
                     decoration: TextDecoration.underline,
+                    fontSize: fontSize,
                   ),
                 ),
                 const SizedBox(width: 4),
                 Icon(
                   Icons.arrow_forward,
                   color: const Color(0xFFD4AF37),
-                  size: 16,
+                  size: fontSize != null ? 14 : 16,
                 ),
               ],
             ),

@@ -10,6 +10,7 @@ class OnboardingSlide extends StatefulWidget {
   final bool isSmallScreen;
   final bool isMediumScreen;
   final bool isLargeScreen;
+  final bool isShortScreen;
 
   const OnboardingSlide({super.key, 
     required this.slide,
@@ -17,6 +18,7 @@ class OnboardingSlide extends StatefulWidget {
     required this.isSmallScreen,
     required this.isMediumScreen,
     required this.isLargeScreen,
+    this.isShortScreen = false,
   });
 
   @override
@@ -44,19 +46,35 @@ class OnboardingSlideState extends State<OnboardingSlide>
 
   @override
   Widget build(BuildContext context) {
-    final illustrationSize = widget.isLargeScreen
-        ? 320.0
-        : (widget.isMediumScreen ? 256.0 : (widget.isSmallScreen ? 192.0 : 224.0));
+    // Adjust illustration size based on screen height
+    double illustrationSize;
+    if (widget.isShortScreen) {
+      illustrationSize = widget.isSmallScreen ? 140.0 : (widget.isMediumScreen ? 180.0 : 200.0);
+    } else {
+      illustrationSize = widget.isLargeScreen
+          ? 320.0
+          : (widget.isMediumScreen ? 256.0 : (widget.isSmallScreen ? 192.0 : 224.0));
+    }
     final innerCircleSize = illustrationSize * 0.75;
     final coreCircleSize = illustrationSize * 0.5;
 
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: widget.isLargeScreen ? 64 : (widget.isMediumScreen ? 48 : 24),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight,
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.isLargeScreen ? 64 : (widget.isMediumScreen ? 48 : 24),
+                vertical: widget.isShortScreen ? 8 : 16,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
           // Illustration Placeholder with Pulse Animation
           AnimatedBuilder(
             animation: _pulseController,
@@ -108,70 +126,89 @@ class OnboardingSlideState extends State<OnboardingSlide>
             ),
           ),
 
-          SizedBox(height: widget.isLargeScreen ? 48 : (widget.isMediumScreen ? 40 : 32)),
+                  SizedBox(height: widget.isShortScreen 
+                      ? (widget.isSmallScreen ? 16 : 20)
+                      : (widget.isLargeScreen ? 48 : (widget.isMediumScreen ? 40 : 32))),
 
-          // Title
-          Text(
-            widget.slide.title,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: widget.isLargeScreen
-                  ? 48
-                  : (widget.isMediumScreen ? 40 : (widget.isSmallScreen ? 30 : 36)),
-              fontWeight: FontWeight.bold,
-              height: 1.2,
-            ),
-          ),
+                  // Title
+                  Text(
+                    widget.slide.title,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: widget.isShortScreen
+                          ? (widget.isSmallScreen ? 24 : 28)
+                          : (widget.isLargeScreen
+                              ? 48
+                              : (widget.isMediumScreen ? 40 : (widget.isSmallScreen ? 30 : 36))),
+                      fontWeight: FontWeight.bold,
+                      height: widget.isShortScreen ? 1.1 : 1.2,
+                    ),
+                  ),
 
-          // Tagline - Only on first slide
-          if (widget.index == 0 && widget.slide.tagline != null) ...[
-            SizedBox(height: widget.isSmallScreen ? 16 : 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                widget.slide.tagline!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: widget.isSmallScreen ? 18 : 20,
-                  height: 1.4,
-                ),
+                  // Tagline - Only on first slide
+                  if (widget.index == 0 && widget.slide.tagline != null) ...[
+                    SizedBox(height: widget.isShortScreen 
+                        ? (widget.isSmallScreen ? 8 : 12)
+                        : (widget.isSmallScreen ? 16 : 24)),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: widget.isSmallScreen ? 8 : 16),
+                      child: Text(
+                        widget.slide.tagline!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: widget.isShortScreen 
+                              ? (widget.isSmallScreen ? 14 : 16)
+                              : (widget.isSmallScreen ? 18 : 20),
+                          height: widget.isShortScreen ? 1.2 : 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  SizedBox(height: widget.isShortScreen 
+                      ? (widget.isSmallScreen ? 8 : 12)
+                      : (widget.isSmallScreen ? 16 : 24)),
+
+                  // Subtitle
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: widget.isSmallScreen ? 8 : 16),
+                    child: Text(
+                      widget.slide.subtitle,
+                      textAlign: TextAlign.center,
+                      style: ResponsiveTextStyles.textBase.copyWith(
+                        color: const Color(0xFFD4AF37), // Gold color
+                        fontSize: widget.isShortScreen 
+                            ? (widget.isSmallScreen ? 14 : 16)
+                            : (widget.isSmallScreen ? 16 : 18),
+                      ),
+                    ),
+                  ),
+
+                  SizedBox(height: widget.isShortScreen ? 12 : 16),
+
+                  // Description
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: widget.isSmallScreen ? 16 : 24),
+                    child: Text(
+                      widget.slide.description,
+                      textAlign: TextAlign.center,
+                      style: ResponsiveTextStyles.textBase.copyWith(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: widget.isShortScreen 
+                            ? (widget.isSmallScreen ? 12 : 14)
+                            : (widget.isSmallScreen ? 14 : 16),
+                        height: widget.isShortScreen ? 1.3 : 1.4,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-
-          SizedBox(height: widget.isSmallScreen ? 16 : 24),
-
-          // Subtitle
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              widget.slide.subtitle,
-              textAlign: TextAlign.center,
-              style: ResponsiveTextStyles.textBase.copyWith(
-                color: const Color(0xFFD4AF37), // Gold color
-                fontSize: widget.isSmallScreen ? 16 : 18,
-              ),
-            ),
           ),
-
-          const SizedBox(height: 16),
-
-          // Description
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(
-              widget.slide.description,
-              textAlign: TextAlign.center,
-              style: ResponsiveTextStyles.textBase.copyWith(
-                color: Colors.white.withOpacity(0.8),
-                fontSize: widget.isSmallScreen ? 14 : 16,
-              ),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
