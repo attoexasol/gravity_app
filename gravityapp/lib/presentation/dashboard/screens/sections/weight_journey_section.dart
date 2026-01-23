@@ -16,11 +16,13 @@ class WeightLossJourneySection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(
       () {
-        // Default starting weight (can be loaded from storage in the future)
-        const double startingWeight = 85.0;
+        // Get starting weight from controller (loaded from storage, set from Settings > Current Weight)
+        final double startingWeight = controller.startingWeight.value > 0
+            ? controller.startingWeight.value
+            : 85.0; // Fallback default
         final double currentWeight = controller.weight.value > 0
             ? controller.weight.value
-            : startingWeight;
+            : startingWeight; // Fallback to starting weight if current not available
         final double goalWeight = controller.weightGoal.value;
 
         // Calculate metrics

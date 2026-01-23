@@ -181,6 +181,26 @@ class PreferencesService {
     debugPrint('✅ All storage cleared for account deletion (including first-time setup status)');
   }
 
+  // Weight storage methods
+  static const String _startingWeightKey = 'starting_weight';
+
+  /// Save starting weight (from Settings > Wellness Goals > Current Weight)
+  static Future<void> saveStartingWeight(double weight) async {
+    await _storage.write(_startingWeightKey, weight);
+    if (kDebugMode) {
+      debugPrint('✅ Starting weight saved: $weight kg');
+    }
+  }
+
+  /// Get starting weight
+  static double? getStartingWeight() {
+    final weight = _storage.read(_startingWeightKey);
+    if (weight is num) {
+      return weight.toDouble();
+    }
+    return null;
+  }
+
   // Get storage instance for direct access
   static GetStorage getStorage() {
     return _storage;

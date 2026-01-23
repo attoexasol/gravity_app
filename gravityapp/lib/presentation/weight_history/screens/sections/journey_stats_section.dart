@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:get/get.dart';
 import '../../controllers/weight_history_controller.dart';
 import '../../../../app/theme/app_text_styles.dart';
 
@@ -13,7 +14,7 @@ class JourneyStatsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Obx(() => Container(
       margin: EdgeInsets.symmetric(horizontal: 16.w),
       padding: EdgeInsets.all(20.r),
       decoration: BoxDecoration(
@@ -65,7 +66,9 @@ class JourneyStatsSection extends StatelessWidget {
                       ),
                       SizedBox(height: 4.h),
                       Text(
-                        '${controller.totalLoss.toStringAsFixed(1)} kg',
+                        controller.totalLoss > 0
+                            ? '${controller.totalLoss.toStringAsFixed(1)} kg'
+                            : '0.0 kg',
                         style: ResponsiveTextStyles.h2.copyWith(
                           color: const Color(0xFF00B8A9),
                           fontWeight: FontWeight.bold,
@@ -101,7 +104,9 @@ class JourneyStatsSection extends StatelessWidget {
                       ),
                       SizedBox(height: 4.h),
                       Text(
-                        '${controller.remaining.toStringAsFixed(1)} kg',
+                        controller.remaining > 0
+                            ? '${controller.remaining.toStringAsFixed(1)} kg'
+                            : '0.0 kg',
                         style: ResponsiveTextStyles.h2.copyWith(
                           color: const Color(0xFFD4AF37),
                           fontWeight: FontWeight.bold,
@@ -134,7 +139,9 @@ class JourneyStatsSection extends StatelessWidget {
                       ),
                       SizedBox(height: 4.h),
                       Text(
-                        '${controller.weeklyAverage} kg',
+                        controller.weeklyAverage > 0
+                            ? '${controller.weeklyAverage.toStringAsFixed(2)} kg'
+                            : '0.0 kg',
                         style: ResponsiveTextStyles.h2.copyWith(
                           color: const Color(0xFF0A2342),
                           fontWeight: FontWeight.bold,
@@ -177,7 +184,7 @@ class JourneyStatsSection extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 }
 

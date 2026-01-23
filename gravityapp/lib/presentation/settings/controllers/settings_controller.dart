@@ -22,6 +22,8 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../core/services/api_service.dart';
 import '../../aicoach/controllers/ai_coach_controller.dart';
 import '../../dashboard/controllers/dashboard_controller.dart';
+import '../../today_views/controllers/today_controller.dart';
+import '../../weight_history/controllers/weight_history_controller.dart';
 
 class SettingsController extends GetxController {
   // Services
@@ -1518,6 +1520,27 @@ Future<void> saveProfileImage() async {
     try {
       isLoadingGoals.value = true;
 
+      // Validate and save current weight as starting weight
+      final currentWeightStr = goals['currentWeight'] ?? '';
+      final currentWeight = double.tryParse(currentWeightStr);
+      
+      if (currentWeight != null && currentWeight > 0 && currentWeight <= 300) {
+        // Save current weight as starting weight (always update when user saves)
+        await PreferencesService.saveStartingWeight(currentWeight);
+        debugPrint('💾 Starting weight updated from current weight: $currentWeight kg');
+      } else if (currentWeightStr.isNotEmpty) {
+        // Invalid weight - show error and return
+        isLoadingGoals.value = false;
+        _safeSnackbar(
+          title: 'Invalid Weight',
+          message: 'Please enter a valid weight between 0 and 300 kg',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Get.theme.colorScheme.error,
+          colorText: Get.theme.colorScheme.onError,
+        );
+        return;
+      }
+
       // Save to local storage first
       final goalsMap = Map<String, String>.from(goals);
       PreferencesService.getStorage().write('userGoals', jsonEncode(goalsMap));
@@ -1596,11 +1619,11 @@ Future<void> saveProfileImage() async {
     }
   }
 
-  /// Notify DashboardController that goals have changed
+  /// Notify DashboardController, TodayController, and WeightHistoryController that goals have changed
   /// This provides real-time updates without polling
   void _notifyDashboardGoalsChanged() {
     try {
-      // Check if DashboardController is registered and notify it
+      // Notify DashboardController
       if (Get.isRegistered<DashboardController>()) {
         final dashboardController = Get.find<DashboardController>();
         dashboardController.notifyGoalsChanged();
@@ -1608,9 +1631,27 @@ Future<void> saveProfileImage() async {
       } else {
         debugPrint('ℹ️ DashboardController not registered, will update on next navigation');
       }
+      
+      // Notify TodayController
+      if (Get.isRegistered<TodayController>()) {
+        final todayController = Get.find<TodayController>();
+        todayController.notifyGoalsChanged();
+        debugPrint('✅ Notified TodayController of goals change');
+      } else {
+        debugPrint('ℹ️ TodayController not registered, will update on next navigation');
+      }
+      
+      // Notify WeightHistoryController
+      if (Get.isRegistered<WeightHistoryController>()) {
+        final weightHistoryController = Get.find<WeightHistoryController>();
+        weightHistoryController.notifyGoalsChanged();
+        debugPrint('✅ Notified WeightHistoryController of goals change');
+      } else {
+        debugPrint('ℹ️ WeightHistoryController not registered, will update on next navigation');
+      }
     } catch (e) {
-      debugPrint('⚠️ Error notifying DashboardController: $e');
-      // Non-critical error - goals are saved, dashboard will update when navigated to
+      debugPrint('⚠️ Error notifying controllers: $e');
+      // Non-critical error - goals are saved, controllers will update when navigated to
     }
   }
 

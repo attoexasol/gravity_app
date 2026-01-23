@@ -46,7 +46,7 @@ class LogWeighInModal extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            'Log Weigh-In',
+                            'Log Weight-In',
                             style: ResponsiveTextStyles.h3.copyWith(
                               color: const Color(0xFF0A2342),
                               fontWeight: FontWeight.w600,

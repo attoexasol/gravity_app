@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
@@ -13,7 +14,7 @@ import '../../../../core/services/preferences_service.dart';
 
 class TodayController extends GetxController {
   // Weight data
-  final RxDouble startingWeight = 85.0.obs;
+  final RxDouble startingWeight = 85.0.obs; // Loaded from storage (Settings > Current Weight)
   final RxDouble currentWeight = 79.0.obs;
   final RxDouble goalWeight = 71.5.obs;
 
@@ -68,6 +69,9 @@ class TodayController extends GetxController {
       reflection.value = reflectionController.text;
     });
 
+    // Load starting weight from storage (set from Settings > Current Weight)
+    _loadStartingWeight();
+
     // Fetch date-wise gravity data on screen load
     fetchDateWiseGravity();
     
@@ -112,9 +116,52 @@ class TodayController extends GetxController {
     return dateWiseData.value?.weight ?? currentWeight.value;
   }
   
-  // Get starting weight from API or fallback
+  // Get starting weight from API or storage or fallback
   double get startingWeightFromApi {
-    return dateWiseData.value?.startingWeight ?? startingWeight.value;
+    // Priority: API data > Storage (Settings) > Fallback
+    if (dateWiseData.value?.startingWeight != null) {
+      return dateWiseData.value!.startingWeight!;
+    }
+    // Use storage value (from Settings > Current Weight)
+    if (startingWeight.value > 0) {
+      return startingWeight.value;
+    }
+    // Fallback
+    return 85.0;
+  }
+  
+  /// Load starting weight from storage (set from Settings > Current Weight)
+  void _loadStartingWeight() {
+    final savedStartingWeight = PreferencesService.getStartingWeight();
+    if (savedStartingWeight != null && savedStartingWeight > 0) {
+      startingWeight.value = savedStartingWeight;
+      debugPrint('📊 Today: Starting weight loaded from storage: $savedStartingWeight kg');
+    } else {
+      // Fallback: try to get from goals
+      final savedGoals = PreferencesService.getStorage().read('userGoals');
+      if (savedGoals != null) {
+        try {
+          final goalsMap = jsonDecode(savedGoals) as Map<String, dynamic>;
+          final currentWeightStr = goalsMap['currentWeight']?.toString();
+          if (currentWeightStr != null) {
+            final currentWeight = double.tryParse(currentWeightStr);
+            if (currentWeight != null && currentWeight > 0) {
+              startingWeight.value = currentWeight;
+              debugPrint('📊 Today: Starting weight fallback to current weight from goals: $currentWeight kg');
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Error loading starting weight from goals: $e');
+        }
+      }
+    }
+  }
+  
+  /// Public method to be called when goals are updated in settings
+  /// This provides real-time updates for starting weight
+  void notifyGoalsChanged() {
+    debugPrint('🔄 Today: Goals changed notification received - reloading starting weight...');
+    _loadStartingWeight();
   }
 
   // Format date for API (YY-MM-dd format, e.g., "26-01-19" for January 19, 2026)
@@ -679,21 +726,98 @@ class TodayController extends GetxController {
     showWeighInModal.value = false;
   }
 
-  void saveWeighIn() {
+  /// Save weight-in entry using the create_manual_user_gravity API
+  /// Same API as used in Dashboard Quick Actions
+  Future<void> saveWeighIn() async {
     final weightValue = double.tryParse(weightController.text);
-    if (weightValue != null && weightValue > 0 && weightValue < 300) {
-      currentWeight.value = weightValue;
-      print('Saving weight: $weightValue, Date: ${selectedDate.value}');
-      // Here you would save to your data store
-      closeWeighInModal();
-    } else {
-      // Show error message
+    
+    // Validate weight input
+    if (weightValue == null || weightValue <= 0 || weightValue >= 300) {
       Get.snackbar(
         'Invalid Weight',
         'Please enter a valid weight between 0 and 300 kg',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red.withOpacity(0.8),
         colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+
+    try {
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        Get.snackbar(
+          'Error',
+          'Session expired. Please login again.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFE53935),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+        return;
+      }
+
+      // Format date as YYYY-MM-DD
+      final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate.value);
+      
+      debugPrint('💾 Saving weight-in:');
+      debugPrint('   - Weight: $weightValue kg');
+      debugPrint('   - Date: $dateStr');
+
+      // Call the same API as Dashboard Quick Actions
+      final response = await _gravityRepository.createManualUserGravity(
+        apiToken: apiToken,
+        date: dateStr,
+        type: 'weight',
+        value: weightValue.toString(),
+      );
+
+      if (response.isSuccess) {
+        debugPrint('✅ Weight-in saved successfully: ${response.message}');
+        
+        // Update local state immediately (optimistic update)
+        currentWeight.value = weightValue;
+        
+        // Close modal
+        closeWeighInModal();
+        
+        // Show success message
+        Get.snackbar(
+          'Success',
+          response.message.isNotEmpty 
+              ? response.message 
+              : 'Weight saved successfully',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFF00B8A9),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+        
+        // Reload date-wise gravity data to get updated weight
+        await fetchDateWiseGravity();
+      } else {
+        debugPrint('❌ Failed to save weight-in: ${response.message}');
+        Get.snackbar(
+          'Error',
+          response.message.isNotEmpty 
+              ? response.message 
+              : 'Failed to save weight',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFE53935),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Error saving weight-in: $e');
+      Get.snackbar(
+        'Error',
+        'An unexpected error occurred. Please try again.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFE53935),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
       );
     }
   }

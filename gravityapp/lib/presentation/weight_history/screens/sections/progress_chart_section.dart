@@ -5,9 +5,61 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../../controllers/weight_history_controller.dart';
 import '../../../../app/theme/app_text_styles.dart';
-import '../../../../data/model/weight_history.dart';
+import '../../../../data/model/weight_history.dart' as weight_history;
 
-class ProgressChartSection extends StatefulWidget {
+/// Progress Over Time Chart Widget
+/// 
+/// A reusable chart widget that displays weight progress over time with:
+/// 
+/// GRID & AXIS:
+/// - Horizontal straight grid lines (subtle grey, 5-unit intervals)
+/// - Vertical dotted grid lines (aligned with dates)
+/// - Left and bottom borders only (top/right removed)
+/// 
+/// Y-AXIS (WEIGHT):
+/// - Fixed 5-unit interval (70, 75, 80, 85)
+/// - Auto-calculated bounds: minY = lowest - 2, maxY = highest + 2
+/// - Integer labels on left side
+/// 
+/// X-AXIS (DATES):
+/// - Index-based spacing (X = entry index)
+/// - Weekly time points with auto-skip if overcrowded
+/// - Format: "Apr 16", "Apr 23", "Apr 30"
+/// 
+/// LINE STYLE:
+/// - Smooth curved line (2.5px thickness)
+/// - Dots on all points
+/// - Last point 20% larger (5.0 vs 4.0 radius)
+/// 
+/// TARGET LINE:
+/// - Horizontal dashed line (amber/yellow, 1.5px)
+/// - "Target" label on right side
+/// 
+/// PERFORMANCE:
+/// - StatelessWidget to avoid rebuilds
+/// - Uses Obx only for data changes
+/// - Const widgets where possible
+
+/// Simple weight entry model for chart
+class ChartWeightEntry {
+  final DateTime date;
+  final double weight;
+
+  const ChartWeightEntry({
+    required this.date,
+    required this.weight,
+  });
+
+  /// Convert from existing WeightEntry model
+  factory ChartWeightEntry.fromApiEntry(weight_history.WeightEntry entry) {
+    return ChartWeightEntry(
+      date: DateTime.parse(entry.date),
+      weight: entry.weight,
+    );
+  }
+}
+
+class ProgressChartSection extends StatelessWidget {
   final WeightHistoryController controller;
 
   const ProgressChartSection({
@@ -16,441 +68,224 @@ class ProgressChartSection extends StatefulWidget {
   });
 
   @override
-  State<ProgressChartSection> createState() => _ProgressChartSectionState();
-}
-
-class _ProgressChartSectionState extends State<ProgressChartSection> {
-  final ScrollController _scrollController = ScrollController();
-  bool _isFocusedOnLast7Days = false;
-  int? _selectedPointIndex;
-  DateTime? _lastTapTime;
-  static const Duration _tapDebounceDuration = Duration(milliseconds: 300);
-  
-  /// SINGLE Y-axis scale mapping function used everywhere
-  /// Exact formula: pixelY = chartHeight * (maxY - value) / (maxY - minY)
-  /// This ensures pixel-perfect alignment between grid lines, labels, and data points
-  /// 
-  /// Parameters:
-  /// - value: The Y-axis value (weight in kg)
-  /// - minY: Minimum Y-axis value
-  /// - maxY: Maximum Y-axis value
-  /// - chartHeight: Total chart height in pixels
-  /// - topPadding: Top padding (must match chart padding)
-  /// 
-  /// Returns: Pixel Y position from top of chart container
-  double _mapYToPixel(
-    double value,
-    double minY,
-    double maxY,
-    double chartHeight,
-    double topPadding,
-  ) {
-    if (maxY <= minY) return topPadding;
-    
-    // Exact formula: pixelY = chartHeight * (maxY - value) / (maxY - minY)
-    // Adjusted for padding: pixelY = topPadding + (chartHeight - 2*topPadding) * (maxY - value) / (maxY - minY)
-    final chartContentHeight = chartHeight - (2 * topPadding);
-    final normalized = (maxY - value) / (maxY - minY);
-    return topPadding + (normalized * chartContentHeight);
-  }
-  
-  /// Check if a value is a major tick (whole numbers: 70, 71, 72, 73, 74, 75)
-  /// Major ticks are whole numbers, minor ticks are 0.5 increments
-  bool _isMajorTick(double value) {
-    // Check if value is a whole number (no decimal part)
-    // Major ticks: 70, 71, 72, 73, 74, 75
-    // Minor ticks: 70.5, 71.5, 72.5, 73.5, 74.5
-    return value == value.roundToDouble();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    // Clear selection when scrolling
-    _scrollController.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  /// Clear selection when scrolling
-  void _onScroll() {
-    if (_selectedPointIndex != null) {
-      setState(() {
-        _selectedPointIndex = null;
-      });
-    }
-  }
-
-  /// Handle tap on data point - toggle behavior
-  void _handlePointTap(int tappedIndex) {
-    // Prevent accidental multi-trigger
-    final now = DateTime.now();
-    if (_lastTapTime != null && 
-        now.difference(_lastTapTime!) < _tapDebounceDuration) {
-      return;
-    }
-    _lastTapTime = now;
-
-    setState(() {
-      // Toggle logic: if same point, hide; if different, show new
-      if (_selectedPointIndex == tappedIndex) {
-        _selectedPointIndex = null; // Hide tooltip
-      } else {
-        _selectedPointIndex = tappedIndex; // Show tooltip for new point
-      }
-    });
-  }
-
-  /// Dismiss tooltip when tapping outside
-  void _dismissTooltip() {
-    if (_selectedPointIndex != null) {
-      setState(() {
-        _selectedPointIndex = null;
-      });
-    }
-  }
-
-  /// Focus on last 7 days - scroll to end
-  void _focusLast7Days() {
-    setState(() {
-      _isFocusedOnLast7Days = true;
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          0.0,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
-
-  /// Reset focus to show all data
-  void _resetFocus() {
-    setState(() {
-      _isFocusedOnLast7Days = false;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    const double chartHeight = 380.0; // Increased height for better visibility
-    const double yAxisWidth = 52.0;
-
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 16.w),
-      padding: EdgeInsets.all(20.r),
+      padding: EdgeInsets.all(18.r),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20.r),
+        borderRadius: BorderRadius.circular(18.r),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10.r,
+            offset: Offset(0, 2.h),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          /// Title and Focus Button Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Progress Over Time',
-                style: ResponsiveTextStyles.textBase.copyWith(
-                  color: const Color(0xFF0A2342),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              // Focus Last 7 Days button
-              Obx(() {
-                final sortedEntries = _getValidSortedEntriesForChart();
-                if (sortedEntries.length > 7) {
-                  return TextButton(
-                    onPressed: _isFocusedOnLast7Days ? _resetFocus : _focusLast7Days,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(
-                      _isFocusedOnLast7Days ? 'Show All' : 'Last 7 Days',
-                      style: ResponsiveTextStyles.textXs.copyWith(
-                        color: const Color(0xFF00B8A9),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              }),
-            ],
-          ),
-          SizedBox(height: 16.h),
-
-          /// Two-layer layout: Fixed Y-axis + Scrollable Chart
+          // Header with title and optional range label
           Obx(() {
-            final sortedEntries = _getValidSortedEntriesForChart();
-            
-            if (sortedEntries.isEmpty) {
-              return SizedBox(
-                height: chartHeight.h,
-                child: Center(
-                  child: Text(
-                    'No weight data available',
-                    style: ResponsiveTextStyles.textSm.copyWith(
-                      color: const Color(0xFF0A2342).withOpacity(0.5),
-                    ),
-                  ),
-                ),
-              );
-            }
-
-            // Fixed Y-axis bounds: 70kg to 75kg (no auto-scaling)
-            const double minY = 70.0;
-            const double maxY = 75.0;
-
-            // Generate Y-axis labels
-            final yAxisLabels = _generateYAxisLabels(minY, maxY);
-
-            // Determine visible range for "Last 7 Days" focus
-            int visibleStartIndex = 0;
-            int visibleEndIndex = sortedEntries.length - 1;
-            int visibleDataPoints = sortedEntries.length;
-            
-            if (_isFocusedOnLast7Days && sortedEntries.length > 7) {
-              visibleStartIndex = sortedEntries.length - 7;
-              visibleEndIndex = sortedEntries.length - 1;
-              visibleDataPoints = 7;
-            }
-
-            // Calculate dynamic chart width
-            final screenWidth = MediaQuery.of(context).size.width;
-            final baseWidth = visibleDataPoints * 64.0;
-            final chartWidth = baseWidth.clamp(screenWidth - 32.w - yAxisWidth, double.infinity);
-
-            // Define consistent padding used everywhere
-            // Increased bottom padding to ensure dates are placed BELOW grid lines
-            const double topPadding = 8.0;
-            const double bottomPadding = 40.0; // Increased to place dates below 70kg grid line
-            
-            return SizedBox(
-              height: chartHeight.h,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  /// Left Layer: Fixed Y-axis labels
-                  SizedBox(
-                    width: yAxisWidth.w,
-                    height: chartHeight.h,
-                    child: _buildFixedYAxis(yAxisLabels, minY, maxY, chartHeight, topPadding),
-                  ),
-                  
-                  /// Right Layer: Horizontally scrollable chart
-                  Expanded(
-                    child: SingleChildScrollView(
-                      controller: _scrollController,
-                      scrollDirection: Axis.horizontal,
-                      reverse: true, // Latest data on right
-                      physics: const BouncingScrollPhysics(),
-                      child: SizedBox(
-                        width: chartWidth,
-                        height: chartHeight.h,
-                        child: _buildScrollableChart(
-                          sortedEntries,
-                          minY,
-                          maxY,
-                          visibleStartIndex,
-                          visibleEndIndex,
-                          chartHeight,
-                          topPadding,
-                          bottomPadding,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
+            final sortedEntries = _getSortedEntries();
+            return _buildHeader();
           }),
           SizedBox(height: 16.h),
-
-          /// Footer note
-          Center(
-            child: Text(
-              'Focus on the trend, not individual points',
-              style: ResponsiveTextStyles.textXs.copyWith(
-                color: const Color(0xFF0A2342).withOpacity(0.5),
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ),
+          
+          // Chart content
+          Obx(() {
+            final sortedEntries = _getSortedEntries();
+            
+            if (sortedEntries.isEmpty) {
+              return _buildEmptyState();
+            }
+            
+            return _buildChart(sortedEntries);
+          }),
+          
+          SizedBox(height: 12.h),
+          
+          // Helper text
+          _buildHelperText(),
         ],
       ),
     );
   }
 
-  /// Build fixed Y-axis labels on the left
-  /// Uses SINGLE scale function for pixel-perfect alignment with grid lines
-  /// Shows all labels: 70, 71, 72, 73, 74, 75
-  Widget _buildFixedYAxis(
-    List<double> labels,
-    double minY,
-    double maxY,
-    double chartHeight,
-    double topPadding,
-  ) {
-    return Padding(
-      padding: EdgeInsets.only(top: topPadding, bottom: topPadding),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: labels.map((value) {
-          // Use SINGLE scale function - exact same calculation as grid lines
-          final pixelY = _mapYToPixel(value, minY, maxY, chartHeight, topPadding);
-          
-          // Adjust for container padding to align with grid lines
-          final adjustedY = pixelY - topPadding;
-          
-          return Positioned(
-            top: adjustedY - 8.h, // Center text vertically on grid line
-            right: 0,
-            child: Text(
-              value.toStringAsFixed(0),
-              style: ResponsiveTextStyles.textXs.copyWith(
-                color: const Color(0xFF0A2342).withOpacity(0.6),
-                fontWeight: _isMajorTick(value) ? FontWeight.w600 : FontWeight.w500,
-              ),
-              textAlign: TextAlign.right,
+  /// Build header with title and optional range label
+  Widget _buildHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          'Progress Over Time',
+          style: ResponsiveTextStyles.textBase.copyWith(
+            color: const Color(0xFF0A2342),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        // Optional: Add range label here if needed
+        // Text('Last 30 Days', style: ...)
+      ],
+    );
+  }
+
+  /// Build empty state
+  Widget _buildEmptyState() {
+    return SizedBox(
+      height: 240.h,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.show_chart,
+              size: 48.sp,
+              color: const Color(0xFF0A2342).withOpacity(0.3),
             ),
-          );
-        }).toList(),
+            SizedBox(height: 12.h),
+            Text(
+              'No weight data available',
+              style: ResponsiveTextStyles.textSm.copyWith(
+                color: const Color(0xFF0A2342).withOpacity(0.5),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  /// Build scrollable chart content (without Y-axis)
-  /// Renders grid lines manually using SINGLE scale function for perfect alignment
-  Widget _buildScrollableChart(
-    List<WeightEntry> sortedEntries,
-    double minY,
-    double maxY,
-    int visibleStartIndex,
-    int visibleEndIndex,
-    double chartHeight,
-    double topPadding,
-    double bottomPadding,
-  ) {
-    // Build spots using INDEX as X values
+  /// Build the main chart
+  Widget _buildChart(List<ChartWeightEntry> sortedEntries) {
+    // Calculate Y-axis bounds with padding: minY = lowest - 2, maxY = highest + 2
+    final weights = sortedEntries.map((e) => e.weight).toList();
+    final minWeight = weights.reduce((a, b) => a < b ? a : b);
+    final maxWeight = weights.reduce((a, b) => a > b ? a : b);
+    
+    final minY = (minWeight - 2).roundToDouble();
+    final maxY = (maxWeight + 2).roundToDouble();
+    
+    // Convert entries to FlSpot (using index as X value)
     final chartSpots = sortedEntries.asMap().entries.map((entry) {
-      return FlSpot(entry.key.toDouble(), entry.value.weight.toDouble());
+      return FlSpot(entry.key.toDouble(), entry.value.weight);
     }).toList();
-
-    // Generate all grid line values (every 1 kg)
-    final gridLines = _generateGridLines(minY, maxY);
-
-    return Stack(
-      clipBehavior: Clip.hardEdge,
-      children: [
-        // Manual grid lines rendered first (behind chart)
-        Padding(
-          padding: EdgeInsets.only(
-            right: 52.w, // Space for Goal label
-            top: topPadding.h,
-            bottom: bottomPadding.h,
-          ),
-          child: SizedBox(
-            width: double.infinity,
-            height: (chartHeight - topPadding - bottomPadding).h,
-            child: CustomPaint(
-              painter: _GridLinePainter(
-                gridLines: gridLines,
-                minY: minY,
-                maxY: maxY,
-                chartHeight: chartHeight - topPadding - bottomPadding,
-                topPadding: 0, // Already accounted in padding
-                isMajorTick: _isMajorTick,
-              ),
-            ),
-          ),
-        ),
-        
-        // Chart overlay (on top of grid lines)
-        Padding(
-          padding: EdgeInsets.only(
-            right: 52.w, // Space for Goal label
-            top: topPadding.h,
-            bottom: bottomPadding.h,
-          ),
-          child: LineChart(
+    
+    // Calculate X-axis interval for weekly labels
+    final xAxisInterval = _calculateXAxisInterval(sortedEntries.length);
+    
+    return SizedBox(
+      height: 240.h,
+      child: Stack(
+        children: [
+          // Main chart
+          LineChart(
             LineChartData(
-              minX: _isFocusedOnLast7Days 
-                  ? visibleStartIndex.toDouble() 
-                  : 0,
-              maxX: visibleEndIndex.toDouble(),
+              // Y-axis bounds with padding
               minY: minY,
               maxY: maxY,
-              // Allow data points outside the fixed range to be visible
-              // This ensures accurate positioning relative to the fixed scale
-              clipData: const FlClipData.none(),
-              borderData: FlBorderData(show: false),
-
-              /// Disable fl_chart's grid system - we render manually for perfect alignment
-              gridData: const FlGridData(
-                show: false, // Disabled - using manual grid lines
+              
+              // X-axis bounds (index-based)
+              minX: 0,
+              maxX: (sortedEntries.length - 1).toDouble(),
+              
+              // Clip data to chart bounds
+              clipData: const FlClipData.all(),
+              
+              // Border configuration: show only left and bottom
+              borderData: FlBorderData(
+                show: true,
+                border: Border(
+                  left: BorderSide(
+                    color: const Color(0xFF0A2342).withOpacity(0.2),
+                    width: 1,
+                  ),
+                  bottom: BorderSide(
+                    color: const Color(0xFF0A2342).withOpacity(0.2),
+                    width: 1,
+                  ),
+                  top: BorderSide.none, // Remove top border
+                  right: BorderSide.none, // Remove right border
+                ),
               ),
-
-              /// Axis titles - hide left Y-axis since it's fixed on the left
+              
+              // Grid configuration
+              gridData: FlGridData(
+                show: true,
+                // Horizontal grid lines (straight, subtle grey)
+                horizontalInterval: 5.0, // Fixed 5-unit interval (70, 75, 80, 85)
+                getDrawingHorizontalLine: (value) {
+                  return FlLine(
+                    color: const Color(0xFF0A2342).withOpacity(0.1), // Subtle grey
+                    strokeWidth: 1,
+                  );
+                },
+                drawHorizontalLine: true,
+                drawVerticalLine: true,
+                // Vertical grid lines (dotted, subtle grey)
+                verticalInterval: xAxisInterval.toDouble(),
+                getDrawingVerticalLine: (value) {
+                  return FlLine(
+                    color: const Color(0xFF0A2342).withOpacity(0.1), // Subtle grey
+                    strokeWidth: 1,
+                    dashArray: [4, 4], // Dashed pattern
+                  );
+                },
+              ),
+              
+              // Titles configuration
               titlesData: FlTitlesData(
+                // Top titles: disabled
                 topTitles: const AxisTitles(
                   sideTitles: SideTitles(showTitles: false),
                 ),
+                // Right axis: disabled
                 rightTitles: const AxisTitles(
                   sideTitles: SideTitles(showTitles: false),
                 ),
-                leftTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false), // Hidden - using fixed Y-axis
+                // Left Y-axis: weight values with 5-unit interval
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 50.w,
+                    interval: 5.0, // Fixed 5-unit interval
+                    getTitlesWidget: (value, meta) {
+                      // Format as integer
+                      return Padding(
+                        padding: EdgeInsets.only(right: 8.w),
+                        child: Text(
+                          value.toInt().toString(),
+                          style: ResponsiveTextStyles.textXs.copyWith(
+                            color: const Color(0xFF0A2342).withOpacity(0.6),
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      );
+                    },
+                  ),
                 ),
-
-                /// Bottom dates - placed BELOW grid lines with proper spacing
+                // Bottom X-axis: date labels (weekly)
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 50.h, // Increased reserved size to place dates below grid lines
-                    interval: _calculateXAxisInterval(sortedEntries.length).toDouble(),
+                    reservedSize: 40.h,
+                    interval: xAxisInterval.toDouble(),
                     getTitlesWidget: (value, meta) {
                       final index = value.toInt();
-
                       if (index >= 0 && index < sortedEntries.length) {
-                        final interval = _calculateXAxisInterval(sortedEntries.length);
-                        if (index % interval != 0 && 
-                            index != 0 && 
-                            index != sortedEntries.length - 1) {
-                          return const SizedBox.shrink();
-                        }
-
                         final entry = sortedEntries[index];
-                        final date = DateTime.parse(entry.date);
-                        final shortDate = _formatShortDate(date);
-
-                        // Place dates BELOW the chart area, not overlapping with grid lines
+                        final formattedDate = _formatShortDate(entry.date);
+                        
                         return Padding(
-                          padding: EdgeInsets.only(top: 12.h), // Additional padding to separate from grid
+                          padding: EdgeInsets.only(top: 8.h),
                           child: Text(
-                            shortDate,
+                            formattedDate,
                             style: ResponsiveTextStyles.textXs.copyWith(
                               color: const Color(0xFF0A2342).withOpacity(0.5),
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         );
                       }
@@ -459,430 +294,153 @@ class _ProgressChartSectionState extends State<ProgressChartSection> {
                   ),
                 ),
               ),
-
-              /// Lines
+              
+              // Line bars data
               lineBarsData: [
-                /// Goal line (dashed baseline)
+                // Target/Goal line (dashed, amber/yellow)
                 LineChartBarData(
                   spots: [
-                    FlSpot(_isFocusedOnLast7Days 
-                        ? visibleStartIndex.toDouble() 
-                        : 0, 
-                        widget.controller.goalWeight),
-                    FlSpot(visibleEndIndex.toDouble(), widget.controller.goalWeight),
+                    FlSpot(0, controller.goalWeight.value),
+                    FlSpot((sortedEntries.length - 1).toDouble(), controller.goalWeight.value),
                   ],
                   isCurved: false,
-                  color: const Color(0xFFD4AF37),
-                  barWidth: 2,
-                  dashArray: [5, 5],
+                  color: const Color(0xFFFFB84D), // Amber/yellow
+                  barWidth: 1.5,
+                  dashArray: [5, 5], // Dashed pattern
                   dotData: const FlDotData(show: false),
+                  preventCurveOverShooting: true,
                 ),
-
-                /// Weight trend line with highlightable dots
-                /// Smooth curved interpolation for professional fitness app appearance
+                
+                // Main weight trend line
                 LineChartBarData(
                   spots: chartSpots,
                   isCurved: true,
-                  curveSmoothness: 0.35, // Smooth, slightly curved interpolation (0.0 = straight, 1.0 = very curved)
-                  color: const Color(0xFF00B8A9),
-                  barWidth: 3,
+                  curveSmoothness: 0.35, // Smooth, slightly curved
+                  color: const Color(0xFF00B8A9), // Teal
+                  barWidth: 2.5,
                   dotData: FlDotData(
                     show: true,
                     getDotPainter: (spot, percent, barData, index) {
-                      final isSelected = _selectedPointIndex == index;
+                      final isLastPoint = index == chartSpots.length - 1;
+                      // Last point is 20% larger (5.0 vs 4.0)
+                      final radius = isLastPoint ? 5.0 : 4.0;
+                      
                       return FlDotCirclePainter(
-                        radius: isSelected ? 7.r : 5.r,
-                        color: isSelected 
-                            ? const Color(0xFF0A2342) 
-                            : const Color(0xFF00B8A9),
-                        strokeWidth: isSelected ? 3 : 2,
+                        radius: radius.r,
+                        color: const Color(0xFF00B8A9),
+                        strokeWidth: 2,
                         strokeColor: Colors.white,
                       );
                     },
                   ),
+                  preventCurveOverShooting: true,
+                  belowBarData: BarAreaData(show: false),
                 ),
               ],
               
-              /// Custom touch interaction for tap-to-toggle
+              // Touch interaction disabled for cleaner UI
               lineTouchData: LineTouchData(
-                enabled: true,
-                touchSpotThreshold: 30, // Larger threshold for easier tapping
-                getTouchLineStart: (barData, spotIndex) {
-                  return 0;
-                },
-                getTouchLineEnd: (barData, spotIndex) {
-                  return double.infinity;
-                },
-                // Disable built-in tooltip - we use custom one
-                touchTooltipData: LineTouchTooltipData(
-                  getTooltipColor: (touchedSpot) => Colors.transparent,
-                  tooltipRoundedRadius: 0,
-                  tooltipPadding: EdgeInsets.zero,
-                  getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-                    // Return tooltip items matching touched spots count (but invisible)
-                    // This is required by fl_chart - count must match
-                    return touchedBarSpots.map((spot) {
-                      return LineTooltipItem(
-                        '',
-                        const TextStyle(
-                          color: Colors.transparent,
-                          fontSize: 0,
-                        ),
-                      );
-                    }).toList();
-                  },
-                ),
-                handleBuiltInTouches: true,
-                // Handle tap events for toggle behavior
-                touchCallback: (FlTouchEvent event, LineTouchResponse? touchResponse) {
-                  if (event is FlTapUpEvent) {
-                    if (touchResponse != null && touchResponse.lineBarSpots != null) {
-                      final lineBarSpots = touchResponse.lineBarSpots!;
-                      if (lineBarSpots.isNotEmpty) {
-                        // Tapped on a data point
-                        final spot = lineBarSpots.first;
-                        final index = spot.x.toInt();
-                        if (index >= 0 && index < sortedEntries.length) {
-                          _handlePointTap(index);
-                        }
-                      } else {
-                        // Tapped on empty chart area - dismiss tooltip
-                        _dismissTooltip();
-                      }
-                    } else {
-                      // No touch response - tapped outside chart
-                      _dismissTooltip();
-                    }
-                  } else if (event is FlPanStartEvent) {
-                    // Dismiss on pan start (scrolling)
-                    _dismissTooltip();
-                  }
-                },
+                enabled: false,
               ),
             ),
           ),
-        ),
-        
-        /// Goal label
-        if (widget.controller.goalWeight >= minY && 
-            widget.controller.goalWeight <= maxY)
-          Positioned(
-            right: 16.w,
-            top: _calculateGoalLabelPosition(
-              widget.controller.goalWeight,
-              minY,
-              maxY,
-              chartHeight,
-              topPadding,
-            ),
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: 10.w,
-                vertical: 4.h,
+          
+          // Target label positioned on the right side
+          if (_isTargetVisible(controller.goalWeight.value, minY, maxY))
+            Positioned(
+              right: 0,
+              top: _calculateTargetLabelY(
+                controller.goalWeight.value,
+                minY,
+                maxY,
+                240, // Chart height
               ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(6.r),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 4.r,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(6.r),
+                ),
+                child: Text(
+                  'Target',
+                  style: ResponsiveTextStyles.textXs.copyWith(
+                    color: const Color(0xFFFFB84D), // Amber/yellow to match goal line
+                    fontWeight: FontWeight.w500,
                   ),
-                ],
-              ),
-              child: Text(
-                'Goal',
-                style: ResponsiveTextStyles.textXs.copyWith(
-                  color: const Color(0xFFD4AF37),
-                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
-          ),
-        
-        /// Custom animated tooltip
-        if (_selectedPointIndex != null && 
-            _selectedPointIndex! >= 0 && 
-            _selectedPointIndex! < sortedEntries.length)
-          _buildCustomTooltip(
-            sortedEntries[_selectedPointIndex!],
-            sortedEntries,
-            minY,
-            maxY,
-            chartHeight,
-            topPadding,
-          ),
-      ],
+        ],
+      ),
     );
   }
 
-  /// Build custom animated tooltip
-  Widget _buildCustomTooltip(
-    WeightEntry entry,
-    List<WeightEntry> sortedEntries,
-    double minY,
-    double maxY,
-    double chartHeight,
-    double topPadding,
-  ) {
-    final index = _selectedPointIndex!;
-    final date = DateTime.parse(entry.date);
-    final formattedDate = DateFormat('MMM d, yyyy', 'en_US').format(date);
-    
-    // Calculate tooltip position based on data point
-    final chartSpots = sortedEntries.asMap().entries.map((e) {
-      return FlSpot(e.key.toDouble(), e.value.weight.toDouble());
-    }).toList();
-    
-    if (index >= chartSpots.length) return const SizedBox.shrink();
-    
-    final spot = chartSpots[index];
-    
-    // Use SINGLE scale function for perfect alignment with grid lines
-    final yPosition = _mapYToPixel(spot.y, minY, maxY, chartHeight, topPadding);
-    
-    // Calculate X position based on index and chart width
-    final screenWidth = MediaQuery.of(context).size.width;
-    final yAxisWidth = 52.0;
-    final chartWidth = (sortedEntries.length * 64.0).clamp(screenWidth - 32.w - yAxisWidth, double.infinity);
-    final maxIndex = sortedEntries.length > 1 ? sortedEntries.length - 1 : 1;
-    final normalizedX = index / maxIndex;
-    final xPosition = normalizedX * (chartWidth - 52.w); // Account for right padding
-    
-    // Position tooltip above the point, centered horizontally
-    final tooltipWidth = 120.w;
-    final tooltipLeft = (xPosition - tooltipWidth / 2).clamp(8.w, chartWidth - tooltipWidth - 52.w);
-    final tooltipTop = (yPosition - 60.h).clamp(8.h, chartHeight - 100.h);
-    
-    return Positioned(
-      left: tooltipLeft,
-      top: tooltipTop,
-      child: IgnorePointer(
-        child: TweenAnimationBuilder<double>(
-          tween: Tween<double>(begin: 0.0, end: 1.0),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          builder: (context, value, child) {
-            return Transform.scale(
-              scale: 0.8 + (0.2 * value), // Scale from 0.8 to 1.0
-              child: Opacity(
-                opacity: value,
-                child: Container(
-                  constraints: BoxConstraints(maxWidth: tooltipWidth),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 12.w,
-                    vertical: 10.h,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12.r),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.15),
-                        blurRadius: 8.r,
-                        offset: Offset(0, 2.h),
-                      ),
-                    ],
-                    border: Border.all(
-                      color: const Color(0xFF0A2342).withOpacity(0.1),
-                      width: 1,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        formattedDate,
-                        style: ResponsiveTextStyles.textXs.copyWith(
-                          color: const Color(0xFF0A2342).withOpacity(0.6),
-                        ),
-                      ),
-                      SizedBox(height: 4.h),
-                      Text(
-                        '${entry.weight.toStringAsFixed(1)} kg',
-                        style: ResponsiveTextStyles.textLg.copyWith(
-                          color: const Color(0xFF00B8A9),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
+  /// Build helper text at bottom
+  Widget _buildHelperText() {
+    return Center(
+      child: Text(
+        'Focus on the trend, not individual points',
+        style: ResponsiveTextStyles.textXs.copyWith(
+          color: const Color(0xFF0A2342).withOpacity(0.4),
+          fontStyle: FontStyle.italic,
         ),
       ),
     );
   }
 
-  /// Generate Y-axis labels for fixed range (whole numbers only: 70, 71, 72, 73, 74, 75)
-  /// Shows only major grid line labels (whole numbers), not 0.5 increments
-  List<double> _generateYAxisLabels(double minY, double maxY) {
-    // For fixed range 70-75kg, show only whole number labels: 70, 71, 72, 73, 74, 75
-    // (0.5 increments are shown as grid lines but not labeled)
-    final labels = <double>[];
-    int current = minY.round(); // 70
-    final maxYInt = maxY.round(); // 75
+  /// Get sorted entries (oldest to newest)
+  List<ChartWeightEntry> _getSortedEntries() {
+    if (controller.weightHistory.isEmpty) return [];
     
-    while (current <= maxYInt) {
-      labels.add(current.toDouble());
-      current += 1;
-    }
-    
-    return labels; // [70.0, 71.0, 72.0, 73.0, 74.0, 75.0]
-  }
-
-  /// Fixed Y-axis bounds: Always returns 70kg to 75kg
-  /// This ensures the chart scale remains stable and doesn't auto-adjust
-  Map<String, double> _calculateYAxisBounds(List<WeightEntry> entries) {
-    // Fixed range: 70kg to 75kg (no auto-scaling)
-    return {'min': 70.0, 'max': 75.0};
-  }
-
-  /// Get valid sorted entries (oldest to newest)
-  List<WeightEntry> _getValidSortedEntriesForChart() {
-    if (widget.controller.weightHistory.isEmpty) return [];
-    
-    final validEntries = widget.controller.weightHistory
+    final validEntries = controller.weightHistory
         .where((entry) => entry.weight > 0)
+        .map((entry) => ChartWeightEntry.fromApiEntry(entry))
         .toList();
     
     if (validEntries.isEmpty) return [];
     
-    final sorted = List<WeightEntry>.from(validEntries);
-    sorted.sort((a, b) {
-      final dateA = DateTime.parse(a.date);
-      final dateB = DateTime.parse(b.date);
-      return dateA.compareTo(dateB);
-    });
+    // Sort by date (oldest to newest)
+    validEntries.sort((a, b) => a.date.compareTo(b.date));
     
-    return sorted;
+    return validEntries;
   }
 
-  /// Format short date label: "Jan 8"
-  String _formatShortDate(DateTime date) {
-    final formatter = DateFormat('MMM d', 'en_US');
-    return formatter.format(date);
-  }
-
-  /// Calculate optimal X-axis interval
+  /// Calculate X-axis interval for date labels (weekly spacing)
   int _calculateXAxisInterval(int dataPointCount) {
-    if (dataPointCount <= 10) return 1;
-    if (dataPointCount <= 20) return 2;
-    return 3;
+    if (dataPointCount <= 7) return 1; // Show all dates
+    if (dataPointCount <= 14) return 2; // Show every other date
+    if (dataPointCount <= 30) return 3; // Show every third date
+    return 4; // Show every fourth date for larger datasets
   }
 
-  /// Calculate Goal label Y position
-  /// Uses SINGLE scale function for perfect alignment
-  double _calculateGoalLabelPosition(
-    double goalWeight,
+  /// Format short date (e.g., "Apr 16", "May 14")
+  String _formatShortDate(DateTime date) {
+    return DateFormat('MMM d', 'en_US').format(date);
+  }
+
+  /// Check if target weight is visible within chart bounds
+  bool _isTargetVisible(double targetWeight, double minY, double maxY) {
+    return targetWeight >= minY && targetWeight <= maxY;
+  }
+
+  /// Calculate Y position for target label
+  double _calculateTargetLabelY(
+    double targetWeight,
     double minY,
     double maxY,
     double chartHeight,
-    double topPadding,
   ) {
-    // Use SINGLE scale function for consistent positioning
-    final position = _mapYToPixel(goalWeight, minY, maxY, chartHeight, topPadding);
-    return position.clamp(topPadding.h, chartHeight - 28.h);
-  }
-
-  /// Generate all grid line values (every 0.5 kg interval for fixed 70-75kg range)
-  /// Returns list of Y values where grid lines should be drawn
-  /// Includes: 70.0, 70.5, 71.0, 71.5, 72.0, 72.5, 73.0, 73.5, 74.0, 74.5, 75.0 (11 lines, minimum 10)
-  List<double> _generateGridLines(double minY, double maxY) {
-    final lines = <double>[];
+    // Map target weight to pixel position
+    // Formula: pixelY = chartHeight * (maxY - value) / (maxY - minY)
+    // Account for padding (approximately 20px top, 40px bottom)
+    const topPadding = 20.0;
+    const bottomPadding = 40.0;
+    final chartContentHeight = chartHeight - topPadding - bottomPadding;
     
-    // For fixed range 70-75kg, generate lines at every 0.5kg interval
-    // This creates 11 grid lines (minimum 10 as required): 70.0, 70.5, 71.0, 71.5, 72.0, 72.5, 73.0, 73.5, 74.0, 74.5, 75.0
-    double current = minY; // 70.0
-    final maxYValue = maxY; // 75.0
-    const interval = 0.5; // 0.5kg intervals
+    final normalized = (maxY - targetWeight) / (maxY - minY);
+    final pixelY = topPadding + (normalized * chartContentHeight);
     
-    while (current <= maxYValue + 0.01) { // Add small epsilon to handle floating point precision
-      lines.add(current);
-      current += interval;
-    }
-    
-    return lines;
-  }
-}
-
-/// Custom painter for manual grid line rendering
-/// Uses SINGLE scale function to ensure perfect alignment with labels and data points
-class _GridLinePainter extends CustomPainter {
-  final List<double> gridLines;
-  final double minY;
-  final double maxY;
-  final double chartHeight;
-  final double topPadding;
-  final bool Function(double) isMajorTick;
-
-  _GridLinePainter({
-    required this.gridLines,
-    required this.minY,
-    required this.maxY,
-    required this.chartHeight,
-    required this.topPadding,
-    required this.isMajorTick,
-  });
-
-  /// SINGLE Y-axis scale mapping function
-  /// Exact formula: pixelY = chartHeight * (maxY - value) / (maxY - minY)
-  /// Uses canvas size for accurate pixel positioning
-  /// Note: topPadding is 0 because canvas is already inside padding
-  double _mapYToPixel(double value, Size canvasSize) {
-    if (maxY <= minY) return 0;
-    
-    // Canvas height is already (chartHeight - 2*topPadding)
-    // Since topPadding = 0 in this context, we use canvas height directly
-    // Formula: pixelY = (maxY - value) / (maxY - minY) * canvasHeight
-    final normalized = (maxY - value) / (maxY - minY);
-    return normalized * canvasSize.height;
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round; // Rounded line caps for cleaner appearance
-
-    for (final value in gridLines) {
-      final isMajor = isMajorTick(value);
-      final pixelY = _mapYToPixel(value, size);
-
-      if (isMajor) {
-        // Major grid line (whole numbers: 70, 71, 72, 73, 74, 75): BOLD, dark, labeled
-        paint
-          ..color = const Color(0xFF0A2342).withOpacity(0.3)
-          ..strokeWidth = 2.5;
-      } else {
-        // Minor grid line (0.5 increments: 70.5, 71.5, 72.5, 73.5, 74.5): normal/light, unlabeled
-        paint
-          ..color = const Color(0xFF0A2342).withOpacity(0.12)
-          ..strokeWidth = 1.0;
-      }
-
-      // Draw horizontal line from exact start (0) to exact end (size.width) for perfect alignment
-      // Ensure endpoints match chart boundaries perfectly - no gaps or overflows
-      final startX = 0.0;
-      final endX = size.width;
-      
-      // Use precise pixel coordinates - ensure lines extend to exact boundaries
-      canvas.drawLine(
-        Offset(startX, pixelY),
-        Offset(endX, pixelY),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GridLinePainter oldDelegate) {
-    return oldDelegate.gridLines != gridLines ||
-        oldDelegate.minY != minY ||
-        oldDelegate.maxY != maxY ||
-        oldDelegate.chartHeight != chartHeight;
+    // Center the label vertically on the line (label height ~20px)
+    return (pixelY - 10).clamp(0.0, chartHeight - 20);
   }
 }

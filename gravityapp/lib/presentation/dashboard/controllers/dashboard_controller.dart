@@ -41,6 +41,7 @@ class DashboardController extends GetxController {
   final stepGoal = 10000.obs; // steps per day
   final waterGoal = 2.5.obs; // in Liters
   final sleepGoal = 8.0.obs; // in hours
+  final startingWeight = 0.0.obs; // in kg - loaded from storage (from Settings > Current Weight)
 
   // Modal visibility states
   final showWeightModal = false.obs;
@@ -455,7 +456,24 @@ class DashboardController extends GetxController {
           }
         }
         
-        debugPrint('✅ Goals loaded: Steps=$stepGoal, Water=$waterGoal, Sleep=$sleepGoal, TargetWeight=$weightGoal');
+        // Load starting weight from storage (set from Settings > Current Weight)
+        final savedStartingWeight = PreferencesService.getStartingWeight();
+        if (savedStartingWeight != null && savedStartingWeight > 0) {
+          startingWeight.value = savedStartingWeight;
+          debugPrint('📊 Starting weight loaded: $savedStartingWeight kg');
+        } else {
+          // Fallback: use current weight from goals if starting weight not set yet
+          final currentWeightStr = goalsMap['currentWeight']?.toString();
+          if (currentWeightStr != null) {
+            final currentWeight = double.tryParse(currentWeightStr);
+            if (currentWeight != null && currentWeight > 0) {
+              startingWeight.value = currentWeight;
+              debugPrint('📊 Starting weight fallback to current weight: $currentWeight kg');
+            }
+          }
+        }
+        
+        debugPrint('✅ Goals loaded: Steps=$stepGoal, Water=$waterGoal, Sleep=$sleepGoal, TargetWeight=$weightGoal, StartingWeight=${startingWeight.value}');
       } else {
         // Use consistent defaults if no goals are saved
         weightGoal.value = 70.0;
