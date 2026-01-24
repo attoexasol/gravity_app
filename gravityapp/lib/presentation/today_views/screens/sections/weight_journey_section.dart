@@ -60,10 +60,14 @@ class WeightJourneySection extends StatelessWidget {
           ),
           SizedBox(height: 16.h),
           Obx(() {
+            // Trigger debug log (debug-only, no spam in production)
+            controller.logWeightJourneyValues();
+            
             final startingWeight = controller.startingWeightFromApi;
             final currentWeight = controller.currentWeightFromApi;
             final totalLossGoal = controller.totalLossGoal;
             final currentLoss = controller.currentLoss;
+            final remainingWeight = controller.remainingWeight;
             final progressPercentage = controller.progressPercentage;
 
             return Column(

@@ -446,48 +446,82 @@ class LoginController extends GetxController {
     Get.toNamed(AppRoutes.forgotPassword);
   }
 
-  /// Check consent and goals data availability and navigate accordingly
-  /// Implements conditional navigation:
-  /// - First-time login (first-time setup not completed) → Goal Settings (skip consent)
-  /// - Subsequent logins (first-time setup completed) → Dashboard directly (skip consent)
+  /// Check user goals from backend and navigate accordingly
+  /// Implements conditional navigation based on SERVER data (not local storage):
+  /// - User has goals in backend → Dashboard directly
+  /// - User missing goals in backend → Goal Settings screen
+  /// This works even after reinstall since it checks backend, not local flags
   Future<void> _checkUserDataAndNavigate(String token) async {
     try {
       // Check if controller is still mounted
       if (isClosed) return;
 
-      // Check if first-time setup has been completed
-      final isFirstTimeSetupCompleted = PreferencesService.isFirstTimeSetupCompleted();
-      
-      debugPrint('📊 First-time setup completed: $isFirstTimeSetupCompleted');
+      debugPrint('🔍 Checking user goals from backend...');
 
-      // If first-time setup is not completed, navigate to Goal Settings (skip consent)
-      if (!isFirstTimeSetupCompleted) {
-        debugPrint('✅ First-time login → Navigating to Goal Settings (skipping consent)');
+      // Check backend for user goals (server-side check, not local storage)
+      final goalsResponse = await _goalsRepository.getSingleGoal(token: token);
+
+      // Determine if user has completed goals based on backend response
+      bool hasGoalsCompleted = false;
+
+      if (goalsResponse.isSuccess && goalsResponse.data != null) {
+        final goalData = goalsResponse.data!;
+        
+        // Check if essential goals are set: currentWeight and targetWeight
+        final currentWeight = goalData['current_weight']?.toString();
+        final targetWeight = goalData['target_weight']?.toString();
+        
+        // User has goals if both currentWeight and targetWeight are present and non-empty
+        hasGoalsCompleted = (currentWeight != null && 
+                           currentWeight.isNotEmpty && 
+                           targetWeight != null && 
+                           targetWeight.isNotEmpty);
+        
+        debugPrint('📊 Backend goals check:');
+        debugPrint('   - currentWeight: ${currentWeight ?? "null"}');
+        debugPrint('   - targetWeight: ${targetWeight ?? "null"}');
+        debugPrint('   - hasGoalsCompleted: $hasGoalsCompleted');
+      } else {
+        // API call failed or returned no data - assume goals not set
+        debugPrint('⚠️ Goals API returned no data or failed: ${goalsResponse.message}');
+        hasGoalsCompleted = false;
+      }
+
+      // Navigate based on backend response
+      if (!hasGoalsCompleted) {
+        // User doesn't have goals → show Goal Settings screen
+        debugPrint('✅ User missing goals → Navigating to Goal Settings');
         await Future.delayed(const Duration(milliseconds: 500));
         if (!isClosed) {
           Get.offAllNamed(AppRoutes.goalSettings);
         }
-        return;
-      }
-
-      // For subsequent logins, navigate directly to Dashboard (skip consent check)
-      debugPrint('✅ Subsequent login → Navigating directly to Dashboard');
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (!isClosed) {
-        Get.offAllNamed(AppRoutes.home);
+      } else {
+        // User has goals → go directly to Dashboard
+        debugPrint('✅ User has goals → Navigating directly to Dashboard');
+        
+        // Update local cache flag for faster future checks (optional optimization)
+        await PreferencesService.setFirstTimeSetupCompleted(true);
+        
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!isClosed) {
+          Get.offAllNamed(AppRoutes.home);
+        }
       }
     } catch (e) {
-      debugPrint('❌ Error checking user data: $e');
-      // On error, check first-time setup status
+      debugPrint('❌ Error checking user goals from backend: $e');
+      
+      // On error, fallback to local storage check (for backward compatibility)
+      // But prefer showing Goal Settings if uncertain (safer for new users)
       if (!isClosed) {
         final isFirstTimeSetupCompleted = PreferencesService.isFirstTimeSetupCompleted();
         if (!isFirstTimeSetupCompleted) {
-          // Default to goal settings for first-time users
-          debugPrint('⚠️ Error occurred, defaulting to Goal Settings for first-time user');
+          // Default to goal settings if local flag says first-time
+          debugPrint('⚠️ Error occurred, defaulting to Goal Settings (local flag indicates first-time)');
           Get.offAllNamed(AppRoutes.goalSettings);
         } else {
-          // Default to dashboard for subsequent logins
-          debugPrint('⚠️ Error occurred, defaulting to Dashboard for subsequent login');
+          // If local flag says completed, go to dashboard
+          // But this should rarely happen since we check backend first
+          debugPrint('⚠️ Error occurred, defaulting to Dashboard (local flag indicates completed)');
           Get.offAllNamed(AppRoutes.home);
         }
       }

@@ -62,15 +62,16 @@ class TodayController extends GetxController {
   void onInit() {
     super.onInit();
     reflectionController = TextEditingController();
-    weightController = TextEditingController(text: currentWeight.value.toString());
+    weightController = TextEditingController(); // Start blank - no Google Fit prefill
     
     // Listen to reflection changes
     reflectionController.addListener(() {
       reflection.value = reflectionController.text;
     });
 
-    // Load starting weight from storage (set from Settings > Current Weight)
+    // Load starting weight and goal weight from storage (set from Settings)
     _loadStartingWeight();
+    _loadGoalWeight();
 
     // Fetch date-wise gravity data on screen load
     fetchDateWiseGravity();
@@ -89,26 +90,131 @@ class TodayController extends GetxController {
     super.onClose();
   }
 
+  /// Debug helper method for weight journey logs (debug-only)
+  void _debugWeightJourneyLog({
+    required double starting,
+    required double target,
+    required double current,
+    required double goalLoss,
+    required double clampedGoalLoss,
+    required double lost,
+    required double clampedLost,
+    required double remaining,
+    required double clampedRemaining,
+  }) {
+    if (kDebugMode) {
+      debugPrint('═══════════════════════════════════════════════════════');
+      debugPrint('📊 WEIGHT JOURNEY VERIFICATION');
+      debugPrint('═══════════════════════════════════════════════════════');
+      debugPrint('INPUTS:');
+      debugPrint('  Starting Weight: ${starting.toStringAsFixed(1)} kg');
+      debugPrint('  Target Weight: ${target.toStringAsFixed(1)} kg');
+      debugPrint('  Current Weight: ${current.toStringAsFixed(1)} kg');
+      debugPrint('───────────────────────────────────────────────────────');
+      debugPrint('CALCULATIONS:');
+      debugPrint('  goalLoss = startingWeight - targetWeight');
+      debugPrint('  goalLoss = ${starting.toStringAsFixed(1)} - ${target.toStringAsFixed(1)} = ${goalLoss.toStringAsFixed(1)} kg (clamped: ${clampedGoalLoss.toStringAsFixed(1)} kg)');
+      debugPrint('  lost = startingWeight - currentWeight');
+      debugPrint('  lost = ${starting.toStringAsFixed(1)} - ${current.toStringAsFixed(1)} = ${lost.toStringAsFixed(1)} kg (clamped: ${clampedLost.toStringAsFixed(1)} kg)');
+      debugPrint('  remaining = currentWeight - targetWeight');
+      debugPrint('  remaining = ${current.toStringAsFixed(1)} - ${target.toStringAsFixed(1)} = ${remaining.toStringAsFixed(1)} kg (clamped: ${clampedRemaining.toStringAsFixed(1)} kg)');
+      debugPrint('═══════════════════════════════════════════════════════');
+    }
+  }
+
   // Calculated values
   double get totalLossGoal {
+    final starting = startingWeightFromApi;
+    final target = goalWeight.value;
+    
+    // goalLoss = startingWeight - targetWeight
+    double goalLoss;
     if (dateWiseData.value?.goalWeightLoss != null) {
-      return dateWiseData.value!.goalWeightLoss!;
+      goalLoss = dateWiseData.value!.goalWeightLoss!;
+    } else {
+      goalLoss = starting - target;
     }
-    return startingWeight.value - goalWeight.value; // 13.5 kg fallback
+    
+    // Clamp: goalLoss cannot go below 0
+    final clampedGoalLoss = goalLoss.clamp(0.0, double.infinity);
+    
+    return clampedGoalLoss;
   }
   
   double get currentLoss {
-    if (dateWiseData.value?.startingWeight != null && dateWiseData.value?.weight != null) {
-      return dateWiseData.value!.startingWeight! - dateWiseData.value!.weight!;
-    }
-    return startingWeight.value - currentWeight.value; // 6 kg fallback
+    final starting = startingWeightFromApi;
+    final current = currentWeightFromApi;
+    
+    // lost = startingWeight - currentWeight
+    // Safe null-handling for API data
+    final s = dateWiseData.value?.startingWeight;
+    final w = dateWiseData.value?.weight;
+    final apiLost = (s != null && w != null) ? (s - w) : null;
+    final lost = apiLost ?? (starting - current);
+    
+    // Clamp: lost cannot go below 0
+    final clampedLost = lost.clamp(0.0, double.infinity);
+    
+    return clampedLost;
+  }
+  
+  /// Get remaining weight to lose
+  double get remainingWeight {
+    final current = currentWeightFromApi;
+    final target = goalWeight.value;
+    
+    // remaining = currentWeight - targetWeight
+    final remaining = current - target;
+    
+    // Clamp: remaining cannot go below 0
+    // If currentWeight < targetWeight, set remaining = 0
+    final clampedRemaining = remaining.clamp(0.0, double.infinity);
+    
+    return clampedRemaining;
   }
   
   double get progressPercentage {
-    if (totalLossGoal > 0) {
-      return (currentLoss / totalLossGoal * 100).clamp(0.0, 100.0);
+    final goalLoss = totalLossGoal;
+    final lost = currentLoss;
+    final current = currentWeightFromApi;
+    final target = goalWeight.value;
+    
+    // If currentWeight < targetWeight, progress must be 1.0 (100%)
+    if (current < target) {
+      return 100.0;
     }
+    
+    // Calculate progress: lost / goalLoss
+    if (goalLoss > 0) {
+      final percentage = (lost / goalLoss * 100).clamp(0.0, 100.0);
+      return percentage;
+    }
+    
     return 0.0;
+  }
+  
+  /// Debug method to log weight journey values (called from UI on render)
+  void logWeightJourneyValues() {
+    if (kDebugMode) {
+      final starting = startingWeightFromApi;
+      final target = goalWeight.value;
+      final current = currentWeightFromApi;
+      final goalLoss = totalLossGoal;
+      final lost = currentLoss;
+      final remaining = remainingWeight;
+      
+      _debugWeightJourneyLog(
+        starting: starting,
+        target: target,
+        current: current,
+        goalLoss: starting - target, // Unclamped for log
+        clampedGoalLoss: goalLoss,
+        lost: starting - current, // Unclamped for log
+        clampedLost: lost,
+        remaining: current - target, // Unclamped for log
+        clampedRemaining: remaining,
+      );
+    }
   }
   
   // Get current weight from API or fallback
@@ -157,11 +263,33 @@ class TodayController extends GetxController {
     }
   }
   
+  /// Load goal weight (target weight) from storage (set from Settings > Target Weight)
+  void _loadGoalWeight() {
+    final savedGoals = PreferencesService.getStorage().read('userGoals');
+    if (savedGoals != null) {
+      try {
+        final goalsMap = jsonDecode(savedGoals) as Map<String, dynamic>;
+        final targetWeightStr = goalsMap['targetWeight']?.toString();
+        if (targetWeightStr != null) {
+          final targetWeight = double.tryParse(targetWeightStr);
+          if (targetWeight != null && targetWeight > 0) {
+            goalWeight.value = targetWeight;
+            debugPrint('📊 Today: Goal weight (target) loaded from storage: $targetWeight kg');
+          }
+        }
+      } catch (e) {
+        debugPrint('⚠️ Error loading goal weight from goals: $e');
+      }
+    }
+  }
+  
   /// Public method to be called when goals are updated in settings
-  /// This provides real-time updates for starting weight
+  /// This provides real-time updates for starting weight and goal weight
   void notifyGoalsChanged() {
-    debugPrint('🔄 Today: Goals changed notification received - reloading starting weight...');
+    debugPrint('🔄 Today: Goals changed notification received - reloading weights...');
     _loadStartingWeight();
+    _loadGoalWeight();
+    update(); // Trigger UI rebuild to show updated values
   }
 
   // Format date for API (YY-MM-dd format, e.g., "26-01-19" for January 19, 2026)
@@ -717,7 +845,8 @@ class TodayController extends GetxController {
   }
 
   void openWeighInModal() {
-    weightController.text = currentWeight.value.toString();
+    // Reset weight field to blank - user must enter manually
+    weightController.clear();
     selectedDate.value = DateTime.now();
     showWeighInModal.value = true;
   }
