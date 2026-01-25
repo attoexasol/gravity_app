@@ -7,6 +7,7 @@ import '../../../../data/model/today_screen.dart';
 import '../../../../app/routes/app_routes.dart';
 import '../../../../data/repositories/ai_coach_repository.dart';
 import '../../../../data/repositories/user_gravity_repository.dart';
+import '../../../../data/repositories/goals_repository.dart';
 import '../../../../data/model/user_gravity_entry.dart';
 import '../../../../data/model/date_wise_gravity_response.dart';
 import '../../../../data/model/api_response.dart';
@@ -54,6 +55,7 @@ class TodayController extends GetxController {
   // Repositories
   final AiCoachRepository _aiCoachRepository = AiCoachRepository();
   final UserGravityRepository _gravityRepository = UserGravityRepository();
+  final GoalsRepository _goalsRepository = GoalsRepository();
 
   // Navigation guard to prevent multiple rapid calls
   bool _isNavigating = false;
@@ -72,6 +74,10 @@ class TodayController extends GetxController {
     // Load starting weight and goal weight from storage (set from Settings)
     _loadStartingWeight();
     _loadGoalWeight();
+
+    // Fetch goal weight from API to ensure we have the latest data
+    // This is critical after logout/login when local storage might be cleared
+    _fetchGoalWeightFromAPI();
 
     // Fetch date-wise gravity data on screen load
     fetchDateWiseGravity();
@@ -283,12 +289,66 @@ class TodayController extends GetxController {
     }
   }
   
+  /// Fetch goal weight (target weight) from API
+  /// This ensures we have the latest goal weight from backend, especially after logout/login
+  /// when local storage might be cleared
+  Future<void> _fetchGoalWeightFromAPI() async {
+    try {
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        debugPrint('⚠️ Token not found, skipping goal weight API fetch');
+        return;
+      }
+
+      debugPrint('🔍 Fetching goal weight from API...');
+      final response = await _goalsRepository.getSingleGoal(token: apiToken);
+
+      if (response.isSuccess && response.data != null) {
+        final goalData = response.data!;
+        final targetWeightStr = goalData['target_weight']?.toString();
+        
+        if (targetWeightStr != null && targetWeightStr.isNotEmpty) {
+          final targetWeight = double.tryParse(targetWeightStr);
+          if (targetWeight != null && targetWeight > 0) {
+            goalWeight.value = targetWeight;
+            debugPrint('✅ Goal weight (target) loaded from API: $targetWeight kg');
+            
+            // Also update local storage for faster future loads
+            final savedGoals = PreferencesService.getStorage().read('userGoals');
+            if (savedGoals != null) {
+              try {
+                final goalsMap = jsonDecode(savedGoals) as Map<String, dynamic>;
+                goalsMap['targetWeight'] = targetWeightStr;
+                PreferencesService.getStorage().write('userGoals', jsonEncode(goalsMap));
+                debugPrint('💾 Goal weight saved to local storage for faster future loads');
+              } catch (e) {
+                debugPrint('⚠️ Error updating goal weight in storage: $e');
+              }
+            }
+          } else {
+            debugPrint('⚠️ Invalid target weight from API: $targetWeightStr');
+          }
+        } else {
+          debugPrint('⚠️ Target weight not found in API response');
+        }
+      } else {
+        debugPrint('⚠️ Goals API returned no data or failed: ${response.message}');
+        // Keep existing value from storage if API fails
+      }
+    } catch (e) {
+      debugPrint('❌ Error fetching goal weight from API: $e');
+      // Keep existing value from storage on error
+    }
+  }
+  
   /// Public method to be called when goals are updated in settings
   /// This provides real-time updates for starting weight and goal weight
   void notifyGoalsChanged() {
     debugPrint('🔄 Today: Goals changed notification received - reloading weights...');
     _loadStartingWeight();
     _loadGoalWeight();
+    // Also fetch from API to ensure we have the latest data
+    _fetchGoalWeightFromAPI();
     update(); // Trigger UI rebuild to show updated values
   }
 
@@ -361,9 +421,25 @@ class TodayController extends GetxController {
           totalNutrition.value = data.nutritionCalories!;
         }
         
+        // If goalWeightLoss is available from API and goalWeight is still at default/0,
+        // calculate target weight from goalWeightLoss: targetWeight = startingWeight - goalWeightLoss
+        if (data.goalWeightLoss != null && data.startingWeight != null) {
+          final calculatedTarget = data.startingWeight! - data.goalWeightLoss!;
+          // Only update if goalWeight is still at default (71.5) or invalid (0 or equals starting)
+          if (goalWeight.value <= 0 || goalWeight.value == 71.5 || goalWeight.value >= data.startingWeight!) {
+            if (calculatedTarget > 0 && calculatedTarget < data.startingWeight!) {
+              goalWeight.value = calculatedTarget;
+              debugPrint('📊 Goal weight calculated from API goalWeightLoss: $calculatedTarget kg (from ${data.startingWeight} - ${data.goalWeightLoss})');
+            }
+          }
+        }
+        
         hasError.value = false;
         errorMessage.value = '';
         debugPrint('✅ Date-wise gravity data loaded successfully');
+        
+        // Log weight journey values after API data is loaded
+        logWeightJourneyValues();
       } else {
         // No data exists for this date - this is NORMAL for new users or days without entries
         // Don't treat this as an error - just show UI with default/empty values

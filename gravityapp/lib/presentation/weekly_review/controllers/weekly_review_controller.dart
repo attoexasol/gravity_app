@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
 import '../../../data/model/weekly_review.dart';
+import '../../../data/model/day_wise_goal_completion.dart';
+import '../../../data/repositories/user_gravity_repository.dart';
+import '../../../core/services/token_manager.dart';
 import '../../../app/routes/app_routes.dart';
 
-/// Weekly Review Controller using GetX - UI Only (No API)
+/// Weekly Review Controller using GetX with API integration
 class WeeklyReviewController extends GetxController {
+  // Repository
+  final UserGravityRepository _repository = UserGravityRepository();
+  final TokenManager _tokenManager = TokenManager();
+
   // Selected week index
   final selectedWeekIndex = 0.obs;
 
@@ -18,11 +26,15 @@ class WeeklyReviewController extends GetxController {
   // Weekly review data
   final weeklyReview = Rx<WeeklyReview?>(null);
 
+  // Loading state
+  final isLoading = false.obs;
+
   @override
   void onInit() {
     super.onInit();
     _generateWeekOptions();
-    _loadMockData();
+    // Load data for current week (index 0)
+    _fetchWeeklyData();
   }
 
   /// Generate week options (last 8 weeks)
@@ -64,7 +76,175 @@ class WeeklyReviewController extends GetxController {
     weekOptions.value = weeks;
   }
 
-  /// Load mock data for UI demonstration
+  /// Fetch weekly goal completion data from API
+  Future<void> _fetchWeeklyData() async {
+    if (weekOptions.isEmpty) {
+      debugPrint('⚠️ Week options not generated yet');
+      return;
+    }
+
+    final selectedWeek = weekOptions[selectedWeekIndex.value];
+    final startDate = selectedWeek.startDate;
+    final endDate = selectedWeek.endDate;
+
+    // Format dates as YYYY-MM-DD
+    final startDateStr = DateFormat('yyyy-MM-dd').format(startDate);
+    final endDateStr = DateFormat('yyyy-MM-dd').format(endDate);
+
+    // Get API token
+    final apiToken = _tokenManager.getAccessToken();
+    if (apiToken == null || apiToken.isEmpty) {
+      debugPrint('⚠️ No API token available, using mock data');
+      _loadMockData();
+      return;
+    }
+
+    isLoading.value = true;
+
+    try {
+      debugPrint('🔄 Fetching weekly goal completion for: $startDateStr to $endDateStr');
+
+      final response = await _repository.fetchWeeklyGoalCompletion(
+        apiToken: apiToken,
+        startDate: startDateStr,
+        endDate: endDateStr,
+      );
+
+      if (response.isSuccess && response.data != null && response.data!.isNotEmpty) {
+        debugPrint('✅ Successfully fetched ${response.data!.length} days of data');
+        _mapApiDataToWeeklyReview(response.data!, startDate);
+      } else {
+        debugPrint('⚠️ API returned no data or failed, using mock data');
+        debugPrint('   Status: ${response.status}, Message: ${response.message}');
+        _loadMockData();
+      }
+    } catch (e) {
+      debugPrint('❌ Error fetching weekly data: $e');
+      // Keep previous data visible on error (don't clear)
+      if (weeklyReview.value == null) {
+        _loadMockData();
+      }
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// Map API response to WeeklyReview model
+  void _mapApiDataToWeeklyReview(
+    List<DayWiseGoalCompletion> apiData,
+    DateTime weekStart,
+  ) {
+    // Initialize arrays for each goal (7 days: Mon-Sun)
+    final nutrition = List<PillarStatus>.filled(7, PillarStatus.missed);
+    final hydration = List<PillarStatus>.filled(7, PillarStatus.missed);
+    final sleep = List<PillarStatus>.filled(7, PillarStatus.missed);
+    final steps = List<PillarStatus>.filled(7, PillarStatus.missed);
+    final fasting = List<PillarStatus>.filled(7, PillarStatus.missed);
+    final weighin = List<PillarStatus>.filled(7, PillarStatus.missed);
+
+    // Helper function to convert API status string to PillarStatus enum
+    PillarStatus _mapStatus(String status) {
+      switch (status.toLowerCase()) {
+        case 'completed':
+          return PillarStatus.complete;
+        case 'partial':
+          return PillarStatus.partial;
+        case 'missed':
+        default:
+          return PillarStatus.missed;
+      }
+    }
+
+    // Helper function to get weekday index (0=Monday, 6=Sunday)
+    int _getWeekdayIndex(DateTime date) {
+      // DateTime.weekday: 1=Monday, 7=Sunday
+      // We want: 0=Monday, 6=Sunday
+      return date.weekday - 1;
+    }
+
+    // Map each day's data to the correct weekday position
+    for (final dayData in apiData) {
+      try {
+        // Parse date string - try multiple formats
+        DateTime? date;
+        try {
+          date = DateFormat('yyyy-MM-dd').parse(dayData.date);
+        } catch (e) {
+          // Try alternative formats if needed
+          try {
+            date = DateTime.parse(dayData.date);
+          } catch (e2) {
+            debugPrint('⚠️ Could not parse date: ${dayData.date}');
+            continue; // Skip this day if date parsing fails
+          }
+        }
+
+        if (date == null) continue;
+
+        final weekdayIndex = _getWeekdayIndex(date);
+
+        // Ensure index is within bounds (0-6)
+        if (weekdayIndex >= 0 && weekdayIndex < 7) {
+          // Map each goal status to the correct weekday position
+          nutrition[weekdayIndex] = _mapStatus(dayData.nutration.status);
+          hydration[weekdayIndex] = _mapStatus(dayData.hydration.status);
+          sleep[weekdayIndex] = _mapStatus(dayData.sleep.status);
+          steps[weekdayIndex] = _mapStatus(dayData.steps.status);
+          weighin[weekdayIndex] = _mapStatus(dayData.weight.status);
+          // Note: Fasting is not in API response, keep as missed
+        } else {
+          debugPrint('⚠️ Invalid weekday index: $weekdayIndex for date: ${dayData.date}');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Error processing day data for ${dayData.date}: $e');
+      }
+    }
+
+    // Create consistency data
+    final consistency = WeekConsistencyData(
+      nutrition: nutrition,
+      hydration: hydration,
+      sleep: sleep,
+      steps: steps,
+      fasting: fasting, // Not in API, keep as missed
+      weighin: weighin,
+    );
+
+    // Keep existing patterns and status insights (not from API)
+    final patterns = weeklyReview.value?.patterns ?? [
+      WeekPattern(
+        category: 'Nutrition',
+        insight: 'Dinners were least consistent mid-week',
+      ),
+      WeekPattern(
+        category: 'Steps',
+        insight: 'Steps were consistent on logged days',
+      ),
+    ];
+
+    final statusInsights = weeklyReview.value?.statusInsights ?? WeekStatusInsights(
+      weightTrend: 'Trending Down',
+      consistency: 'Moderate',
+      momentum: 'Building',
+    );
+
+    // Count days with at least one completed goal
+    final daysLogged = apiData.length;
+
+    // Update weekly review
+    weeklyReview.value = WeeklyReview(
+      phase: weeklyReview.value?.phase ?? 'Weight Loss',
+      daysLogged: daysLogged,
+      summary: weeklyReview.value?.summary ?? 'This week shows steady effort with a few gaps',
+      consistency: consistency,
+      patterns: patterns,
+      statusInsights: statusInsights,
+    );
+
+    debugPrint('✅ Mapped API data to WeeklyReview model');
+  }
+
+  /// Load mock data for UI demonstration (fallback)
   void _loadMockData() {
     // Mock consistency data
     final consistency = WeekConsistencyData(
@@ -215,15 +395,15 @@ class WeeklyReviewController extends GetxController {
   void selectWeek(int index) {
     selectedWeekIndex.value = index;
     showWeekPicker.value = false;
-    // Reload data for selected week (in real app, this would fetch from API)
-    _loadMockData();
+    // Fetch data for selected week from API
+    _fetchWeeklyData();
   }
 
   /// Navigate to older week
   void navigateToOlderWeek() {
     if (selectedWeekIndex.value < weekOptions.length - 1) {
       selectedWeekIndex.value = selectedWeekIndex.value + 1;
-      _loadMockData();
+      _fetchWeeklyData();
     }
   }
 
@@ -231,7 +411,7 @@ class WeeklyReviewController extends GetxController {
   void navigateToNewerWeek() {
     if (selectedWeekIndex.value > 0) {
       selectedWeekIndex.value = selectedWeekIndex.value - 1;
-      _loadMockData();
+      _fetchWeeklyData();
     }
   }
 

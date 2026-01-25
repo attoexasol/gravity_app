@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../../core/services/api_service.dart';
 import '../model/api_response.dart';
 import '../model/user_gravity_entry.dart';
+import '../model/day_wise_goal_completion.dart';
 
 /// User Gravity Repository - Handles User Gravity API calls
 class UserGravityRepository {
@@ -412,6 +413,66 @@ class UserGravityRepository {
     } catch (e) {
       debugPrint('❌ GetMonthlyGravityWeight Unknown Error: $e');
       return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Fetch weekly goal completion data
+  /// API: POST https://gravity.attoexasolutions.com/api/day-wise-goal-completion
+  /// Request Body: { "api_token": string, "start_date": string, "end_date": string }
+  /// Response: Array of day-wise goal completion objects
+  Future<ApiResponse<List<DayWiseGoalCompletion>>> fetchWeeklyGoalCompletion({
+    required String apiToken,
+    required String startDate, // YYYY-MM-DD format
+    required String endDate, // YYYY-MM-DD format
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'api_token': apiToken,
+        'start_date': startDate,
+        'end_date': endDate,
+      };
+
+      debugPrint('📤 GET Weekly Goal Completion Request:');
+      debugPrint('   Start Date: $startDate');
+      debugPrint('   End Date: $endDate');
+
+      final response = await _apiService.post(
+        '/day-wise-goal-completion',
+        body: body,
+      );
+
+      debugPrint('📥 GET Weekly Goal Completion Response Status: ${response['status']}');
+
+      List<DayWiseGoalCompletion> completions = [];
+      if (response['data'] != null && response['data'] is List) {
+        final dataList = response['data'] as List;
+        completions = dataList
+            .map((item) => DayWiseGoalCompletion.fromJson(item as Map<String, dynamic>))
+            .toList();
+        debugPrint('📥 Parsed ${completions.length} day-wise goal completion entries');
+      } else {
+        debugPrint('⚠️ No data array found in response or data is not a list');
+      }
+
+      return ApiResponse<List<DayWiseGoalCompletion>>(
+        status: response['status'] ?? false,
+        message: response['message'] ?? '',
+        data: completions,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ FetchWeeklyGoalCompletion API Error: ${e.message}');
+      return ApiResponse<List<DayWiseGoalCompletion>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ FetchWeeklyGoalCompletion Unknown Error: $e');
+      return ApiResponse<List<DayWiseGoalCompletion>>(
         status: false,
         message: 'An unexpected error occurred. Please try again.',
         error: e.toString(),
