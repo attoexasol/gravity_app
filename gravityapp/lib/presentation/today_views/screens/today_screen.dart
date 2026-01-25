@@ -28,17 +28,19 @@ class TodayScreen extends GetView<TodayController> {
                 // Scrollable content with pull-to-refresh
                 Expanded(
                   child: Obx(() {
-                    // Show skeleton loader while loading
-                    if (controller.isLoading.value && controller.dateWiseData.value == null) {
+                    // Show skeleton loader only on initial load (first time, no data yet)
+                    if (controller.isLoading.value && controller.dateWiseData.value == null && !controller.hasError.value) {
                       return _buildSkeletonLoader();
                     }
                     
-                    // Show error state if no data
-                    if (controller.hasError.value && controller.dateWiseData.value == null) {
+                    // Show error state ONLY for actual errors (network failures, etc.)
+                    // NOT for "no data" responses (which is normal for new users)
+                    if (controller.hasError.value && controller.errorMessage.value.isNotEmpty) {
                       return _buildErrorState(controller);
                     }
                     
-                    // Show content with fade animation
+                    // Always show content - even when no data exists (new users, empty days)
+                    // UI will display with default/empty values
                     return RefreshIndicator(
                       onRefresh: controller.onRefresh,
                       color: const Color(0xFF00B8A9),

@@ -45,11 +45,11 @@ class LoginController extends GetxController {
   void onInit() {
     super.onInit();
     // Initialize controllers in onInit to ensure they're created when controller is initialized
-    emailController = TextEditingController(text: "rajibduet02@gmail.com");
-    passwordController = TextEditingController(text: "Gravity@024017");
+    // emailController = TextEditingController(text: "rajibduet02@gmail.com");
+    // passwordController = TextEditingController(text: "Gravity@024017");
 
-    // emailController = TextEditingController(text: "");
-    // passwordController = TextEditingController(text: "");
+    emailController = TextEditingController(text: "");
+    passwordController = TextEditingController(text: "");
     
     // Clear error when user starts typing
     emailController.addListener(() {

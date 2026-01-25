@@ -365,18 +365,35 @@ class TodayController extends GetxController {
         errorMessage.value = '';
         debugPrint('✅ Date-wise gravity data loaded successfully');
       } else {
-        // No data exists for this date
-        hasError.value = true;
-        errorMessage.value = response.message.isNotEmpty 
-            ? response.message 
-            : 'No data available for this date';
+        // No data exists for this date - this is NORMAL for new users or days without entries
+        // Don't treat this as an error - just show UI with default/empty values
         dateWiseData.value = null;
-        debugPrint('⚠️ No data found for date: $dateString');
+        hasError.value = false; // Not an error - just no data yet
+        errorMessage.value = ''; // Clear any previous error messages
+        
+        // Reset to default values when no data exists (so UI shows empty/default state)
+        // Keep currentWeight and startingWeight from storage/previous values
+        // Reset only the daily tracking values
+        hydrationLiters.value = 0.0;
+        sleepHours.value = 0.0;
+        steps.value = 0;
+        totalNutrition.value = 0;
+        
+        debugPrint('ℹ️ No data found for date: $dateString - showing UI with default values');
       }
     } catch (e) {
+      // Only set error for actual exceptions (network failures, parsing errors, etc.)
+      // Not for "no data" responses (which are handled above)
       hasError.value = true;
       errorMessage.value = 'Failed to load data. Please try again.';
       dateWiseData.value = null;
+      
+      // Reset to default values on error too (so UI still shows)
+      hydrationLiters.value = 0.0;
+      sleepHours.value = 0.0;
+      steps.value = 0;
+      totalNutrition.value = 0;
+      
       debugPrint('❌ Error fetching date-wise gravity: $e');
     } finally {
       isLoading.value = false;
