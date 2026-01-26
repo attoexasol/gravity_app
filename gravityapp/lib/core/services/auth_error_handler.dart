@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'token_manager.dart';
 import 'session_manager.dart';
 import 'preferences_service.dart';
+import 'image_cache_service.dart';
 import '../../app/routes/app_routes.dart';
 
 /// Authentication Error Handler - Handles 401 errors and session management
@@ -140,6 +141,9 @@ class AuthErrorHandler {
       
       // Clear user data
       await PreferencesService.clearUserData();
+      
+      // Clear image cache to prevent old user's profile images from showing
+      await ImageCacheService.clearAllImageData();
       
       // Show session expired dialog if not already shown
       if (!_hasShownSessionExpiredDialog) {

@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:gravityapp/data/model/navigation_item.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../core/services/token_manager.dart';
+import '../../../core/services/image_cache_service.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../aicoach/controllers/ai_coach_controller.dart';
 import '../../community/controllers/community_controller.dart';
@@ -216,6 +217,9 @@ class MainLayoutController extends GetxController {
         // Clear user data while preserving onboarding
         // Note: Tokens are already cleared by logout() method
         await PreferencesService.clearUserData();
+        
+        // Clear image cache to prevent old user's profile images from showing
+        await ImageCacheService.clearAllImageData();
 
         // Navigate to login screen and clear navigation stack
         Get.offAllNamed('/login');
@@ -226,6 +230,10 @@ class MainLayoutController extends GetxController {
           final tokenManager = TokenManager();
           await tokenManager.clearTokens();
           await PreferencesService.clearUserData();
+          
+          // Clear image cache to prevent old user's profile images from showing
+          await ImageCacheService.clearAllImageData();
+          
           Get.offAllNamed('/login');
         } catch (clearError) {
           debugPrint('❌ Error clearing storage: $clearError');

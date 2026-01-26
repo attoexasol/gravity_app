@@ -143,17 +143,17 @@ class CommunityController extends GetxController {
     userName.value = PreferencesService.getUserName() ?? 'You';
 
     // Load profile image - prefer API URL over local path
-    final profileImageUrl =
-        PreferencesService.getStorage().read('user_profile_image_url')
-            as String?;
-    final profileImagePath =
-        PreferencesService.getStorage().read('user_profile_image') as String?;
+    // Use PreferencesService methods for consistency
+    final profileImageUrl = PreferencesService.getProfileImageUrl();
+    final profileImagePath = PreferencesService.getProfileImagePath();
 
+    // Only set profile image if it exists, otherwise use empty string
+    // This ensures new users don't see old cached images
     userProfileImage.value = profileImageUrl ?? profileImagePath ?? '';
 
     debugPrint('👤 User profile loaded:');
     debugPrint('   - Name: ${userName.value}');
-    debugPrint('   - Profile Image: ${userProfileImage.value}');
+    debugPrint('   - Profile Image: ${userProfileImage.value.isEmpty ? "None" : userProfileImage.value}');
   }
 
   /// Safely navigate back, handling snackbar errors

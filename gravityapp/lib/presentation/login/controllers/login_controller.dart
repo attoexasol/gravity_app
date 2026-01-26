@@ -45,11 +45,11 @@ class LoginController extends GetxController {
   void onInit() {
     super.onInit();
     // Initialize controllers in onInit to ensure they're created when controller is initialized
-    emailController = TextEditingController(text: "rajibduet02@gmail.com");
-    passwordController = TextEditingController(text: "Gravity@024017");
+    // emailController = TextEditingController(text: "rajibduet02@gmail.com");
+    // passwordController = TextEditingController(text: "Gravity@024017");
 
-    // emailController = TextEditingController(text: "");
-    // passwordController = TextEditingController(text: "");
+    emailController = TextEditingController(text: "");
+    passwordController = TextEditingController(text: "");
     
     // Clear error when user starts typing
     emailController.addListener(() {
@@ -277,15 +277,15 @@ class LoginController extends GetxController {
         await PreferencesService.saveUserType(userTypeString);
         debugPrint('✅ User type saved: $userTypeString');
 
+        // Clear any previous user's profile image first to prevent image leakage
+        await PreferencesService.clearProfileImage();
+        
         // Save profile image from API response if available
         if (response.data != null &&
             response.data!.profileImage != null &&
             response.data!.profileImage!.isNotEmpty) {
           final profileImageUrl = response.data!.profileImage!;
-          PreferencesService.getStorage().write(
-            'user_profile_image_url',
-            profileImageUrl,
-          );
+          await PreferencesService.saveProfileImageUrl(profileImageUrl);
           debugPrint('✅ Profile image saved from login: $profileImageUrl');
         } else {
           // Try to fetch user profile to get the latest profile image
@@ -297,17 +297,18 @@ class LoginController extends GetxController {
                 profileResponse.data!.profileImage != null &&
                 profileResponse.data!.profileImage!.isNotEmpty) {
               final profileImageUrl = profileResponse.data!.profileImage!;
-              PreferencesService.getStorage().write(
-                'user_profile_image_url',
-                profileImageUrl,
-              );
+              await PreferencesService.saveProfileImageUrl(profileImageUrl);
               debugPrint(
                 '✅ Profile image saved from profile API: $profileImageUrl',
               );
+            } else {
+              // User has no profile image - ensure it's cleared
+              debugPrint('✅ No profile image found for user - cleared previous image');
             }
           } catch (e) {
             debugPrint('⚠️ Could not fetch profile image: $e');
             // Continue with login even if profile fetch fails
+            // Profile image is already cleared above, so new user won't see old image
           }
         }
 

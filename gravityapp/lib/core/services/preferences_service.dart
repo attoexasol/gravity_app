@@ -97,12 +97,44 @@ class PreferencesService {
     return _storage.read(_userTypeKey);
   }
 
+  // Profile image storage keys
+  static const String _userProfileImageUrlKey = 'user_profile_image_url';
+  static const String _userProfileImageKey = 'user_profile_image';
+
+  // Profile image methods
+  static Future<void> saveProfileImageUrl(String url) async {
+    await _storage.write(_userProfileImageUrlKey, url);
+  }
+
+  static String? getProfileImageUrl() {
+    return _storage.read(_userProfileImageUrlKey) as String?;
+  }
+
+  static Future<void> saveProfileImagePath(String path) async {
+    await _storage.write(_userProfileImageKey, path);
+  }
+
+  static String? getProfileImagePath() {
+    return _storage.read(_userProfileImageKey) as String?;
+  }
+
+  /// Clear profile image data (URL and local path)
+  static Future<void> clearProfileImage() async {
+    await _storage.remove(_userProfileImageUrlKey);
+    await _storage.remove(_userProfileImageKey);
+    if (kDebugMode) {
+      debugPrint('✅ Profile image data cleared');
+    }
+  }
+
   // Clear user data (for logout)
   static Future<void> clearUserData() async {
     await _storage.remove(_userEmailKey);
     await _storage.remove(_userNameKey);
     await _storage.remove(_userIdKey);
     await _storage.remove(_userTypeKey);
+    // Also clear profile image data to prevent old user's image showing for new user
+    await clearProfileImage();
   }
 
   /// Clear authentication data (token and user data) while preserving onboarding status

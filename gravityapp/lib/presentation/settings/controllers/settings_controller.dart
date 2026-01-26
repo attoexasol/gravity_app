@@ -12,6 +12,7 @@ import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../core/services/token_manager.dart';
+import '../../../core/services/image_cache_service.dart';
 import '../screens/sections/profile_image_picker_modal.dart';
 import '../../../core/services/health_sync_service.dart'
     show HealthSyncService, HealthPlatform, SyncActivity;
@@ -129,8 +130,12 @@ class SettingsController extends GetxController {
               ? profileImageUrl
               : 'https://gravity.attoexasolutions.com/storage/$profileImageUrl';
           
-          PreferencesService.getStorage().write('user_profile_image_url', fullImageUrl);
+          await PreferencesService.saveProfileImageUrl(fullImageUrl);
           debugPrint('✅ Profile image saved from API: $fullImageUrl');
+        } else {
+          // User has no profile image - clear any previous image
+          await PreferencesService.clearProfileImage();
+          debugPrint('✅ No profile image found - cleared previous image');
         }
 
         // Update user reactive value
@@ -139,7 +144,7 @@ class SettingsController extends GetxController {
             ? (userData.profileImage!.startsWith('http')
                 ? userData.profileImage!
                 : 'https://gravity.attoexasolutions.com/storage/${userData.profileImage!}')
-            : PreferencesService.getStorage().read('user_profile_image_url') as String?;
+            : PreferencesService.getProfileImageUrl();
 
         user.value = UserAccountInfo(
           name: userData.name,
@@ -168,12 +173,9 @@ class SettingsController extends GetxController {
     final userInitials = UserAccountInfo.generateInitials(userName);
 
     // Prefer API URL over local path
-    final profileImageUrl =
-        PreferencesService.getStorage().read('user_profile_image_url')
-            as String?;
-    final profileImagePath =
-        profileImageUrl ??
-        (PreferencesService.getStorage().read('user_profile_image') as String?);
+    // Use PreferencesService methods for consistency
+    final profileImageUrl = PreferencesService.getProfileImageUrl();
+    final profileImagePath = profileImageUrl ?? PreferencesService.getProfileImagePath();
 
     user.value = UserAccountInfo(
       name: userName,
@@ -438,14 +440,8 @@ Future<void> saveProfileImage() async {
     if (uploadResponse.isSuccess && uploadResponse.data != null) {
       final profileImageUrl = uploadResponse.data!;
 
-      PreferencesService.getStorage().write(
-        'user_profile_image_url',
-        profileImageUrl,
-      );
-      PreferencesService.getStorage().write(
-        'user_profile_image',
-        imagePathToUpload,
-      );
+      await PreferencesService.saveProfileImageUrl(profileImageUrl);
+      await PreferencesService.saveProfileImagePath(imagePathToUpload);
 
       user.value = user.value.copyWith(
         profileImagePath: profileImageUrl,
@@ -468,10 +464,7 @@ Future<void> saveProfileImage() async {
       );
     } else {
       // Fallback: local save only
-      PreferencesService.getStorage().write(
-        'user_profile_image',
-        imagePathToUpload,
-      );
+      await PreferencesService.saveProfileImagePath(imagePathToUpload);
 
       user.value = user.value.copyWith(
         profileImagePath: imagePathToUpload,
@@ -1080,10 +1073,7 @@ Future<void> saveProfileImage() async {
       if (uploadResponse.isSuccess && uploadResponse.data != null) {
         // Save the API returned profile image URL
         final profileImageUrl = uploadResponse.data!;
-        PreferencesService.getStorage().write(
-          'user_profile_image_url',
-          profileImageUrl,
-        );
+        await PreferencesService.saveProfileImageUrl(profileImageUrl);
 
         // Update user info with the API URL
         user.value = user.value.copyWith(profileImagePath: profileImageUrl);
@@ -1846,6 +1836,17 @@ Future<void> saveProfileImage() async {
         // Use clearAuthData() instead of clearAll() to safely preserve onboarding
         // Note: Tokens are already cleared by logout() method, but we clear user data here
         await PreferencesService.clearUserData();
+        
+        // Clear image cache to prevent old user's profile images from showing
+        await ImageCacheService.clearAllImageData();
+        
+        // Reset user state in controller
+        user.value = UserAccountInfo(
+          name: 'User',
+          email: 'user@example.com',
+          initials: 'U',
+          profileImagePath: null,
+        );
 
         // Navigate to login screen and clear navigation stack
         Get.offAllNamed('/login');
@@ -1859,6 +1860,18 @@ Future<void> saveProfileImage() async {
           await tokenManager.clearTokens();
           // Use clearAuthData() to preserve onboarding
           await PreferencesService.clearUserData();
+          
+          // Clear image cache to prevent old user's profile images from showing
+          await ImageCacheService.clearAllImageData();
+          
+          // Reset user state in controller
+          user.value = UserAccountInfo(
+            name: 'User',
+            email: 'user@example.com',
+            initials: 'U',
+            profileImagePath: null,
+          );
+          
           Get.offAllNamed('/login');
         } catch (clearError) {
           debugPrint('❌ Error clearing storage: $clearError');

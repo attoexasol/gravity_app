@@ -28,9 +28,9 @@ class AccountSection extends StatelessWidget {
     
     // Load profile image from preferences as fallback (for persistence)
     // Prefer API URL over local path, matching Community page behavior
-    final profileImageUrl = PreferencesService.getStorage().read('user_profile_image_url') as String?;
-    final profileImagePathFromStorage = profileImageUrl ?? 
-        (PreferencesService.getStorage().read('user_profile_image') as String?);
+    // Use PreferencesService methods for consistency
+    final profileImageUrl = PreferencesService.getProfileImageUrl();
+    final profileImagePathFromStorage = profileImageUrl ?? PreferencesService.getProfileImagePath();
     
     // Use controller value if available, otherwise fallback to storage
     final effectiveProfileImagePath = profileImagePath ?? profileImagePathFromStorage;
