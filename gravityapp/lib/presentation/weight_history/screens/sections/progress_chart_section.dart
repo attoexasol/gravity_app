@@ -69,6 +69,8 @@ class ProgressChartSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // IMPORTANT: Graph container is ALWAYS visible for both new and existing users
+    // Conditional rendering only applies INSIDE the container (empty state vs chart)
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 16.w),
       padding: EdgeInsets.all(18.r),
@@ -94,7 +96,10 @@ class ProgressChartSection extends StatelessWidget {
           }),
           SizedBox(height: 16.h),
           
-          // Chart content
+          // Chart content - conditional rendering inside container:
+          // - No data: Empty placeholder with "No data available" message
+          // - Single entry: Single point chart
+          // - Multiple entries: Full line chart with trend
           Obx(() {
             final sortedEntries = _getSortedEntries();
             
@@ -133,7 +138,7 @@ class ProgressChartSection extends StatelessWidget {
     );
   }
 
-  /// Build empty state
+  /// Build empty state - shown when no data exists (new users)
   Widget _buildEmptyState() {
     return SizedBox(
       height: 240.h,
@@ -148,9 +153,17 @@ class ProgressChartSection extends StatelessWidget {
             ),
             SizedBox(height: 12.h),
             Text(
-              'No weight data available',
+              'No data available',
               style: ResponsiveTextStyles.textSm.copyWith(
                 color: const Color(0xFF0A2342).withOpacity(0.5),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            SizedBox(height: 4.h),
+            Text(
+              'Start logging your weight to see your progress',
+              style: ResponsiveTextStyles.textXs.copyWith(
+                color: const Color(0xFF0A2342).withOpacity(0.4),
               ),
             ),
           ],
@@ -160,19 +173,33 @@ class ProgressChartSection extends StatelessWidget {
   }
 
   /// Build the main chart
+  /// Handles three cases:
+  /// 1. No data: Returns empty state (handled in build method)
+  /// 2. Single entry: Shows single point chart
+  /// 3. Multiple entries: Shows full line chart with trend
   Widget _buildChart(List<ChartWeightEntry> sortedEntries) {
+    // Ensure we have at least one entry (this method is only called when entries exist)
+    assert(sortedEntries.isNotEmpty, 'Chart should not be built with empty entries');
+    
+    final isSingleEntry = sortedEntries.length == 1;
+    
     // Calculate Y-axis bounds with padding: minY = lowest - 2, maxY = highest + 2
     final weights = sortedEntries.map((e) => e.weight).toList();
     final minWeight = weights.reduce((a, b) => a < b ? a : b);
     final maxWeight = weights.reduce((a, b) => a > b ? a : b);
     
-    final minY = (minWeight - 2).roundToDouble();
-    final maxY = (maxWeight + 2).roundToDouble();
+    // For single entry, add more padding to make the point visible
+    final yPadding = isSingleEntry ? 5.0 : 2.0;
+    final minY = (minWeight - yPadding).roundToDouble();
+    final maxY = (maxWeight + yPadding).roundToDouble();
     
     // Convert entries to FlSpot (using index as X value)
     final chartSpots = sortedEntries.asMap().entries.map((entry) {
       return FlSpot(entry.key.toDouble(), entry.value.weight);
     }).toList();
+    
+    // For single entry, ensure X-axis has proper bounds (0 to 0, but with padding for visibility)
+    final maxX = isSingleEntry ? 1.0 : (sortedEntries.length - 1).toDouble();
     
     // Calculate X-axis interval for weekly labels
     final xAxisInterval = _calculateXAxisInterval(sortedEntries.length);
@@ -189,8 +216,9 @@ class ProgressChartSection extends StatelessWidget {
               maxY: maxY,
               
               // X-axis bounds (index-based)
+              // For single entry, use 0 to 1 to ensure point is visible
               minX: 0,
-              maxX: (sortedEntries.length - 1).toDouble(),
+              maxX: maxX,
               
               // Clip data to chart bounds
               clipData: const FlClipData.all(),
@@ -301,7 +329,7 @@ class ProgressChartSection extends StatelessWidget {
                 LineChartBarData(
                   spots: [
                     FlSpot(0, controller.goalWeight.value),
-                    FlSpot((sortedEntries.length - 1).toDouble(), controller.goalWeight.value),
+                    FlSpot(maxX, controller.goalWeight.value),
                   ],
                   isCurved: false,
                   color: const Color(0xFFFFB84D), // Amber/yellow
