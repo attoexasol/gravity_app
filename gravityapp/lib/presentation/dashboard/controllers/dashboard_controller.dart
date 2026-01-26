@@ -343,7 +343,7 @@ class DashboardController extends GetxController {
       ApiResponse<UserGravityEntry> response;
 
       if (todayEntryId.value != null) {
-        // Update existing entry
+        // Try to update existing entry first
         Get.printInfo(info: '🔄 Updating existing entry (ID: ${todayEntryId.value})');
         response = await _gravityRepository.updateUserGravity(
           id: todayEntryId.value!,
@@ -356,6 +356,31 @@ class DashboardController extends GetxController {
           dataSource: dataSource,
           date: todayStr,
         );
+
+        // If update fails with 404 "Record not found", fallback to CREATE
+        // This handles cases where:
+        // - Record was deleted from database
+        // - ID is stale (from previous day/session)
+        // - Date mismatch between app and database
+        if (!response.isSuccess && 
+            (response.message.toLowerCase().contains('record not found') ||
+             response.message.toLowerCase().contains('not found'))) {
+          Get.printInfo(info: '⚠️ Update failed with 404, falling back to CREATE (stale ID: ${todayEntryId.value})');
+          todayEntryId.value = null; // Clear stale ID
+          
+          // Retry as CREATE
+          Get.printInfo(info: '➕ Creating new entry (fallback from failed update)');
+          response = await _gravityRepository.createUserGravity(
+            apiToken: apiToken,
+            weight: currentWeight,
+            steps: currentSteps > 0 ? currentSteps : null,
+            sleepHours: currentSleepHours > 0 ? currentSleepHours : null,
+            hydrationLiters: currentHydration,
+            nutration: 'good',
+            dataSource: dataSource,
+            date: todayStr,
+          );
+        }
       } else {
         // Create new entry
         Get.printInfo(info: '➕ Creating new entry');
