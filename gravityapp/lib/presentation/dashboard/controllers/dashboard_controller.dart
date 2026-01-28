@@ -11,6 +11,7 @@ import '../../../core/services/preferences_service.dart';
 import '../../../data/repositories/user_gravity_repository.dart';
 import '../../../data/model/user_gravity_entry.dart';
 import '../../../data/model/api_response.dart';
+import '../../today_views/controllers/today_controller.dart';
 
 class DashboardController extends GetxController {
   final HealthSyncService _healthService = HealthSyncService();
@@ -27,10 +28,8 @@ class DashboardController extends GetxController {
   final previousWeight = 0.0.obs; // in kg
   final mealsEaten = 0.obs; // Number of meals eaten today (0-2)
 
-  // Today's entry from DB
-  final todayEntry = Rx<UserGravityEntry?>(null);
+  // Today's entry ID (set when creating/updating entry, used for upsert logic)
   final todayEntryId = Rx<int?>(null);
-  final isDbLoaded = false.obs; // Track if DB load was attempted
 
   // Throttle for saving to prevent multiple rapid API calls
   DateTime? _lastSaveTime;
@@ -75,7 +74,8 @@ class DashboardController extends GetxController {
     // Listen for goal changes in storage (when updated from settings)
     _setupGoalsListener();
     
-    // Load today's entry from DB
+    // Load today's entry from backend using single_user_gravity API
+    // This provides Steps, Sleep, Hydration for "Today's Progress" and Weight for "Weight Journey"
     loadTodayFromDb();
     
     // Subscribe to health service updates BEFORE initializing
@@ -217,89 +217,161 @@ class DashboardController extends GetxController {
     return null;
   }
 
-  /// Load today's entry from database
+  /// Load today's entry from backend using single_user_gravity API
+  /// Priority: Health Sync > Backend API (single_user_gravity) > Existing Reactive State > Defaults
+  /// This method fetches today's entry ID (if needed) and then calls single_user_gravity API
   Future<void> loadTodayFromDb() async {
     try {
       final apiToken = PreferencesService.getAuthToken();
       if (apiToken == null || apiToken.isEmpty) {
         Get.printError(info: 'API token not found, cannot load today\'s entry');
-        isDbLoaded.value = true; // Mark as attempted
         return;
       }
 
-      final response = await _gravityRepository.getAllUserGravity(apiToken: apiToken);
-      isDbLoaded.value = true;
-
-      if (response.isSuccess && response.data != null) {
+      // Step 1: Get today's entry ID (if we don't already have it)
+      int? entryId = todayEntryId.value;
+      
+      if (entryId == null) {
+        // Need to find today's entry ID first
         final todayStr = _todayString;
-        final todayEntryFound = response.data!.firstWhere(
-          (entry) => entry.date == todayStr,
-          orElse: () => UserGravityEntry(date: ''),
-        );
+        debugPrint('🔍 Finding today\'s entry ID for date: $todayStr');
+        
+        final allEntriesResponse = await _gravityRepository.getAllUserGravity(apiToken: apiToken);
+        
+        if (allEntriesResponse.isSuccess && allEntriesResponse.data != null) {
+          final todayEntryFound = allEntriesResponse.data!.firstWhere(
+            (entry) => entry.date == todayStr,
+            orElse: () => UserGravityEntry(date: ''),
+          );
+          
+          if (todayEntryFound.date.isNotEmpty && todayEntryFound.id != null) {
+            entryId = todayEntryFound.id;
+            todayEntryId.value = entryId;
+            debugPrint('✅ Found today\'s entry ID: $entryId');
+          } else {
+            debugPrint('ℹ️ No entry found for today - will use health sync or defaults');
+            // No entry exists yet - will be created on first health sync or manual entry
+            return;
+          }
+        } else {
+          Get.printError(info: 'Failed to load entries: ${allEntriesResponse.message}');
+          return;
+        }
+      }
 
-        if (todayEntryFound.date.isNotEmpty) {
-          todayEntry.value = todayEntryFound;
-          todayEntryId.value = todayEntryFound.id;
-
-          // Populate UI values from DB entry with priority logic
-          // Priority: Health Sync (if successful) > Manual DB Entry > Default
-          final oldMetrics = healthMetrics.value;
-          final isHealthSyncSuccessful = oldMetrics.syncStatus == SyncStatus.success;
-          final isDbEntryManual = todayEntryFound.dataSource == 'manual';
-          final hasHealthSyncPlatform = oldMetrics.platform == HealthPlatform.apple || 
-                                         oldMetrics.platform == HealthPlatform.google;
+      // Step 2: Call single_user_gravity API with today's entry ID
+      if (entryId != null) {
+        debugPrint('📞 Calling single_user_gravity API with ID: $entryId');
+        
+        final singleEntryResponse = await _gravityRepository.getSingleUserGravity(id: entryId);
+        
+        if (singleEntryResponse.isSuccess && singleEntryResponse.data != null) {
+          final entry = singleEntryResponse.data!;
+          
+          // Merge backend API data with health sync data
+          // Priority: Health Sync (if successful) > Backend API > Existing Reactive State
+          final currentMetrics = healthMetrics.value;
+          final isHealthSyncSuccessful = currentMetrics.syncStatus == SyncStatus.success;
+          final hasHealthSyncPlatform = currentMetrics.platform == HealthPlatform.apple || 
+                                         currentMetrics.platform == HealthPlatform.google;
           
           // Determine final values with priority
-          // Priority: If health sync was successful, always use health sync data (even if 0)
-          // This ensures we show the most up-to-date data from Google Fit/Apple Health
-          final finalSteps = (isHealthSyncSuccessful && hasHealthSyncPlatform)
-              ? oldMetrics.steps  // Health sync wins (most recent, even if 0)
-              : (todayEntryFound.steps ?? oldMetrics.steps);  // Use DB or fallback
+          // Priority: Health Sync (if successful) > Backend API > Existing Reactive State
+          // When health sync is NOT successful, ALWAYS use backend API data (even if 0)
+          // When health sync IS successful, use health sync data (even if 0)
           
-          final finalSleep = (isHealthSyncSuccessful && hasHealthSyncPlatform)
-              ? oldMetrics.sleepHours  // Health sync wins (most recent, even if 0)
-              : (todayEntryFound.sleepHours ?? oldMetrics.sleepHours);  // Use DB or fallback
+          int finalSteps;
+          if (isHealthSyncSuccessful && hasHealthSyncPlatform) {
+            // Health sync is active - use health sync data (most recent, even if 0)
+            finalSteps = currentMetrics.steps;
+            debugPrint('   ✅ Using health sync steps: $finalSteps');
+          } else {
+            // Health sync is NOT active - use backend API data
+            // Check if backend API has steps data (even if 0, it's valid)
+            if (entry.steps != null) {
+              finalSteps = entry.steps!;
+              debugPrint('   ✅ Using backend API steps: $finalSteps');
+            } else {
+              // Backend API doesn't have steps - fall back to existing state
+              finalSteps = currentMetrics.steps;
+              debugPrint('   ⚠️ Backend API steps is null, using existing: $finalSteps');
+            }
+          }
           
-          final finalWater = (isHealthSyncSuccessful && hasHealthSyncPlatform)
-              ? (oldMetrics.waterIntake ?? 0.0)  // Health sync wins (most recent, even if 0 or null)
-              : (todayEntryFound.hydrationLiters ?? oldMetrics.waterIntake ?? 0.0);  // Use DB or fallback
+          double finalSleep;
+          if (isHealthSyncSuccessful && hasHealthSyncPlatform) {
+            // Health sync is active - use health sync data (most recent, even if 0)
+            finalSleep = currentMetrics.sleepHours;
+            debugPrint('   ✅ Using health sync sleep: $finalSleep');
+          } else {
+            // Health sync is NOT active - use backend API data
+            // Check if backend API has sleep data (even if 0, it's valid)
+            if (entry.sleepHours != null) {
+              finalSleep = entry.sleepHours!;
+              debugPrint('   ✅ Using backend API sleep: $finalSleep');
+            } else {
+              // Backend API doesn't have sleep - fall back to existing state
+              finalSleep = currentMetrics.sleepHours;
+              debugPrint('   ⚠️ Backend API sleep is null, using existing: $finalSleep');
+            }
+          }
           
+          double finalWater;
+          if (isHealthSyncSuccessful && hasHealthSyncPlatform) {
+            // Health sync is active - use health sync data (most recent, even if 0 or null)
+            finalWater = currentMetrics.waterIntake ?? 0.0;
+            debugPrint('   ✅ Using health sync hydration: $finalWater');
+          } else {
+            // Health sync is NOT active - use backend API data
+            // Check if backend API has hydration data (even if 0, it's valid)
+            if (entry.hydrationLiters != null) {
+              finalWater = entry.hydrationLiters!;
+              debugPrint('   ✅ Using backend API hydration: $finalWater');
+            } else {
+              // Backend API doesn't have hydration - fall back to existing state or 0
+              finalWater = currentMetrics.waterIntake ?? 0.0;
+              debugPrint('   ⚠️ Backend API hydration is null, using existing: $finalWater');
+            }
+          }
+          
+          // Update healthMetrics with merged values
           healthMetrics.value = HealthMetrics(
             steps: finalSteps,
             sleepHours: finalSleep,
-            syncStatus: oldMetrics.syncStatus, // Preserve sync status
-            lastSyncTime: oldMetrics.lastSyncTime, // Preserve last sync time
-            platform: oldMetrics.platform, // Preserve platform
-            weight: todayEntryFound.weight ?? oldMetrics.weight,
+            syncStatus: currentMetrics.syncStatus, // Preserve sync status
+            lastSyncTime: currentMetrics.lastSyncTime, // Preserve last sync time
+            platform: currentMetrics.platform, // Preserve platform
+            weight: currentMetrics.weight ?? entry.weight ?? (weight.value > 0 ? weight.value : null),
             waterIntake: finalWater,
           );
           
-          debugPrint('📊 Merged data - Steps: $finalSteps (DB: ${todayEntryFound.steps}, Health: ${oldMetrics.steps}), Health sync active: $isHealthSyncSuccessful');
+          // Also update waterIntake reactive variable directly (UI uses controller.waterIntake.value)
+          waterIntake.value = finalWater;
           
-          // Update weight separately if available
-          if (todayEntryFound.weight != null && todayEntryFound.weight! > 0) {
-            weight.value = todayEntryFound.weight!;
+          debugPrint('📊 Merged data from single_user_gravity:');
+          debugPrint('   - Health sync active: $isHealthSyncSuccessful');
+          debugPrint('   - Steps: $finalSteps (Backend: ${entry.steps}, Health: ${currentMetrics.steps})');
+          debugPrint('   - Sleep: $finalSleep (Backend: ${entry.sleepHours}, Health: ${currentMetrics.sleepHours})');
+          debugPrint('   - Hydration: $finalWater (Backend: ${entry.hydrationLiters}, Health: ${currentMetrics.waterIntake})');
+          debugPrint('   - Using backend API data: ${!isHealthSyncSuccessful || !hasHealthSyncPlatform}');
+          debugPrint('   - Final healthMetrics.steps: ${healthMetrics.value.steps}');
+          debugPrint('   - Final healthMetrics.sleepHours: ${healthMetrics.value.sleepHours}');
+          debugPrint('   - Final waterIntake.value: ${waterIntake.value}');
+          
+          // Update weight from backend API if health sync doesn't have it
+          if (!isHealthSyncSuccessful || currentMetrics.weight == null) {
+            if (entry.weight != null && entry.weight! > 0) {
+              weight.value = entry.weight!;
+            }
           }
           
-          // Update water intake separately if available
-          // Only update from DB if health sync wasn't successful (to avoid overwriting fresh sync data)
-          if (!isHealthSyncSuccessful && todayEntryFound.hydrationLiters != null) {
-            waterIntake.value = todayEntryFound.hydrationLiters!;
-          } else if (isHealthSyncSuccessful && hasHealthSyncPlatform) {
-            // Use health sync value (even if 0)
-            waterIntake.value = finalWater ?? 0.0;
-          }
-
-          Get.printInfo(info: '✅ Loaded today\'s entry from DB: ${todayEntryFound.id}');
+          Get.printInfo(info: '✅ Loaded today\'s entry from single_user_gravity API (ID: $entryId)');
         } else {
-          Get.printInfo(info: 'ℹ️ No entry found for today in DB');
+          Get.printError(info: 'Failed to load single entry: ${singleEntryResponse.message}');
         }
-      } else {
-        Get.printError(info: 'Failed to load entries: ${response.message}');
       }
     } catch (e) {
       Get.printError(info: 'Error loading today\'s entry: $e');
-      isDbLoaded.value = true; // Mark as attempted even on error
     }
   }
 
@@ -397,7 +469,6 @@ class DashboardController extends GetxController {
       }
 
       if (response.isSuccess && response.data != null) {
-        todayEntry.value = response.data;
         todayEntryId.value = response.data!.id;
         Get.printInfo(info: '✅ Saved today\'s gravity entry to DB (ID: ${response.data!.id})');
       } else {
@@ -653,8 +724,26 @@ class DashboardController extends GetxController {
           duration: const Duration(seconds: 2),
         );
         
-        // Reload today's entry from DB to get updated data
+        // Extract entry ID from response if available (for future single_user_gravity calls)
+        if (response.data != null) {
+          final entryId = response.data!['id'];
+          if (entryId != null) {
+            final id = entryId is int ? entryId : int.tryParse(entryId.toString());
+            if (id != null) {
+              todayEntryId.value = id;
+              debugPrint('📝 Updated todayEntryId from manual entry response: $id');
+            }
+          }
+        }
+        
+        // Reload data from single_user_gravity API to get updated backend data
+        // This ensures "Today's Progress" and "Weight Journey" show latest backend data
         await loadTodayFromDb();
+        
+        // Notify TodayController to refetch so Pillar Status reflects updated Hydration/Sleep/Steps/Weight-in
+        if (Get.isRegistered<TodayController>()) {
+          Get.find<TodayController>().fetchDateWiseGravity(isRefresh: true);
+        }
       } else {
         debugPrint('❌ Failed to save manual entry: ${response.message}');
         Get.snackbar(

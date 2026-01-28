@@ -57,7 +57,7 @@ class DateWiseGravityResponse {
       }
     }
 
-    // Parse hydration_liters
+    // Parse hydration_liters (and fallback to "hydration" string e.g. "3L" from manual/API)
     double? parsedHydrationLiters;
     if (json['hydration_liters'] != null) {
       if (json['hydration_liters'] is num) {
@@ -65,6 +65,11 @@ class DateWiseGravityResponse {
       } else if (json['hydration_liters'] is String) {
         parsedHydrationLiters = double.tryParse(json['hydration_liters'] as String);
       }
+    }
+    if (parsedHydrationLiters == null && json['hydration'] != null) {
+      final hydrationStr = json['hydration'].toString();
+      final numericStr = hydrationStr.replaceAll(RegExp(r'[Ll]'), '').trim();
+      parsedHydrationLiters = double.tryParse(numericStr);
     }
 
     // Parse nutrition_calories
