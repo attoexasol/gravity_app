@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
     <uses-permission android:name="android.permission.health.READ_HYDRATION" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <!-- Health Connect WRITE permissions (manual entry → device health store) -->
+    <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />
+    <uses-permission android:name="android.permission.health.WRITE_HYDRATION" />
+    <uses-permission android:name="android.permission.health.WRITE_SLEEP" />
 
     <!-- Optional extras -->
     <!-- <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" /> -->

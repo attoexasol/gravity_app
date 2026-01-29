@@ -74,9 +74,8 @@ class DashboardController extends GetxController {
     // Listen for goal changes in storage (when updated from settings)
     _setupGoalsListener();
     
-    // Load today's entry from backend using single_user_gravity API
-    // This provides Steps, Sleep, Hydration for "Today's Progress" and Weight for "Weight Journey"
-    loadTodayFromDb();
+    // Today's Progress & Weight: Health only (no GET /single_user_gravity or /all_user_gravity for display)
+    debugPrint('Dashboard: Today\'s Progress & Weight from Health only (no GET /single_user_gravity or /all_user_gravity).');
     
     // Subscribe to health service updates BEFORE initializing
     _healthService.subscribe((metrics) {
@@ -115,17 +114,10 @@ class DashboardController extends GetxController {
         }
       }
       
-      // Update water intake from HealthKit/Google Fit if available
-      // Always update when sync is successful, even if value is 0 (means no water logged today)
-      if (metrics.syncStatus == SyncStatus.success && metrics.platform != HealthPlatform.none) {
-        // If sync was successful, always use the synced value (even if 0 or null)
-        // null means error fetching, 0.0 means no data found
-        waterIntake.value = metrics.waterIntake ?? 0.0;
-        debugPrint('💧 Updated water intake from health sync: ${waterIntake.value} L (sync status: ${metrics.syncStatus}, platform: ${metrics.platform})');
-      } else if (metrics.waterIntake != null) {
-        // Update if we have any value (including 0) even if sync wasn't fully successful
+      // Update water intake only when health has data; do not overwrite with null/0 (health-only display)
+      if (metrics.waterIntake != null) {
         waterIntake.value = metrics.waterIntake!;
-        debugPrint('💧 Updated water intake from metrics: ${waterIntake.value} L');
+        debugPrint('💧 Updated water intake from health sync: ${waterIntake.value} L (sync status: ${metrics.syncStatus}, platform: ${metrics.platform})');
       }
 
       // When sync finishes successfully, save to DB
@@ -212,171 +204,14 @@ class DashboardController extends GetxController {
   /// Get data source string from platform
   String? _getDataSourceFromPlatform(HealthPlatform platform) {
     if (kIsWeb) return null;
-    if (Platform.isIOS) return 'health_connect';
-    if (Platform.isAndroid) return 'google_fit';
+    if (Platform.isIOS) return 'apple_health';
+    if (Platform.isAndroid) return 'health_connect';
     return null;
   }
 
-  /// Load today's entry from backend using single_user_gravity API
-  /// Priority: Health Sync > Backend API (single_user_gravity) > Existing Reactive State > Defaults
-  /// This method fetches today's entry ID (if needed) and then calls single_user_gravity API
-  Future<void> loadTodayFromDb() async {
-    try {
-      final apiToken = PreferencesService.getAuthToken();
-      if (apiToken == null || apiToken.isEmpty) {
-        Get.printError(info: 'API token not found, cannot load today\'s entry');
-        return;
-      }
-
-      // Step 1: Get today's entry ID (if we don't already have it)
-      int? entryId = todayEntryId.value;
-      
-      if (entryId == null) {
-        // Need to find today's entry ID first
-        final todayStr = _todayString;
-        debugPrint('🔍 Finding today\'s entry ID for date: $todayStr');
-        
-        final allEntriesResponse = await _gravityRepository.getAllUserGravity(apiToken: apiToken);
-        
-        if (allEntriesResponse.isSuccess && allEntriesResponse.data != null) {
-          final todayEntryFound = allEntriesResponse.data!.firstWhere(
-            (entry) => entry.date == todayStr,
-            orElse: () => UserGravityEntry(date: ''),
-          );
-          
-          if (todayEntryFound.date.isNotEmpty && todayEntryFound.id != null) {
-            entryId = todayEntryFound.id;
-            todayEntryId.value = entryId;
-            debugPrint('✅ Found today\'s entry ID: $entryId');
-          } else {
-            debugPrint('ℹ️ No entry found for today - will use health sync or defaults');
-            // No entry exists yet - will be created on first health sync or manual entry
-            return;
-          }
-        } else {
-          Get.printError(info: 'Failed to load entries: ${allEntriesResponse.message}');
-          return;
-        }
-      }
-
-      // Step 2: Call single_user_gravity API with today's entry ID
-      if (entryId != null) {
-        debugPrint('📞 Calling single_user_gravity API with ID: $entryId');
-        
-        final singleEntryResponse = await _gravityRepository.getSingleUserGravity(id: entryId);
-        
-        if (singleEntryResponse.isSuccess && singleEntryResponse.data != null) {
-          final entry = singleEntryResponse.data!;
-          
-          // Merge backend API data with health sync data
-          // Priority: Health Sync (if successful) > Backend API > Existing Reactive State
-          final currentMetrics = healthMetrics.value;
-          final isHealthSyncSuccessful = currentMetrics.syncStatus == SyncStatus.success;
-          final hasHealthSyncPlatform = currentMetrics.platform == HealthPlatform.apple || 
-                                         currentMetrics.platform == HealthPlatform.google;
-          
-          // Determine final values with priority
-          // Priority: Health Sync (if successful) > Backend API > Existing Reactive State
-          // When health sync is NOT successful, ALWAYS use backend API data (even if 0)
-          // When health sync IS successful, use health sync data (even if 0)
-          
-          int finalSteps;
-          if (isHealthSyncSuccessful && hasHealthSyncPlatform) {
-            // Health sync is active - use health sync data (most recent, even if 0)
-            finalSteps = currentMetrics.steps;
-            debugPrint('   ✅ Using health sync steps: $finalSteps');
-          } else {
-            // Health sync is NOT active - use backend API data
-            // Check if backend API has steps data (even if 0, it's valid)
-            if (entry.steps != null) {
-              finalSteps = entry.steps!;
-              debugPrint('   ✅ Using backend API steps: $finalSteps');
-            } else {
-              // Backend API doesn't have steps - fall back to existing state
-              finalSteps = currentMetrics.steps;
-              debugPrint('   ⚠️ Backend API steps is null, using existing: $finalSteps');
-            }
-          }
-          
-          double finalSleep;
-          if (isHealthSyncSuccessful && hasHealthSyncPlatform) {
-            // Health sync is active - use health sync data (most recent, even if 0)
-            finalSleep = currentMetrics.sleepHours;
-            debugPrint('   ✅ Using health sync sleep: $finalSleep');
-          } else {
-            // Health sync is NOT active - use backend API data
-            // Check if backend API has sleep data (even if 0, it's valid)
-            if (entry.sleepHours != null) {
-              finalSleep = entry.sleepHours!;
-              debugPrint('   ✅ Using backend API sleep: $finalSleep');
-            } else {
-              // Backend API doesn't have sleep - fall back to existing state
-              finalSleep = currentMetrics.sleepHours;
-              debugPrint('   ⚠️ Backend API sleep is null, using existing: $finalSleep');
-            }
-          }
-          
-          double finalWater;
-          if (isHealthSyncSuccessful && hasHealthSyncPlatform) {
-            // Health sync is active - use health sync data (most recent, even if 0 or null)
-            finalWater = currentMetrics.waterIntake ?? 0.0;
-            debugPrint('   ✅ Using health sync hydration: $finalWater');
-          } else {
-            // Health sync is NOT active - use backend API data
-            // Check if backend API has hydration data (even if 0, it's valid)
-            if (entry.hydrationLiters != null) {
-              finalWater = entry.hydrationLiters!;
-              debugPrint('   ✅ Using backend API hydration: $finalWater');
-            } else {
-              // Backend API doesn't have hydration - fall back to existing state or 0
-              finalWater = currentMetrics.waterIntake ?? 0.0;
-              debugPrint('   ⚠️ Backend API hydration is null, using existing: $finalWater');
-            }
-          }
-          
-          // Update healthMetrics with merged values
-          healthMetrics.value = HealthMetrics(
-            steps: finalSteps,
-            sleepHours: finalSleep,
-            syncStatus: currentMetrics.syncStatus, // Preserve sync status
-            lastSyncTime: currentMetrics.lastSyncTime, // Preserve last sync time
-            platform: currentMetrics.platform, // Preserve platform
-            weight: currentMetrics.weight ?? entry.weight ?? (weight.value > 0 ? weight.value : null),
-            waterIntake: finalWater,
-          );
-          
-          // Also update waterIntake reactive variable directly (UI uses controller.waterIntake.value)
-          waterIntake.value = finalWater;
-          
-          debugPrint('📊 Merged data from single_user_gravity:');
-          debugPrint('   - Health sync active: $isHealthSyncSuccessful');
-          debugPrint('   - Steps: $finalSteps (Backend: ${entry.steps}, Health: ${currentMetrics.steps})');
-          debugPrint('   - Sleep: $finalSleep (Backend: ${entry.sleepHours}, Health: ${currentMetrics.sleepHours})');
-          debugPrint('   - Hydration: $finalWater (Backend: ${entry.hydrationLiters}, Health: ${currentMetrics.waterIntake})');
-          debugPrint('   - Using backend API data: ${!isHealthSyncSuccessful || !hasHealthSyncPlatform}');
-          debugPrint('   - Final healthMetrics.steps: ${healthMetrics.value.steps}');
-          debugPrint('   - Final healthMetrics.sleepHours: ${healthMetrics.value.sleepHours}');
-          debugPrint('   - Final waterIntake.value: ${waterIntake.value}');
-          
-          // Update weight from backend API if health sync doesn't have it
-          if (!isHealthSyncSuccessful || currentMetrics.weight == null) {
-            if (entry.weight != null && entry.weight! > 0) {
-              weight.value = entry.weight!;
-            }
-          }
-          
-          Get.printInfo(info: '✅ Loaded today\'s entry from single_user_gravity API (ID: $entryId)');
-        } else {
-          Get.printError(info: 'Failed to load single entry: ${singleEntryResponse.message}');
-        }
-      }
-    } catch (e) {
-      Get.printError(info: 'Error loading today\'s entry: $e');
-    }
-  }
-
-  /// Upsert (create or update) today's gravity entry
+  /// Upsert (create or update) today's gravity entry. Backend write-only (no GET for display).
   Future<void> upsertTodayGravity({required String dataSource}) async {
+    debugPrint('Dashboard: Backend write-only — upsert gravity (create or update); no GET for display.');
     // Prevent multiple simultaneous saves
     if (_isSavingGravity) {
       Get.printInfo(info: '⏳ Save already in progress, skipping...');
@@ -681,6 +516,52 @@ class DashboardController extends GetxController {
     }
   }
 
+  /// Write manual entry (weight/hydration/sleep) to device health store.
+  /// Never throws; logs errors. DB save is independent.
+  Future<void> _writeManualEntryToHealth({required String type, required String value}) async {
+    try {
+      if (type != 'weight' && type != 'hydration' && type != 'sleep_hours') return;
+      final metrics = _healthService.getMetrics();
+      final connected = metrics.syncStatus == SyncStatus.success ||
+          metrics.platform == HealthPlatform.apple ||
+          metrics.platform == HealthPlatform.google;
+      if (!connected) {
+        final ok = await _healthService.initialize();
+        if (!ok) {
+          debugPrint('⚠️ Health not connected, skipping write to health store');
+          return;
+        }
+      }
+      if (type == 'weight') {
+        final kg = double.tryParse(value);
+        if (kg != null && kg > 0 && kg < 300) {
+          await _healthService.writeWeightKg(kg);
+        }
+        return;
+      }
+      if (type == 'hydration') {
+        final newTotal = double.tryParse(value);
+        if (newTotal == null || newTotal < 0) return;
+        final currentTotal = (metrics.syncStatus == SyncStatus.success && metrics.waterIntake != null)
+            ? metrics.waterIntake!
+            : 0.0;
+        final delta = newTotal - currentTotal;
+        if (delta > 0.01) {
+          await _healthService.writeWaterLiters(delta);
+        }
+        return;
+      }
+      if (type == 'sleep_hours') {
+        final hours = double.tryParse(value);
+        if (hours != null && hours >= 0 && hours <= 24) {
+          await _healthService.writeSleepHours(hours);
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ _writeManualEntryToHealth error: $e');
+    }
+  }
+
   /// Save manual entry using the create_manual_user_gravity API
   Future<void> _saveManualEntry({required String type, required String value}) async {
     try {
@@ -736,9 +617,10 @@ class DashboardController extends GetxController {
           }
         }
         
-        // Reload data from single_user_gravity API to get updated backend data
-        // This ensures "Today's Progress" and "Weight Journey" show latest backend data
-        await loadTodayFromDb();
+        // Write manual entry to device health store (Apple Health / Health Connect), then resync
+        await _writeManualEntryToHealth(type: type, value: value);
+        await _healthService.syncHealthData();
+        debugPrint('Dashboard: Manual entry saved; UI will update from health sync only (no backend GET).');
         
         // Notify TodayController to refetch so Pillar Status reflects updated Hydration/Sleep/Steps/Weight-in
         if (Get.isRegistered<TodayController>()) {

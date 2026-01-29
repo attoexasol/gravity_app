@@ -174,7 +174,7 @@ class SyncStatusSection extends StatelessWidget {
                                     HealthPlatform.none) ...[
                                   SizedBox(width: 8.w),
                                   Text(
-                                    ' · ${healthMetrics.platform == HealthPlatform.apple ? 'Apple Health' : 'Google Fit'}',
+                                    ' · ${healthMetrics.platform == HealthPlatform.apple ? 'Apple Health' : 'Health Connect'}',
                                     style: ResponsiveTextStyles.textXs.copyWith(
                                       color: const Color(
                                         0xFF00B8A9,

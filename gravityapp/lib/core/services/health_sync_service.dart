@@ -129,29 +129,37 @@ class HealthSyncService {
       _health = Health();
 
       // Request permissions - use platform-specific data types
-      // For Android, request essential permissions first, then optionally sleep permissions
-      // This prevents the entire authorization from failing if sleep types aren't supported
+      // READ for STEPS; READ_WRITE for WEIGHT, WATER, sleep (so manual entry can write to health store)
       final essentialTypes = (!kIsWeb && Platform.isAndroid)
           ? [
-              // Health Connect/Google Fit essential types (known to work)
               HealthDataType.STEPS,
               HealthDataType.WEIGHT,
               HealthDataType.WATER,
             ]
           : [
-              // HealthKit supported types (all at once for iOS)
-              // Use SLEEP_ASLEEP only to avoid double counting with SLEEP_IN_BED
               HealthDataType.STEPS,
               HealthDataType.SLEEP_ASLEEP,
               HealthDataType.WEIGHT,
               HealthDataType.WATER,
             ];
+      final essentialPermissions = (!kIsWeb && Platform.isAndroid)
+          ? [
+              HealthDataAccess.READ,       // STEPS
+              HealthDataAccess.READ_WRITE, // WEIGHT
+              HealthDataAccess.READ_WRITE, // WATER
+            ]
+          : [
+              HealthDataAccess.READ,       // STEPS
+              HealthDataAccess.READ_WRITE, // SLEEP_ASLEEP
+              HealthDataAccess.READ_WRITE, // WEIGHT
+              HealthDataAccess.READ_WRITE, // WATER
+            ];
 
       // Sleep types for Android (requested separately as optional)
-      // Android uses SLEEP_SESSION, iOS uses SLEEP_ASLEEP
       final sleepTypes = (!kIsWeb && Platform.isAndroid)
           ? [HealthDataType.SLEEP_SESSION]
           : [HealthDataType.SLEEP_ASLEEP];
+      final sleepPermissions = [HealthDataAccess.READ_WRITE];
 
       print('🔵 Requesting $platformName permissions...');
 
@@ -161,23 +169,18 @@ class HealthSyncService {
       if (!kIsWeb && Platform.isAndroid) {
         try {
           print(
-            '🔵 Attempting to request Health Connect/Google Fit authorization...',
+            '🔵 Attempting to request Health Connect authorization...',
           );
-          print('🔵 This should open the permission dialog...');
           print(
-            '🔵 Requesting essential permissions: ${essentialTypes.map((t) => t.toString()).join(", ")}',
+            '🔵 Requesting essential permissions (READ_WRITE for weight/water): ${essentialTypes.map((t) => t.toString()).join(", ")}',
           );
 
-          // First, request essential permissions (steps, weight, water)
-          // This should trigger the permission dialog
-          // Note: The health package will show the Health Connect permission dialog automatically
-          // if Health Connect is installed and properly configured
-          granted = await _health!.requestAuthorization(essentialTypes);
+          granted = await _health!.requestAuthorization(essentialTypes, permissions: essentialPermissions);
           print('🔵 Essential permissions granted: $granted');
 
           if (!granted) {
             print(
-              '⚠️ Health Connect/Google Fit authorization was denied or not available',
+              '⚠️ Health Connect authorization was denied or not available',
             );
             print('💡 Troubleshooting steps:');
             print(
@@ -200,15 +203,14 @@ class HealthSyncService {
 
           // If essential permissions granted, try to request sleep permissions (optional)
           try {
-            print('🔵 Requesting optional sleep permissions...');
-            final sleepGranted = await _health!.requestAuthorization(sleepTypes);
+            print('🔵 Requesting optional sleep permissions (READ_WRITE)...');
+            final sleepGranted = await _health!.requestAuthorization(sleepTypes, permissions: sleepPermissions);
             print('🔵 Sleep permissions granted: $sleepGranted');
             if (!sleepGranted) {
               print('⚠️ Sleep permissions not available - will continue without sleep data');
             }
           } catch (e) {
             print('⚠️ Could not request sleep permissions: $e - will continue without sleep data');
-            // Don't fail the entire initialization if sleep permissions fail
           }
         } catch (e, stackTrace) {
           print(
@@ -231,8 +233,8 @@ class HealthSyncService {
           return false;
         }
       } else {
-        // For iOS, request all permissions at once
-        granted = await _health!.requestAuthorization(essentialTypes);
+        // For iOS, request all permissions at once (READ_WRITE for weight, water, sleep)
+        granted = await _health!.requestAuthorization(essentialTypes, permissions: essentialPermissions);
         print('🔵 Permission granted: $granted');
 
         if (!granted) {
@@ -507,6 +509,90 @@ class HealthSyncService {
       _updateMetrics(SyncStatus.error);
       // Record sync error
       _recordSyncActivity(status: 'error', error: e.toString(), metrics: null);
+    }
+  }
+
+  /// Write weight (kg) to device health store. Returns false on web/unsupported or on error.
+  Future<bool> writeWeightKg(double kg, {DateTime? at}) async {
+    if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return false;
+    if (_health == null || !_isInitialized) {
+      final ok = await initialize();
+      if (!ok || _health == null) return false;
+    }
+    try {
+      final when = at ?? DateTime.now();
+      final success = await _health!.writeHealthData(
+        value: kg,
+        type: HealthDataType.WEIGHT,
+        startTime: when,
+        endTime: when,
+        unit: HealthDataUnit.KILOGRAM,
+        recordingMethod: RecordingMethod.manual,
+      );
+      if (success) print('✅ Wrote weight to health store: $kg kg');
+      return success;
+    } catch (e) {
+      print('⚠️ Error writing weight to health store: $e');
+      return false;
+    }
+  }
+
+  /// Write water intake (liters) as a single event to device health store.
+  /// Returns false on web/unsupported or on error.
+  Future<bool> writeWaterLiters(double liters, {DateTime? at}) async {
+    if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return false;
+    if (_health == null || !_isInitialized) {
+      final ok = await initialize();
+      if (!ok || _health == null) return false;
+    }
+    if (liters <= 0) return true;
+    try {
+      final when = at ?? DateTime.now();
+      final success = await _health!.writeHealthData(
+        value: liters,
+        type: HealthDataType.WATER,
+        startTime: when,
+        endTime: when,
+        unit: HealthDataUnit.LITER,
+        recordingMethod: RecordingMethod.manual,
+      );
+      if (success) print('✅ Wrote water to health store: $liters L');
+      return success;
+    } catch (e) {
+      print('⚠️ Error writing water to health store: $e');
+      return false;
+    }
+  }
+
+  /// Write sleep session (hours) to device health store.
+  /// endAt defaults to now; start = endAt - hours.
+  /// iOS: SLEEP_ASLEEP; Android: SLEEP_SESSION. Value is ignored for sleep types.
+  Future<bool> writeSleepHours(double hours, {DateTime? endAt}) async {
+    if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return false;
+    if (_health == null || !_isInitialized) {
+      final ok = await initialize();
+      if (!ok || _health == null) return false;
+    }
+    if (hours <= 0) return true;
+    try {
+      final end = endAt ?? DateTime.now();
+      final start = end.subtract(Duration(seconds: (hours * 3600).round().clamp(0, 86400 * 365)));
+      final type = (!kIsWeb && Platform.isAndroid)
+          ? HealthDataType.SLEEP_SESSION
+          : HealthDataType.SLEEP_ASLEEP;
+      // For sleep, value is ignored by the plugin; start/end define the session
+      final success = await _health!.writeHealthData(
+        value: 0,
+        type: type,
+        startTime: start,
+        endTime: end,
+        recordingMethod: RecordingMethod.manual,
+      );
+      if (success) print('✅ Wrote sleep to health store: $hours h');
+      return success;
+    } catch (e) {
+      print('⚠️ Error writing sleep to health store: $e');
+      return false;
     }
   }
 
