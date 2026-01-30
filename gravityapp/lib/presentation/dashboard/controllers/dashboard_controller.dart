@@ -540,6 +540,8 @@ class DashboardController extends GetxController {
         return;
       }
       if (type == 'hydration') {
+        // Best-effort only: Google Fit / Health Connect hydration write is unreliable by platform design.
+        // Local data (backend + UI state) is source of truth; failure must NOT affect app or UI.
         final newTotal = double.tryParse(value);
         if (newTotal == null || newTotal < 0) return;
         final currentTotal = (metrics.syncStatus == SyncStatus.success && metrics.waterIntake != null)
@@ -547,7 +549,11 @@ class DashboardController extends GetxController {
             : 0.0;
         final delta = newTotal - currentTotal;
         if (delta > 0.01) {
-          await _healthService.writeWaterLiters(delta);
+          try {
+            await _healthService.writeWaterLiters(delta);
+          } catch (_) {
+            // Silent failure: hydration write is non-critical; local save already succeeded.
+          }
         }
         return;
       }

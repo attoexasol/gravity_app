@@ -529,31 +529,59 @@ class HealthSyncService {
     }
   }
 
-  /// Write water intake (liters) as a single event to device health store.
-  /// Returns false on web/unsupported or on error.
+  /// Best-effort, experimental: attempt to write hydration to Google Fit / Health Connect.
+  /// Google Fit / Health Connect hydration write is unreliable by platform design; it may not
+  /// appear in Google Fit UI. Failure must NOT break the app. Gravity local data is the
+  /// source of truth; dashboard must use local data only.
+  /// Uses short time range (event-based record). No retry. Silent failure on error.
   Future<bool> writeWaterLiters(double liters, {DateTime? at}) async {
     if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return false;
-    if (_health == null || !_isInitialized) {
-      final ok = await initialize();
-      if (!ok || _health == null) return false;
-    }
     if (liters <= 0) return true;
     try {
-      final when = at ?? DateTime.now();
-      final success = await _health!.writeHealthData(
+      if (_health == null || !_isInitialized) {
+        final ok = await initialize();
+        if (!ok || _health == null) return false;
+      }
+    } catch (e) {
+      print('⚠️ Hydration write (best-effort): init failed, skipping — $e');
+      return false;
+    }
+    final end = at ?? DateTime.now();
+    final start = end.subtract(const Duration(minutes: 2));
+    final ml = (liters * 1000).round();
+    try {
+      final successMl = await _health!.writeHealthData(
+        value: ml.toDouble(),
+        type: HealthDataType.WATER,
+        startTime: start,
+        endTime: end,
+        unit: HealthDataUnit.MILLILITER,
+        recordingMethod: RecordingMethod.manual,
+      );
+      if (successMl) {
+        print('✅ Hydration (best-effort): wrote $liters L ($ml ml) to health store');
+        return true;
+      }
+    } catch (e) {
+      print('⚠️ Hydration write (best-effort): MILLILITER failed, trying LITER — $e');
+    }
+    try {
+      final successL = await _health!.writeHealthData(
         value: liters,
         type: HealthDataType.WATER,
-        startTime: when,
-        endTime: when,
+        startTime: start,
+        endTime: end,
         unit: HealthDataUnit.LITER,
         recordingMethod: RecordingMethod.manual,
       );
-      if (success) print('✅ Wrote water to health store: $liters L');
-      return success;
+      if (successL) {
+        print('✅ Hydration (best-effort): wrote $liters L to health store');
+        return true;
+      }
     } catch (e) {
-      print('⚠️ Error writing water to health store: $e');
-      return false;
+      print('⚠️ Hydration write (best-effort): LITER failed — $e');
     }
+    return false;
   }
 
   /// Sleep uses REPLACE strategy, not merge or sum.
