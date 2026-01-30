@@ -287,6 +287,33 @@ class HealthSyncService {
     }
   }
 
+  /// Sleep uses REPLACE strategy, not merge or sum.
+  /// Deletes all sleep records in the overnight window for the given date (Health Connect / Apple Health)
+  /// so that writeSleepHours can insert the only session for that day.
+  Future<bool> _deleteSleepForDate(DateTime date) async {
+    if (kIsWeb || _health == null || !_isInitialized) return false;
+    try {
+      // Same window as sync query: yesterday 18:00 to date 12:00 (overnight sleep for this date)
+      final rangeStart = DateTime(date.year, date.month, date.day - 1, 18);
+      final rangeEnd = DateTime(date.year, date.month, date.day, 12);
+      final type = (!kIsWeb && Platform.isAndroid)
+          ? HealthDataType.SLEEP_SESSION
+          : HealthDataType.SLEEP_ASLEEP;
+      final deleted = await _health!.delete(
+        type: type,
+        startTime: rangeStart,
+        endTime: rangeEnd,
+      );
+      if (deleted) {
+        print('🔄 Sleep REPLACE: deleted existing sleep in range $rangeStart → $rangeEnd');
+      }
+      return deleted;
+    } catch (e) {
+      print('⚠️ Error deleting sleep for date: $e');
+      return false;
+    }
+  }
+
   /// Sync health data from HealthKit (iOS) or Google Fit (Android)
   Future<void> syncHealthData() async {
     if (kIsWeb) {
@@ -349,70 +376,35 @@ class HealthSyncService {
         print('⚠️ Error fetching steps: $e');
       }
 
-      // Fetch Sleep Hours (from yesterday 18:00 to today 12:00 to catch overnight sleep)
+      // Sleep uses REPLACE strategy: single session only. Never sum, merge, or accumulate.
+      // Dashboard shows (endTime - startTime) of the one effective session.
       double sleepHours = 0.0;
       try {
-        // Calculate sleep window: yesterday at 18:00 (6 PM) to today at 12:00 (noon)
-        final sleepStart = DateTime(now.year, now.month, now.day - 1, 18);
-        final sleepEnd = DateTime(now.year, now.month, now.day, 12);
-        
-        // Platform-specific sleep types
-        // Android: Use SLEEP_SESSION only
-        // iOS: Use SLEEP_ASLEEP only (avoid double counting with SLEEP_IN_BED)
+        final sleepQueryStart = DateTime(now.year, now.month, now.day - 1, 18);
+        final sleepQueryEnd = DateTime(now.year, now.month, now.day, 12);
         final sleepTypes = (!kIsWeb && Platform.isAndroid)
             ? [HealthDataType.SLEEP_SESSION]
             : [HealthDataType.SLEEP_ASLEEP];
-        
         final platformName = Platform.isIOS ? 'HealthKit' : 'Health Connect';
         print('🔵 Querying sleep data from $platformName...');
-        print('   Time range: ${sleepStart.toString()} to ${sleepEnd.toString()}');
-        print('   Sleep types: ${sleepTypes.map((t) => t.toString()).join(", ")}');
-        
-        // Query sleep data (health package handles timezone conversion)
         final sleepData = await _health!.getHealthDataFromTypes(
           types: sleepTypes,
-          startTime: sleepStart,
-          endTime: sleepEnd,
+          startTime: sleepQueryStart,
+          endTime: sleepQueryEnd,
         );
-        
         print('🔵 Sleep data query returned ${sleepData.length} data points');
-        
         if (sleepData.isNotEmpty) {
-          // Debug: Print raw sleep records
-          print('📋 Raw sleep records:');
-          for (var data in sleepData) {
-            print('   - Type: ${data.type.toString()}');
-            print('     From: ${data.dateFrom.toString()}');
-            print('     To: ${data.dateTo.toString()}');
-            final duration = data.dateTo.difference(data.dateFrom).inMinutes / 60.0;
-            print('     Duration: ${duration.toStringAsFixed(2)}h');
-          }
-          
-          // Calculate total sleep in hours
-          // Android: Sum all SLEEP_SESSION durations directly
-          // iOS: Sum only SLEEP_ASLEEP segments (already filtered by sleepTypes)
-          for (var data in sleepData) {
-            final start = data.dateFrom;
-            final end = data.dateTo;
-            final duration = end.difference(start).inMinutes / 60.0;
-            
-            // For Android (SLEEP_SESSION), sum all sessions directly
-            // For iOS (SLEEP_ASLEEP), sum all asleep segments directly
-            // Both are already filtered to the correct type, so we can sum all
-            sleepHours += duration;
-            print('   ✓ Added ${duration.toStringAsFixed(2)}h (total: ${sleepHours.toStringAsFixed(2)}h)');
-          }
-          
-          print('📊 Total sleep: ${sleepHours.toStringAsFixed(1)}h (from ${sleepData.length} ${sleepData.length == 1 ? 'session' : 'sessions'})');
+          // Single session only: take the most recent by endTime (dateTo). No sum, no merge.
+          sleepData.sort((a, b) => b.dateTo.compareTo(a.dateTo));
+          final session = sleepData.first;
+          sleepHours = session.dateTo.difference(session.dateFrom).inMinutes / 60.0;
+          print('📊 Sleep REPLACE: single session only, duration = ${sleepHours.toStringAsFixed(1)}h (${session.dateFrom} → ${session.dateTo})');
         } else {
           print('⚠️ No sleep data found in $platformName');
-          print('   💡 Make sure sleep is tracked in Google Fit/Health Connect app');
-          print('   💡 Sleep window: yesterday 6 PM to today 12 PM');
         }
       } catch (e, stackTrace) {
         print('⚠️ Error fetching sleep: $e');
         print('   Stack trace: $stackTrace');
-        // Don't fail the entire sync if sleep fetch fails
       }
 
       // Fetch Weight (most recent from last 30 days for better chance of finding data)
@@ -564,9 +556,9 @@ class HealthSyncService {
     }
   }
 
-  /// Write sleep session (hours) to device health store.
-  /// endAt defaults to now; start = endAt - hours.
-  /// iOS: SLEEP_ASLEEP; Android: SLEEP_SESSION. Value is ignored for sleep types.
+  /// Sleep uses REPLACE strategy, not merge or sum.
+  /// 1) DELETE existing sleep for the same date (Health Connect / Apple Health).
+  /// 2) INSERT only the new session. New sleep is the ONLY record for that day.
   Future<bool> writeSleepHours(double hours, {DateTime? endAt}) async {
     if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return false;
     if (_health == null || !_isInitialized) {
@@ -577,10 +569,12 @@ class HealthSyncService {
     try {
       final end = endAt ?? DateTime.now();
       final start = end.subtract(Duration(seconds: (hours * 3600).round().clamp(0, 86400 * 365)));
+      // Step 1: Delete existing sleep for this date (confirm deletion before insert)
+      await _deleteSleepForDate(end);
+      // Step 2: Insert only the new session (single record for that day)
       final type = (!kIsWeb && Platform.isAndroid)
           ? HealthDataType.SLEEP_SESSION
           : HealthDataType.SLEEP_ASLEEP;
-      // For sleep, value is ignored by the plugin; start/end define the session
       final success = await _health!.writeHealthData(
         value: 0,
         type: type,
@@ -588,7 +582,9 @@ class HealthSyncService {
         endTime: end,
         recordingMethod: RecordingMethod.manual,
       );
-      if (success) print('✅ Wrote sleep to health store: $hours h');
+      if (success) {
+        print('✅ Sleep REPLACE: inserted only session $hours h ($start → $end)');
+      }
       return success;
     } catch (e) {
       print('⚠️ Error writing sleep to health store: $e');

@@ -18,7 +18,7 @@ class ProgressRingsSection extends StatelessWidget {
         margin: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
         padding: EdgeInsets.all(20.r),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Colors.white,  
           borderRadius: BorderRadius.circular(28.r),
           boxShadow: [
             BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10.r),
