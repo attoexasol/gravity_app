@@ -83,8 +83,11 @@ class DashboardController extends GetxController {
       healthMetrics.value = metrics;
       isSyncing.value = metrics.syncStatus == SyncStatus.syncing;
       
-      // Debug: Log when metrics update
+      // Debug: Log when metrics update (Today's Progress ring reads healthMetrics.value.sleepHours)
       debugPrint('🔄 Health metrics updated: Steps=${metrics.steps}, Sleep=${metrics.sleepHours}, Water=${metrics.waterIntake}, Status=${metrics.syncStatus}');
+      if (metrics.sleepHours > 0) {
+        debugPrint('   → Today\'s Progress ring will show sleep: ${metrics.sleepHours.toStringAsFixed(1)} hrs');
+      }
       
       // Update weight from HealthKit if available
       if (metrics.weight != null && metrics.weight! > 0) {

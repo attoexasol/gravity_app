@@ -377,16 +377,17 @@ class HealthSyncService {
       }
 
       // Sleep uses REPLACE strategy: single session only. Never sum, merge, or accumulate.
-      // Dashboard shows (endTime - startTime) of the one effective session.
+      // Query window must include: overnight (yesterday 18:00 → today) and any session logged today.
+      // Use end = now so afternoon/evening sessions and late-logged overnight sleep are included.
       double sleepHours = 0.0;
       try {
         final sleepQueryStart = DateTime(now.year, now.month, now.day - 1, 18);
-        final sleepQueryEnd = DateTime(now.year, now.month, now.day, 12);
+        final sleepQueryEnd = now;
         final sleepTypes = (!kIsWeb && Platform.isAndroid)
             ? [HealthDataType.SLEEP_SESSION]
             : [HealthDataType.SLEEP_ASLEEP];
         final platformName = Platform.isIOS ? 'HealthKit' : 'Health Connect';
-        print('🔵 Querying sleep data from $platformName...');
+        print('🔵 Sleep query: $platformName from $sleepQueryStart to $sleepQueryEnd (sessions spanning midnight included)');
         final sleepData = await _health!.getHealthDataFromTypes(
           types: sleepTypes,
           startTime: sleepQueryStart,
@@ -394,13 +395,12 @@ class HealthSyncService {
         );
         print('🔵 Sleep data query returned ${sleepData.length} data points');
         if (sleepData.isNotEmpty) {
-          // Single session only: take the most recent by endTime (dateTo). No sum, no merge.
           sleepData.sort((a, b) => b.dateTo.compareTo(a.dateTo));
           final session = sleepData.first;
           sleepHours = session.dateTo.difference(session.dateFrom).inMinutes / 60.0;
-          print('📊 Sleep REPLACE: single session only, duration = ${sleepHours.toStringAsFixed(1)}h (${session.dateFrom} → ${session.dateTo})');
+          print('📊 Sleep for dashboard: duration = ${sleepHours.toStringAsFixed(1)}h (${session.dateFrom} → ${session.dateTo})');
         } else {
-          print('⚠️ No sleep data found in $platformName');
+          print('⚠️ No sleep data found in $platformName for query window');
         }
       } catch (e, stackTrace) {
         print('⚠️ Error fetching sleep: $e');

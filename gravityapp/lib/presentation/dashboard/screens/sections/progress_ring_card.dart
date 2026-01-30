@@ -53,7 +53,7 @@ class ProgressRingsSection extends StatelessWidget {
                   color: const Color(0xFF00B8A9),
                   customValue: controller.healthMetrics.value.steps.toString(),
                 ),
-                // Sleep
+                // Sleep: from health sync (single session, duration = endTime - startTime)
                 ProgressRing(
                   value: controller.healthMetrics.value.sleepHours,
                   max: controller.sleepGoal.value,
