@@ -8,7 +8,7 @@ class DailyDetailsController extends GetxController {
   // Source screen: 'dashboard' or 'weekly-review'
   final String fromScreen;
   
-  // Current day index
+  // Current day index (used for mock pillar data; derived from selectedDate)
   final RxInt currentDayIndex = 0.obs;
 
   // Animation direction for slide transitions
@@ -17,13 +17,18 @@ class DailyDetailsController extends GetxController {
   // All days data
   final List<DayData> allDaysData = [];
 
-  /// Header date string (day name + date). Uses real current date when viewing today (index 0).
+  /// Selected calendar date (day-by-day navigation). Previous = yesterday, Next = tomorrow.
+  final Rx<DateTime> selectedDate = Rx<DateTime>(DateTime.now());
+
+  /// Header date string (day name + date). Driven by selectedDate.
   final RxString headerDateText = ''.obs;
 
   DailyDetailsController({this.fromScreen = 'dashboard'}) {
     _initializeData();
     _setInitialDayIndex();
   }
+
+  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
   void _initializeData() {
     // Mock data - Add today's data (Jan 5, 2026) and the week (May 6-12)
@@ -195,42 +200,38 @@ class DailyDetailsController extends GetxController {
   }
 
   void _setInitialDayIndex() {
-    // Dashboard → Show today (index 0), Weekly Review → Show Tuesday of that week (index 2)
-    if (fromScreen == 'dashboard') {
-      currentDayIndex.value = 0;
-    } else {
-      currentDayIndex.value = 2; // Tuesday (May 7)
-    }
+    selectedDate.value = _dateOnly(DateTime.now());
+    _syncCurrentDayIndexFromSelectedDate();
     _updateHeaderDateText();
   }
 
   DayData get currentDay => allDaysData[currentDayIndex.value];
 
-  void _updateHeaderDateText() {
-    if (currentDayIndex.value == 0) {
-      headerDateText.value = DateFormat('EEEE, MMMM d').format(DateTime.now());
-    } else {
-      headerDateText.value = currentDay.fullDate;
-    }
+  void _syncCurrentDayIndexFromSelectedDate() {
+    final today = _dateOnly(DateTime.now());
+    final daysDiff = today.difference(selectedDate.value).inDays;
+    currentDayIndex.value = daysDiff.clamp(0, allDaysData.length - 1);
   }
 
-  bool get canGoPrevious => currentDayIndex.value > 0;
-  bool get canGoNext => currentDayIndex.value < allDaysData.length - 1;
+  void _updateHeaderDateText() {
+    headerDateText.value = DateFormat('EEEE, MMMM d').format(selectedDate.value);
+  }
+
+  bool get canGoPrevious => true;
+  bool get canGoNext => true;
 
   void goToPreviousDay() {
-    if (canGoPrevious) {
-      direction.value = -1;
-      currentDayIndex.value--;
-      _updateHeaderDateText();
-    }
+    direction.value = -1;
+    selectedDate.value = _dateOnly(selectedDate.value.subtract(const Duration(days: 1)));
+    _syncCurrentDayIndexFromSelectedDate();
+    _updateHeaderDateText();
   }
 
   void goToNextDay() {
-    if (canGoNext) {
-      direction.value = 1;
-      currentDayIndex.value++;
-      _updateHeaderDateText();
-    }
+    direction.value = 1;
+    selectedDate.value = _dateOnly(selectedDate.value.add(const Duration(days: 1)));
+    _syncCurrentDayIndexFromSelectedDate();
+    _updateHeaderDateText();
   }
 
   void onBack() {
