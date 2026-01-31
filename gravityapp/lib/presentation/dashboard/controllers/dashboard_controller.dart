@@ -66,6 +66,9 @@ class DashboardController extends GetxController {
   // App lifecycle observer for syncing when app resumes
   late AppLifecycleObserver _lifecycleObserver;
 
+  /// Single subscription to health metrics; cancelled in onClose to avoid duplicate listeners.
+  StreamSubscription<HealthMetrics>? _healthSubscription;
+
   @override
   void onInit() {
     super.onInit();
@@ -77,8 +80,9 @@ class DashboardController extends GetxController {
     // Today's Progress & Weight: Health only (no GET /single_user_gravity or /all_user_gravity for display)
     debugPrint('Dashboard: Today\'s Progress & Weight from Health only (no GET /single_user_gravity or /all_user_gravity).');
     
-    // Subscribe to health service updates BEFORE initializing
-    _healthService.subscribe((metrics) {
+    // Single subscription to health service; cancelled in onClose to prevent duplicate listeners on re-create
+    _healthSubscription?.cancel();
+    _healthSubscription = _healthService.stream.listen((metrics) {
       // Always update healthMetrics to trigger UI rebuild
       healthMetrics.value = metrics;
       isSyncing.value = metrics.syncStatus == SyncStatus.syncing;
@@ -128,10 +132,11 @@ class DashboardController extends GetxController {
         // Determine data source based on platform
         final dataSource = _getDataSourceFromPlatform(metrics.platform);
         if (dataSource != null) {
-          // Debounce: only save if last save was more than 3 seconds ago
+          // Debounce: only save if last save was more than 10 seconds ago (reduces duplicate
+          // update_user_gravity calls from rapid success emissions e.g. init + first sync)
           final now = DateTime.now();
-          if (_lastSaveTime == null || 
-              now.difference(_lastSaveTime!).inSeconds >= 3) {
+          if (_lastSaveTime == null ||
+              now.difference(_lastSaveTime!).inSeconds >= 10) {
             upsertTodayGravity(dataSource: dataSource);
           }
         }
@@ -191,6 +196,8 @@ class DashboardController extends GetxController {
   
   @override
   void onClose() {
+    _healthSubscription?.cancel();
+    _healthSubscription = null;
     _timeTickerTimer?.cancel();
     _healthSyncTimer?.cancel();
     WidgetsBinding.instance.removeObserver(_lifecycleObserver);

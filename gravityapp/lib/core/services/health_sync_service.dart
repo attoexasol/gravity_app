@@ -68,6 +68,8 @@ class HealthSyncService {
 
   Health? _health;
   bool _isInitialized = false;
+  /// Single-flight: prevent overlapping syncHealthData() runs (avoids duplicate success emissions).
+  bool _syncInProgress = false;
 
   HealthMetrics _metrics = HealthMetrics(
     steps: 0,
@@ -251,14 +253,15 @@ class HealthSyncService {
             : (Platform.isIOS ? HealthPlatform.apple : HealthPlatform.google);
         print('✅ $platformName initialized successfully');
 
-        _updateMetrics(SyncStatus.success, platform: platform);
-        // Record successful initialization
+        // Set platform and "syncing" so UI has platform; do NOT emit success here (would trigger
+        // upsertTodayGravity before real data is fetched). Only syncHealthData() emits success.
+        _updateMetrics(SyncStatus.syncing, platform: platform);
         _recordSyncActivity(
-          status: 'success',
+          status: 'syncing',
           error: null,
           metrics: {'action': 'initialization', 'platform': platform.name},
         );
-        // Fetch initial data
+        // Fetch initial data; syncHealthData() will emit success when done
         await syncHealthData();
         return true;
       } else {
@@ -315,9 +318,15 @@ class HealthSyncService {
   }
 
   /// Sync health data from HealthKit (iOS) or Google Fit (Android)
+  /// Single-flight: if a sync is already in progress, this call is skipped to avoid duplicate success emissions.
   Future<void> syncHealthData() async {
     if (kIsWeb) {
       print('⚠️ Health data syncing is not available on web');
+      return;
+    }
+
+    if (_syncInProgress) {
+      print('⏳ Sync already in progress, skipping duplicate call');
       return;
     }
 
@@ -331,6 +340,7 @@ class HealthSyncService {
       }
     }
 
+    _syncInProgress = true;
     final platformName = Platform.isIOS ? 'HealthKit' : 'Google Fit';
     print('🔄 Syncing health data from $platformName...');
     _updateMetrics(SyncStatus.syncing);
@@ -501,6 +511,8 @@ class HealthSyncService {
       _updateMetrics(SyncStatus.error);
       // Record sync error
       _recordSyncActivity(status: 'error', error: e.toString(), metrics: null);
+    } finally {
+      _syncInProgress = false;
     }
   }
 

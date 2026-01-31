@@ -21,7 +21,8 @@ class TodayController extends GetxController {
 
   // Reflection
   final RxString reflection = ''.obs;
-  
+  final RxBool isSubmittingReflection = false.obs;
+
   // Text controllers
   late final TextEditingController reflectionController;
   late final TextEditingController weightController;
@@ -788,6 +789,38 @@ class TodayController extends GetxController {
     reflection.value = '';
   }
 
+  /// Submit daily reflection to API. Disables submit button while in progress.
+  /// Does nothing if input is empty. Shows success snackbar on status=true; handles errors silently.
+  Future<void> submitReflection() async {
+    final text = reflectionController.text.trim();
+    if (text.isEmpty) return;
+
+    final apiToken = PreferencesService.getAuthToken();
+    if (apiToken == null || apiToken.isEmpty) return;
+
+    isSubmittingReflection.value = true;
+    try {
+      final response = await _gravityRepository.storeDailyReflection(
+        apiToken: apiToken,
+        dailyReflection: text,
+      );
+      if (response.isSuccess) {
+        Get.snackbar(
+          'Success',
+          response.message.isNotEmpty ? response.message : 'Daily Reflection updated successfully.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFF00B8A9),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Submit reflection error: $e');
+    } finally {
+      isSubmittingReflection.value = false;
+    }
+  }
+
   void openWeighInModal() {
     // Reset weight field to blank - user must enter manually
     weightController.clear();
@@ -901,6 +934,88 @@ class TodayController extends GetxController {
 
   void closeGoalsModal() {
     showGoalsModal.value = false;
+  }
+
+  /// Save weight goals from the Weight Goals modal.
+  /// Validates (target < starting, both > 0), persists to PreferencesService and userGoals,
+  /// updates reactive state so Weight Journey progress bar and text recalculate, then closes modal.
+  Future<void> saveWeightGoals({required double startingKg, required double targetKg}) async {
+    // Re-validate server-side (modal already validated)
+    if (startingKg <= 0 || targetKg <= 0 || targetKg >= startingKg) {
+      Get.snackbar(
+        'Invalid goals',
+        'Target weight must be less than starting weight; both must be greater than 0.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.withOpacity(0.8),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+
+    try {
+      // Persist starting weight
+      await PreferencesService.saveStartingWeight(startingKg);
+
+      // Update userGoals map with target weight (keep other goals from storage)
+      final savedGoals = PreferencesService.getStorage().read('userGoals');
+      Map<String, dynamic> goalsMap = {};
+      if (savedGoals != null) {
+        try {
+          goalsMap = Map<String, dynamic>.from(jsonDecode(savedGoals) as Map);
+        } catch (_) {}
+      }
+      goalsMap['targetWeight'] = targetKg.toString();
+      goalsMap['currentWeight'] = currentWeight.value.toString();
+      PreferencesService.getStorage().write('userGoals', jsonEncode(goalsMap));
+
+      // Update reactive state so Weight Journey UI recalculates progress bar & text
+      startingWeight.value = startingKg;
+      goalWeight.value = targetKg;
+
+      closeGoalsModal();
+
+      // Optionally sync to backend (same pattern as Settings > Goals)
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken != null && apiToken.isNotEmpty) {
+        final waterIntake = goalsMap['waterIntake']?.toString() ?? '3';
+        final waterIntakeWithUnit =
+            waterIntake.endsWith('L') || waterIntake.endsWith('l')
+                ? waterIntake
+                : '$waterIntake L';
+        final response = await _goalsRepository.createGoals(
+          token: apiToken,
+          currentWeight: goalsMap['currentWeight']?.toString() ?? currentWeight.value.toString(),
+          targetWeight: targetKg.toString(),
+          stepGoal: goalsMap['stepGoal']?.toString() ?? '12000',
+          dailyWaterIntake: waterIntakeWithUnit,
+          sleepHours: goalsMap['sleepHours']?.toString() ?? '7-8',
+          aiTone: goalsMap['aiTone']?.toString() ?? 'encouraging',
+        );
+        if (!response.isSuccess && kDebugMode) {
+          debugPrint('⚠️ Weight goals saved locally but API sync failed: ${response.message}');
+        }
+      }
+
+      Get.snackbar(
+        'Success',
+        'Weight goals saved.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFF00B8A9),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error saving weight goals: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to save goals. Please try again.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFE53935),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+    }
   }
 
   void handleDone() {

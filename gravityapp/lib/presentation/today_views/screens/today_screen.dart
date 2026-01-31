@@ -10,6 +10,7 @@ import 'sections/one_thing_to_watch_section.dart';
 import 'sections/reflection_section.dart';
 import 'sections/done_button_section.dart';
 import 'modals/log_weigh_in_modal.dart';
+import 'modals/weight_goals_modal.dart';
 
 class TodayScreen extends GetView<TodayController> {
   const TodayScreen({super.key});
@@ -87,9 +88,12 @@ class TodayScreen extends GetView<TodayController> {
                 ),
               ],
             ),
-            // Modal overlay
+            // Modal overlays
             Obx(() => controller.showWeighInModal.value
                 ? LogWeighInModal(controller: controller)
+                : const SizedBox.shrink()),
+            Obx(() => controller.showGoalsModal.value
+                ? WeightGoalsModal(controller: controller)
                 : const SizedBox.shrink()),
           ],
         ),

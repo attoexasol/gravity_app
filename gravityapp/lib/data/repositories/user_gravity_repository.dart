@@ -420,6 +420,52 @@ class UserGravityRepository {
     }
   }
 
+  /// Create or update daily reflection
+  /// API: POST /user-gravity/daily_reflection/store
+  /// Request Body: { "api_token": string, "daily_reflection": string }
+  Future<ApiResponse<Map<String, dynamic>>> storeDailyReflection({
+    required String apiToken,
+    required String dailyReflection,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'api_token': apiToken,
+        'daily_reflection': dailyReflection,
+      };
+
+      debugPrint('📤 Store Daily Reflection Request');
+
+      final response = await _apiService.post(
+        '/user-gravity/daily_reflection/store',
+        body: body,
+      );
+
+      debugPrint('📥 Store Daily Reflection Response Status: ${response['status']}');
+
+      return ApiResponse<Map<String, dynamic>>(
+        status: response['status'] ?? false,
+        message: response['message'] ?? '',
+        data: response['data'] != null && response['data'] is Map<String, dynamic>
+            ? response['data'] as Map<String, dynamic>
+            : null,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ StoreDailyReflection API Error: ${e.message}');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ StoreDailyReflection Unknown Error: $e');
+      return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
   /// Fetch weekly goal completion data
   /// API: POST https://gravity.attoexasolutions.com/api/day-wise-goal-completion
   /// Request Body: { "api_token": string, "start_date": string, "end_date": string }
