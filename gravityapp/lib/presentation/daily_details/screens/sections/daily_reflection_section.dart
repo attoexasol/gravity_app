@@ -59,7 +59,10 @@ class DailyReflectionSection extends StatelessWidget {
               if (!hasReflection) ...[
                 SizedBox(height: 12.h),
                 GestureDetector(
-                  onTap: () => Get.toNamed(AppRoutes.dailySummary),
+                  onTap: () => Get.toNamed(
+                    AppRoutes.dailySummary,
+                    arguments: {'scrollToReflection': true},
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

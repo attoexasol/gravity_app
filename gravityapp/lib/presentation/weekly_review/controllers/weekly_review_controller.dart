@@ -143,7 +143,7 @@ class WeeklyReviewController extends GetxController {
     final weighin = List<PillarStatus>.filled(7, PillarStatus.missed);
 
     // Helper function to convert API status string to PillarStatus enum
-    PillarStatus _mapStatus(String status) {
+    PillarStatus mapStatus(String status) {
       switch (status.toLowerCase()) {
         case 'completed':
           return PillarStatus.complete;
@@ -156,7 +156,7 @@ class WeeklyReviewController extends GetxController {
     }
 
     // Helper function to get weekday index (0=Monday, 6=Sunday)
-    int _getWeekdayIndex(DateTime date) {
+    int getWeekdayIndex(DateTime date) {
       // DateTime.weekday: 1=Monday, 7=Sunday
       // We want: 0=Monday, 6=Sunday
       return date.weekday - 1;
@@ -179,18 +179,16 @@ class WeeklyReviewController extends GetxController {
           }
         }
 
-        if (date == null) continue;
-
-        final weekdayIndex = _getWeekdayIndex(date);
+        final weekdayIndex = getWeekdayIndex(date);
 
         // Ensure index is within bounds (0-6)
         if (weekdayIndex >= 0 && weekdayIndex < 7) {
           // Map each goal status to the correct weekday position
-          nutrition[weekdayIndex] = _mapStatus(dayData.nutration.status);
-          hydration[weekdayIndex] = _mapStatus(dayData.hydration.status);
-          sleep[weekdayIndex] = _mapStatus(dayData.sleep.status);
-          steps[weekdayIndex] = _mapStatus(dayData.steps.status);
-          weighin[weekdayIndex] = _mapStatus(dayData.weight.status);
+          nutrition[weekdayIndex] = mapStatus(dayData.nutration.status);
+          hydration[weekdayIndex] = mapStatus(dayData.hydration.status);
+          sleep[weekdayIndex] = mapStatus(dayData.sleep.status);
+          steps[weekdayIndex] = mapStatus(dayData.steps.status);
+          weighin[weekdayIndex] = mapStatus(dayData.weight.status);
           // Note: Fasting is not in API response, keep as missed
         } else {
           debugPrint('⚠️ Invalid weekday index: $weekdayIndex for date: ${dayData.date}');

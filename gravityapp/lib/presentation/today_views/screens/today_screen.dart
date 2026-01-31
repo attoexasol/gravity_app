@@ -42,48 +42,7 @@ class TodayScreen extends GetView<TodayController> {
                     
                     // Always show content - even when no data exists (new users, empty days)
                     // UI will display with default/empty values
-                    return RefreshIndicator(
-                      onRefresh: controller.onRefresh,
-                      color: const Color(0xFF00B8A9),
-                      child: TweenAnimationBuilder<double>(
-                        tween: Tween<double>(begin: 0.0, end: 1.0),
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeIn,
-                        builder: (context, opacity, child) {
-                          return Opacity(
-                            opacity: opacity,
-                            child: child,
-                          );
-                        },
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(height: 24.h),
-                              // Pillar Status
-                              PillarStatusSection(controller: controller),
-                              SizedBox(height: 16.h),
-                              // Weight Journey
-                              WeightJourneySection(controller: controller),
-                              SizedBox(height: 16.h),
-                              // Wins Today
-                              WinsTodaySection(),
-                              SizedBox(height: 16.h),
-                              // One Thing to Watch
-                              OneThingToWatchSection(),
-                              SizedBox(height: 16.h),
-                              // Reflection
-                              ReflectionSection(controller: controller),
-                              SizedBox(height: 16.h),
-                              // Done Button
-                              DoneButtonSection(controller: controller),
-                              SizedBox(height: 96.h), // Bottom padding
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
+                    return _ScrollToReflectionContent(controller: controller);
                   }),
                 ),
               ],
@@ -213,6 +172,83 @@ class TodayScreen extends GetView<TodayController> {
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Wraps Today scroll content and scrolls to the reflection section when
+/// navigated with [arguments: {'scrollToReflection': true}].
+class _ScrollToReflectionContent extends StatefulWidget {
+  const _ScrollToReflectionContent({required this.controller});
+  final TodayController controller;
+
+  @override
+  State<_ScrollToReflectionContent> createState() =>
+      _ScrollToReflectionContentState();
+}
+
+class _ScrollToReflectionContentState extends State<_ScrollToReflectionContent> {
+  final GlobalKey _reflectionKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    if (Get.arguments is Map &&
+        (Get.arguments as Map)['scrollToReflection'] == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = _reflectionKey.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeInOut,
+            alignment: 0.2,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: widget.controller.onRefresh,
+      color: const Color(0xFF00B8A9),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 0.0, end: 1.0),
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeIn,
+        builder: (context, opacity, child) {
+          return Opacity(
+            opacity: opacity,
+            child: child,
+          );
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(height: 24.h),
+              PillarStatusSection(controller: widget.controller),
+              SizedBox(height: 16.h),
+              WeightJourneySection(controller: widget.controller),
+              SizedBox(height: 16.h),
+              WinsTodaySection(),
+              SizedBox(height: 16.h),
+              OneThingToWatchSection(),
+              SizedBox(height: 16.h),
+              RepaintBoundary(
+                key: _reflectionKey,
+                child: ReflectionSection(controller: widget.controller),
+              ),
+              SizedBox(height: 16.h),
+              DoneButtonSection(controller: widget.controller),
+              SizedBox(height: 96.h),
             ],
           ),
         ),

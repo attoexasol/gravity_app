@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'progress_chart_section.dart';
 
 /// Example usage of ProgressChartSection with mock weekly data
@@ -73,14 +74,13 @@ class ProgressChartExample extends StatelessWidget {
     final minWeight = weights.reduce((a, b) => a < b ? a : b);
     final maxWeight = weights.reduce((a, b) => a > b ? a : b);
     
+    // Y-axis bounds (minY, maxY) and FlSpot list - use with real chart in ProgressChartSection
     final minY = (minWeight - 2).roundToDouble();
     final maxY = (maxWeight + 2).roundToDouble();
-    
-    // Convert to FlSpot
     final chartSpots = entries.asMap().entries.map((entry) {
       return FlSpot(entry.key.toDouble(), entry.value.weight);
     }).toList();
-    
+
     // This is a simplified example - in production, use ProgressChartSection widget
     return const SizedBox(
       height: 240,
