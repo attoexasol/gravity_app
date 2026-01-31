@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 import '../../../../data/model/daily_details.dart';
 import '../../../../app/routes/app_routes.dart';
 
@@ -9,12 +10,15 @@ class DailyDetailsController extends GetxController {
   
   // Current day index
   final RxInt currentDayIndex = 0.obs;
-  
+
   // Animation direction for slide transitions
   final RxInt direction = 0.obs;
-  
+
   // All days data
   final List<DayData> allDaysData = [];
+
+  /// Header date string (day name + date). Uses real current date when viewing today (index 0).
+  final RxString headerDateText = ''.obs;
 
   DailyDetailsController({this.fromScreen = 'dashboard'}) {
     _initializeData();
@@ -197,9 +201,18 @@ class DailyDetailsController extends GetxController {
     } else {
       currentDayIndex.value = 2; // Tuesday (May 7)
     }
+    _updateHeaderDateText();
   }
 
   DayData get currentDay => allDaysData[currentDayIndex.value];
+
+  void _updateHeaderDateText() {
+    if (currentDayIndex.value == 0) {
+      headerDateText.value = DateFormat('EEEE, MMMM d').format(DateTime.now());
+    } else {
+      headerDateText.value = currentDay.fullDate;
+    }
+  }
 
   bool get canGoPrevious => currentDayIndex.value > 0;
   bool get canGoNext => currentDayIndex.value < allDaysData.length - 1;
@@ -208,6 +221,7 @@ class DailyDetailsController extends GetxController {
     if (canGoPrevious) {
       direction.value = -1;
       currentDayIndex.value--;
+      _updateHeaderDateText();
     }
   }
 
@@ -215,6 +229,7 @@ class DailyDetailsController extends GetxController {
     if (canGoNext) {
       direction.value = 1;
       currentDayIndex.value++;
+      _updateHeaderDateText();
     }
   }
 

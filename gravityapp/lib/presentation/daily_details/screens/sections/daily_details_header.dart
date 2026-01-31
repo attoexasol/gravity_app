@@ -31,7 +31,6 @@ class DailyDetailsHeader extends StatelessWidget {
         ),
       ),
       child: Obx(() {
-        final currentDay = controller.currentDay;
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -58,10 +57,10 @@ class DailyDetailsHeader extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Date
+                // Date (current date when viewing today, else selected day)
                 Expanded(
                   child: Text(
-                    currentDay.fullDate,
+                    controller.headerDateText.value,
                     style: ResponsiveTextStyles.h2.copyWith(
                       color: const Color(0xFF0A2342),
                       fontWeight: FontWeight.w600,
