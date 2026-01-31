@@ -23,6 +23,9 @@ class DailyDetailsController extends GetxController {
   /// Header date string (day name + date). Driven by selectedDate.
   final RxString headerDateText = ''.obs;
 
+  /// Day-wise daily reflection from API; when non-empty, "+ Add reflection" is hidden.
+  final Rx<String?> dailyReflection = Rx<String?>(null);
+
   DailyDetailsController({this.fromScreen = 'dashboard'}) {
     _initializeData();
     _setInitialDayIndex();
