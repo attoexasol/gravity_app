@@ -420,6 +420,38 @@ class UserGravityRepository {
     }
   }
 
+  /// Get day-wise daily reflection for a date
+  /// API: POST https://gravity.attoexasolutions.com/api/daily_reflection/day-wise
+  /// Request Body: { "api_token": string, "date": "YYYY-MM-DD" }
+  /// Response: { "status": true, "date": "...", "daily_reflection": "..." } or daily_reflection null if none
+  Future<String?> getDailyReflectionByDate({
+    required String apiToken,
+    required String date, // YYYY-MM-DD
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'api_token': apiToken,
+        'date': date,
+      };
+      debugPrint('📤 Get Daily Reflection (day-wise) Request: date=$date');
+      final response = await _apiService.post(
+        '/daily_reflection/day-wise',
+        body: body,
+      );
+      debugPrint('📥 Get Daily Reflection Response Status: ${response['status']}');
+      if (response['status'] != true) return null;
+      final reflection = response['daily_reflection'];
+      if (reflection == null) return null;
+      return reflection is String ? reflection : reflection.toString();
+    } on ApiException catch (e) {
+      debugPrint('❌ GetDailyReflectionByDate API Error: ${e.message}');
+      return null;
+    } catch (e) {
+      debugPrint('❌ GetDailyReflectionByDate Error: $e');
+      return null;
+    }
+  }
+
   /// Create or update daily reflection
   /// API: POST /user-gravity/daily_reflection/store
   /// Request Body: { "api_token": string, "daily_reflection": string }

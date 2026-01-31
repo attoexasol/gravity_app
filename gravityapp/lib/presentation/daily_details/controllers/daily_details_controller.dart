@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/model/daily_details.dart';
+import '../../../../data/repositories/user_gravity_repository.dart';
+import '../../../../core/services/preferences_service.dart';
 import '../../../../app/routes/app_routes.dart';
 
 class DailyDetailsController extends GetxController {
@@ -26,9 +28,33 @@ class DailyDetailsController extends GetxController {
   /// Day-wise daily reflection from API; when non-empty, "+ Add reflection" is hidden.
   final Rx<String?> dailyReflection = Rx<String?>(null);
 
+  final UserGravityRepository _gravityRepository = UserGravityRepository();
+
   DailyDetailsController({this.fromScreen = 'dashboard'}) {
     _initializeData();
     _setInitialDayIndex();
+  }
+
+  /// Selected date in YYYY-MM-DD for API calls
+  String get selectedDateYyyyMmDd => DateFormat('yyyy-MM-dd').format(selectedDate.value);
+
+  @override
+  void onInit() {
+    super.onInit();
+    _fetchDailyReflectionForSelectedDate();
+  }
+
+  Future<void> _fetchDailyReflectionForSelectedDate() async {
+    final apiToken = PreferencesService.getAuthToken();
+    if (apiToken == null || apiToken.isEmpty) {
+      dailyReflection.value = null;
+      return;
+    }
+    final reflection = await _gravityRepository.getDailyReflectionByDate(
+      apiToken: apiToken,
+      date: selectedDateYyyyMmDd,
+    );
+    dailyReflection.value = reflection;
   }
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -228,6 +254,7 @@ class DailyDetailsController extends GetxController {
     selectedDate.value = _dateOnly(selectedDate.value.subtract(const Duration(days: 1)));
     _syncCurrentDayIndexFromSelectedDate();
     _updateHeaderDateText();
+    _fetchDailyReflectionForSelectedDate();
   }
 
   void goToNextDay() {
@@ -235,6 +262,7 @@ class DailyDetailsController extends GetxController {
     selectedDate.value = _dateOnly(selectedDate.value.add(const Duration(days: 1)));
     _syncCurrentDayIndexFromSelectedDate();
     _updateHeaderDateText();
+    _fetchDailyReflectionForSelectedDate();
   }
 
   void onBack() {
