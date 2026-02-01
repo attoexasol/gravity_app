@@ -280,8 +280,9 @@ class AuthRepository {
         }
       }
 
-      // Clear tokens locally
+      // Clear tokens locally (TokenManager + legacy auth_token)
       await tokenManager.clearTokens();
+      await PreferencesService.clearAuthToken();
 
       // Clear session
       final sessionManager = SessionManager();
@@ -297,6 +298,7 @@ class AuthRepository {
       // Even if logout fails, clear tokens locally
       try {
         await TokenManager().clearTokens();
+        await PreferencesService.clearAuthToken();
       } catch (clearError) {
         debugPrint('❌ Error clearing tokens: $clearError');
       }

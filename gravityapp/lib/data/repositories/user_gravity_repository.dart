@@ -3,6 +3,7 @@ import '../../core/services/api_service.dart';
 import '../model/api_response.dart';
 import '../model/user_gravity_entry.dart';
 import '../model/day_wise_goal_completion.dart';
+import '../model/day_activity.dart';
 
 /// User Gravity Repository - Handles User Gravity API calls
 class UserGravityRepository {
@@ -370,6 +371,56 @@ class UserGravityRepository {
     } catch (e) {
       debugPrint('❌ GetDateWiseGravity Unknown Error: $e');
       return ApiResponse<Map<String, dynamic>>(
+        status: false,
+        message: 'An unexpected error occurred. Please try again.',
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Get day-wise activity (pillars: weight, steps, sleep, hydration, nutration)
+  /// API: POST https://gravity.attoexasolutions.com/api/user/day-activity
+  /// Request: { "api_token": string, "date": "YYYY-MM-DD" }
+  Future<ApiResponse<DayActivityData>> getDayActivity({
+    required String apiToken,
+    required String date, // YYYY-MM-DD
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'api_token': apiToken,
+        'date': date,
+      };
+      debugPrint('📤 GET Day Activity Request: date=$date');
+      final response = await _apiService.post(
+        '/user/day-activity',
+        body: body,
+      );
+      debugPrint('📥 GET Day Activity Response Status: ${response['status']}');
+      if (response['status'] != true || response['data'] == null) {
+        return ApiResponse<DayActivityData>(
+          status: false,
+          message: response['message']?.toString() ?? 'No data',
+          data: null,
+        );
+      }
+      final data = DayActivityData.fromJson(
+        response['data'] as Map<String, dynamic>,
+      );
+      return ApiResponse<DayActivityData>(
+        status: true,
+        message: response['message']?.toString() ?? '',
+        data: data,
+      );
+    } on ApiException catch (e) {
+      debugPrint('❌ GetDayActivity API Error: ${e.message}');
+      return ApiResponse<DayActivityData>(
+        status: false,
+        message: e.message,
+        error: e.errors,
+      );
+    } catch (e) {
+      debugPrint('❌ GetDayActivity Error: $e');
+      return ApiResponse<DayActivityData>(
         status: false,
         message: 'An unexpected error occurred. Please try again.',
         error: e.toString(),

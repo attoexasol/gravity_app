@@ -805,6 +805,8 @@ class TodayController extends GetxController {
         dailyReflection: text,
       );
       if (response.isSuccess) {
+        reflectionController.clear();
+        reflection.value = '';
         Get.snackbar(
           'Success',
           response.message.isNotEmpty ? response.message : 'Daily Reflection updated successfully.',

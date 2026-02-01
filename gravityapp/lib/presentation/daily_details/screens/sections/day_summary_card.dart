@@ -15,7 +15,7 @@ class DaySummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final day = controller.currentDay;
+      final day = controller.displayDay;
       return Container(
         margin: EdgeInsets.symmetric(horizontal: 16.w, vertical: 24.h),
         padding: EdgeInsets.all(20.r),

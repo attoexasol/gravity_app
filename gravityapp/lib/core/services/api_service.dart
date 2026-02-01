@@ -400,8 +400,9 @@ class ApiService {
       final sessionManager = SessionManager();
       await sessionManager.clearSession();
       
-      // Clear user data
+      // Clear user data and legacy auth token (so isAuthenticated() is false)
       await PreferencesService.clearUserData();
+      await PreferencesService.clearAuthToken();
       
       // Navigate to login screen
       if (Get.currentRoute != AppRoutes.login) {

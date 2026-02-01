@@ -139,8 +139,9 @@ class AuthErrorHandler {
       // Clear session
       await _sessionManager.clearSession();
       
-      // Clear user data
+      // Clear user data and legacy auth token (so isAuthenticated() is false)
       await PreferencesService.clearUserData();
+      await PreferencesService.clearAuthToken();
       
       // Clear image cache to prevent old user's profile images from showing
       await ImageCacheService.clearAllImageData();

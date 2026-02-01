@@ -44,10 +44,9 @@ class LoginController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    // Initialize controllers in onInit to ensure they're created when controller is initialized
     emailController = TextEditingController(text: "rajibduet02@gmail.com");
     passwordController = TextEditingController(text: "Gravity@024017");
-
+    // Initialize controllers in onInit to ensure they're created when controller is initialized
     // emailController = TextEditingController(text: "");
     // passwordController = TextEditingController(text: "");
     

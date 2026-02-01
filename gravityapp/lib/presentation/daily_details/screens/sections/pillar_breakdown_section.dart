@@ -16,7 +16,7 @@ class PillarBreakdownSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final day = controller.currentDay;
+      final day = controller.displayDay;
       return Padding(
         padding: EdgeInsets.symmetric(horizontal: 16.w),
         child: Column(
@@ -82,7 +82,7 @@ class PillarBreakdownSection extends StatelessWidget {
               controller: controller,
               icon: Icons.monitor_weight,
               iconColor: const Color(0xFF00B8A9),
-              title: 'Weigh-in',
+              title: 'Weight-in',
               pillar: day.pillars.weighin,
             ),
           ],

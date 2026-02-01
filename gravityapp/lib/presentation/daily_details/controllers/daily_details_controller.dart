@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/model/daily_details.dart';
+import '../../../../data/model/day_activity.dart';
 import '../../../../data/repositories/user_gravity_repository.dart';
 import '../../../../core/services/preferences_service.dart';
 import '../../../../app/routes/app_routes.dart';
@@ -28,6 +29,9 @@ class DailyDetailsController extends GetxController {
   /// Day-wise daily reflection from API; when non-empty, "+ Add reflection" is hidden.
   final Rx<String?> dailyReflection = Rx<String?>(null);
 
+  /// Day-wise activity from API (weight, steps, sleep, hydration, nutration). When non-null, Pillar Breakdown and Day Summary use this.
+  final Rx<DayActivityData?> dayActivityData = Rx<DayActivityData?>(null);
+
   final UserGravityRepository _gravityRepository = UserGravityRepository();
 
   DailyDetailsController({this.fromScreen = 'dashboard'}) {
@@ -41,7 +45,21 @@ class DailyDetailsController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    _fetchDayActivityForSelectedDate();
     _fetchDailyReflectionForSelectedDate();
+  }
+
+  Future<void> _fetchDayActivityForSelectedDate() async {
+    final apiToken = PreferencesService.getAuthToken();
+    if (apiToken == null || apiToken.isEmpty) {
+      dayActivityData.value = null;
+      return;
+    }
+    final response = await _gravityRepository.getDayActivity(
+      apiToken: apiToken,
+      date: selectedDateYyyyMmDd,
+    );
+    dayActivityData.value = response.isSuccess ? response.data : null;
   }
 
   Future<void> _fetchDailyReflectionForSelectedDate() async {
@@ -236,6 +254,126 @@ class DailyDetailsController extends GetxController {
 
   DayData get currentDay => allDaysData[currentDayIndex.value];
 
+  /// Day to show: from day-activity API when available, else mock currentDay.
+  DayData get displayDay {
+    final api = dayActivityData.value;
+    if (api != null) return _dayDataFromApi(api);
+    return currentDay;
+  }
+
+  static PillarStatus _apiStatusToPillarStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return PillarStatus.complete;
+      case 'partial':
+        return PillarStatus.partial;
+      case 'missed':
+        return PillarStatus.missed;
+      default:
+        return PillarStatus.none;
+    }
+  }
+
+  DayData _dayDataFromApi(DayActivityData api) {
+    final d = selectedDate.value;
+    final dateStr = DateFormat('MMM d').format(d);
+    final dayName = DateFormat('EEEE').format(d);
+    final fullDateStr = DateFormat('EEEE, MMMM d').format(d);
+
+    final nutrition = api.nutration != null
+        ? Pillar(
+            status: _apiStatusToPillarStatus(api.nutration!.status),
+            detail: api.nutration!.actualString.isNotEmpty
+                ? '${api.nutration!.actualString} cal'
+                : 'Logged',
+          )
+        : Pillar(status: PillarStatus.none, detail: 'Not logged');
+    final hydration = api.hydration != null
+        ? Pillar(
+            status: _apiStatusToPillarStatus(api.hydration!.status),
+            detail: api.hydration!.actualString.isNotEmpty
+                ? api.hydration!.actualString
+                : (api.hydration!.goal ?? '—'),
+          )
+        : Pillar(status: PillarStatus.none, detail: '—');
+    final sleep = api.sleep != null
+        ? Pillar(
+            status: _apiStatusToPillarStatus(api.sleep!.status),
+            detail: api.sleep!.actualString.isNotEmpty
+                ? '${api.sleep!.actualString} hours'
+                : (api.sleep!.goal != null ? '${api.sleep!.goal} hours' : '—'),
+          )
+        : Pillar(status: PillarStatus.none, detail: '—');
+    final step = api.steps != null
+        ? Pillar(
+            status: _apiStatusToPillarStatus(api.steps!.status),
+            detail: api.steps!.actualString.isNotEmpty
+                ? '${api.steps!.actualString} steps today'
+                : (api.steps!.goal ?? '—'),
+          )
+        : Pillar(status: PillarStatus.none, detail: '—');
+    final fasting = Pillar(status: PillarStatus.none, detail: 'Not scheduled');
+    final weighin = api.weight != null
+        ? Pillar(
+            status: _apiStatusToPillarStatus(api.weight!.status),
+            detail: api.weight!.actualString.isNotEmpty
+                ? '${api.weight!.actualString} kg'
+                : (api.weight!.goal != null ? '${api.weight!.goal} kg' : 'Not scheduled'),
+          )
+        : Pillar(status: PillarStatus.none, detail: 'Not scheduled');
+
+    final pillars = DayPillars(
+      nutrition: nutrition,
+      hydration: hydration,
+      sleep: sleep,
+      step: step,
+      fasting: fasting,
+      weighin: weighin,
+    );
+
+    int completed = 0;
+    for (final p in [nutrition, hydration, sleep, step, weighin]) {
+      if (p.status == PillarStatus.complete || p.status == PillarStatus.partial) completed++;
+    }
+    const totalPillars = 6;
+
+    DayMood mood;
+    String moodLabel;
+    String moodEmoji;
+    if (completed == totalPillars) {
+      mood = DayMood.great;
+      moodLabel = 'Great day';
+      moodEmoji = '🤩';
+    } else if (completed >= totalPillars - 1) {
+      mood = DayMood.good;
+      moodLabel = 'Good day';
+      moodEmoji = '😊';
+    } else if (completed >= totalPillars - 2) {
+      mood = DayMood.okay;
+      moodLabel = 'Okay day';
+      moodEmoji = '😐';
+    } else {
+      mood = DayMood.tough;
+      moodLabel = 'Tough day';
+      moodEmoji = '😓';
+    }
+
+    return DayData(
+      date: dateStr,
+      dayName: dayName,
+      fullDate: fullDateStr,
+      mood: mood,
+      moodEmoji: moodEmoji,
+      moodLabel: moodLabel,
+      pillarsCompleted: completed,
+      totalPillars: totalPillars,
+      morningTag: '—',
+      eveningTag: '—',
+      pillars: pillars,
+      reflection: null,
+    );
+  }
+
   void _syncCurrentDayIndexFromSelectedDate() {
     final today = _dateOnly(DateTime.now());
     final daysDiff = today.difference(selectedDate.value).inDays;
@@ -246,14 +384,20 @@ class DailyDetailsController extends GetxController {
     headerDateText.value = DateFormat('EEEE, MMMM d').format(selectedDate.value);
   }
 
+  /// Left arrow: always allow navigating to previous dates.
   bool get canGoPrevious => true;
-  bool get canGoNext => true;
+
+  /// Right arrow: enabled only when selectedDate is before today (date-only comparison).
+  /// Disabled when selectedDate is today to prevent navigation to future dates.
+  bool get canGoNext =>
+      _dateOnly(selectedDate.value).isBefore(_dateOnly(DateTime.now()));
 
   void goToPreviousDay() {
     direction.value = -1;
     selectedDate.value = _dateOnly(selectedDate.value.subtract(const Duration(days: 1)));
     _syncCurrentDayIndexFromSelectedDate();
     _updateHeaderDateText();
+    _fetchDayActivityForSelectedDate();
     _fetchDailyReflectionForSelectedDate();
   }
 
@@ -262,6 +406,7 @@ class DailyDetailsController extends GetxController {
     selectedDate.value = _dateOnly(selectedDate.value.add(const Duration(days: 1)));
     _syncCurrentDayIndexFromSelectedDate();
     _updateHeaderDateText();
+    _fetchDayActivityForSelectedDate();
     _fetchDailyReflectionForSelectedDate();
   }
 
