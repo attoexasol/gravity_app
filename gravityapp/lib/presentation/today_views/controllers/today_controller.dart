@@ -12,6 +12,7 @@ import '../../../../data/model/user_gravity_entry.dart';
 import '../../../../data/model/date_wise_gravity_response.dart';
 import '../../../../data/model/api_response.dart';
 import '../../../../core/services/preferences_service.dart';
+import '../../../../core/services/app_lifecycle_service.dart';
 
 class TodayController extends GetxController {
   // Weight data
@@ -792,6 +793,7 @@ class TodayController extends GetxController {
   /// Submit daily reflection to API. Disables submit button while in progress.
   /// Does nothing if input is empty. Shows success snackbar on status=true; handles errors silently.
   Future<void> submitReflection() async {
+    if (!AppLifecycleService().isAppInForeground) return;
     final text = reflectionController.text.trim();
     if (text.isEmpty) return;
 
@@ -837,6 +839,7 @@ class TodayController extends GetxController {
   /// Save weight-in entry using the create_manual_user_gravity API
   /// Same API as used in Dashboard Quick Actions
   Future<void> saveWeighIn() async {
+    if (!AppLifecycleService().isAppInForeground) return;
     final weightValue = double.tryParse(weightController.text);
     
     // Validate weight input
@@ -905,17 +908,19 @@ class TodayController extends GetxController {
         // Reload date-wise gravity data to get updated weight
         await fetchDateWiseGravity();
       } else {
-        debugPrint('❌ Failed to save weight-in: ${response.message}');
-        Get.snackbar(
-          'Error',
-          response.message.isNotEmpty 
-              ? response.message 
-              : 'Failed to save weight',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: const Color(0xFFE53935),
-          colorText: Colors.white,
-          duration: const Duration(seconds: 2),
-        );
+        if (response.message != kNetworkUnavailableMessage) {
+          debugPrint('❌ Failed to save weight-in: ${response.message}');
+          Get.snackbar(
+            'Error',
+            response.message.isNotEmpty
+                ? response.message
+                : 'Failed to save weight',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: const Color(0xFFE53935),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2),
+          );
+        }
       }
     } catch (e) {
       debugPrint('❌ Error saving weight-in: $e');
@@ -1020,18 +1025,16 @@ class TodayController extends GetxController {
     }
   }
 
-  void handleDone() {
-    // Prevent multiple rapid calls
-    if (_isNavigating) {
-      return;
-    }
-    
+  /// Called when user taps Done. Saves reflection if there is text, then navigates back.
+  Future<void> handleDone() async {
+    if (_isNavigating) return;
     _isNavigating = true;
-    
-    // Save reflection
-    print('Saving reflection: ${reflection.value}');
-    
-    // Use a small delay to ensure state is saved, then navigate
+
+    final hasReflection = reflectionController.text.trim().isNotEmpty;
+    if (hasReflection) {
+      await submitReflection();
+    }
+
     Future.delayed(const Duration(milliseconds: 100), () {
       _navigateBack();
     });

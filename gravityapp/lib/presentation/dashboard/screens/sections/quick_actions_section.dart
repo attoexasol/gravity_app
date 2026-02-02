@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_text_styles.dart';
 import '../../controllers/dashboard_controller.dart';
 
@@ -170,22 +171,272 @@ class QuickActionsSection extends StatelessWidget {
     );
   }
 
-  /// Show Fasting Mode Modal
+  /// Show Fasting Mode Modal (dropdown-based; time-window rules; no numeric input)
   void _showFastingModal(BuildContext context) {
-    ManualEntryModal.show(
+    showDialog(
       context: context,
-      title: 'Log Meals',
-      icon: Icons.restaurant_outlined,
-      iconColor: const Color(0xFFD4AF37),
-      value: controller.fastingInput.value,
-      onChanged: (value) => controller.fastingInput.value = value,
-      onSubmit: () => controller.handleFastingSubmit(),
-      onClose: () => controller.fastingInput.value = '',
-      placeholder: 'Enter number of meals (0-2)',
-      unit: 'meals',
-      gradient: const [Color(0xFFD4AF37), Color(0xFFB8941F)],
-      description: 'Track your daily meals. Enter 0-2 meals eaten today.',
-      keyboardType: TextInputType.number,
+      barrierDismissible: true,
+      barrierColor: AppColors.foreground.withOpacity(0.4),
+      builder: (context) => FastingDropdownModal(controller: controller),
+    );
+  }
+}
+
+// --- Time window helpers for fasting modal ---
+bool _isInMeal1Window(DateTime now) {
+  final h = now.hour + now.minute / 60.0;
+  return h >= 12 && h < 14;
+}
+
+bool _isInMeal2Window(DateTime now) {
+  final h = now.hour + now.minute / 60.0;
+  return h >= 17 && h < 19;
+}
+
+bool _isInOmadWindow(DateTime now) {
+  return _isInMeal1Window(now) || _isInMeal2Window(now);
+}
+
+/// Dropdown-based fasting modal: two expandable sections (2_MEALS / OMAD), time-window radios only.
+class FastingDropdownModal extends StatefulWidget {
+  final DashboardController controller;
+
+  const FastingDropdownModal({super.key, required this.controller});
+
+  @override
+  State<FastingDropdownModal> createState() => _FastingDropdownModalState();
+}
+
+class _FastingDropdownModalState extends State<FastingDropdownModal> {
+  /// Which section is expanded: 0 = 2_MEALS, 1 = OMAD, -1 = none. Only one at a time.
+  int _expandedIndex = -1;
+
+  static const Color _kTealAccent = Color(0xFF00B8A9);
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.popover,
+          borderRadius: BorderRadius.circular(AppSizes.radiusLg * 2),
+          border: Border.all(color: AppColors.border, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.foreground.withOpacity(0.08),
+              blurRadius: 20.r,
+              offset: Offset(0, 8.h),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 8.h),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Fasting Mark meal',
+                    style: ResponsiveTextStyles.textLg.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.popoverForeground,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: AppColors.secondary,
+                        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                      ),
+                      child: Icon(Icons.close, size: 18.sp, color: AppColors.popoverForeground),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(12.w, 0, 12.w, 20.h),
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  dividerColor: Colors.transparent,
+                  splashColor: _kTealAccent.withOpacity(0.1),
+                  highlightColor: _kTealAccent.withOpacity(0.05),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ExpansionTile(
+                      key: ValueKey('two_meals_$_expandedIndex'),
+                      initiallyExpanded: _expandedIndex == 0,
+                      onExpansionChanged: (expanded) {
+                        setState(() => _expandedIndex = expanded ? 0 : -1);
+                      },
+                      tilePadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                      childrenPadding: EdgeInsets.fromLTRB(8.w, 0, 8.w, 12.h),
+                      iconColor: _kTealAccent,
+                      collapsedIconColor: _kTealAccent,
+                      title: Text(
+                        'Two Meals Plan',
+                        style: ResponsiveTextStyles.textBase.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.popoverForeground,
+                        ),
+                      ),
+                      children: [Obx(() => _buildTwoMealsContent())],
+                    ),
+                    ExpansionTile(
+                      key: ValueKey('omad_$_expandedIndex'),
+                      initiallyExpanded: _expandedIndex == 1,
+                      onExpansionChanged: (expanded) {
+                        setState(() => _expandedIndex = expanded ? 1 : -1);
+                      },
+                      tilePadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                      childrenPadding: EdgeInsets.fromLTRB(8.w, 0, 8.w, 12.h),
+                      iconColor: _kTealAccent,
+                      collapsedIconColor: _kTealAccent,
+                      title: Text(
+                        'OMAD Plan',
+                        style: ResponsiveTextStyles.textBase.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.popoverForeground,
+                        ),
+                      ),
+                      children: [Obx(() => _buildOmadContent())],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTwoMealsContent() {
+    final now = DateTime.now();
+    final meals = widget.controller.mealsEaten.value;
+    final inWindow1 = _isInMeal1Window(now);
+    final inWindow2 = _isInMeal2Window(now);
+    final meal1Done = meals >= 1;
+    final meal2Done = meals >= 2;
+    final canSelect1 = inWindow1 && !meal1Done;
+    final canSelect2 = inWindow2 && !meal2Done;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildRadioRow(
+          value: 1,
+          groupValue: meals,
+          label: 'Meal 1 completed',
+          subtitle: 'Allowed: 12:00 PM – 2:00 PM',
+          enabled: canSelect1,
+          selected: meal1Done,
+          onChanged: canSelect1 ? () => widget.controller.markMealCompleted(1) : null,
+        ),
+        SizedBox(height: 12.h),
+        _buildRadioRow(
+          value: 2,
+          groupValue: meals,
+          label: 'Meal 2 completed',
+          subtitle: 'Allowed: 5:00 PM – 7:00 PM',
+          enabled: canSelect2,
+          selected: meal2Done,
+          onChanged: canSelect2 ? () => widget.controller.markMealCompleted(2) : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOmadContent() {
+    final now = DateTime.now();
+    final meals = widget.controller.mealsEaten.value;
+    final inWindow = _isInOmadWindow(now);
+    final done = meals >= 1;
+    final canSelect = inWindow && !done;
+
+    return _buildRadioRow(
+      value: 1,
+      groupValue: meals >= 1 ? 1 : 0,
+      label: 'Meal completed',
+      subtitle: 'Allowed: 12:00–2:00 PM OR 5:00–7:00 PM',
+      enabled: canSelect,
+      selected: done,
+      onChanged: canSelect ? () => widget.controller.markMealCompleted(1) : null,
+    );
+  }
+
+  Widget _buildRadioRow({
+    required int value,
+    required int groupValue,
+    required String label,
+    required String subtitle,
+    required bool enabled,
+    required bool selected,
+    required VoidCallback? onChanged,
+  }) {
+    return InkWell(
+      onTap: enabled ? onChanged : null,
+      borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+      splashColor: _kTealAccent.withOpacity(0.1),
+      highlightColor: _kTealAccent.withOpacity(0.05),
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.6,
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 12.w),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 24.w,
+                height: 24.h,
+                child: Radio<int>(
+                  value: value,
+                  groupValue: groupValue,
+                  onChanged: enabled ? (_) => onChanged?.call() : null,
+                  activeColor: _kTealAccent,
+                  fillColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return _kTealAccent;
+                    }
+                    return AppColors.mutedForeground;
+                  }),
+                ),
+              ),
+              SizedBox(width: 12.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: ResponsiveTextStyles.textSm.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.popoverForeground,
+                      ),
+                    ),
+                    SizedBox(height: 2.h),
+                    Text(
+                      subtitle,
+                      style: ResponsiveTextStyles.textXs.copyWith(
+                        color: AppColors.mutedForeground,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

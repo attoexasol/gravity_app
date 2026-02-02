@@ -18,6 +18,7 @@ class DailyReflectionSection extends StatelessWidget {
     return Obx(() {
       final reflection = controller.dailyReflection.value;
       final hasReflection = reflection != null && reflection.trim().isNotEmpty;
+      final isToday = controller.isSelectedDateToday;
 
       return Padding(
         padding: EdgeInsets.symmetric(horizontal: 16.w),
@@ -56,13 +57,17 @@ class DailyReflectionSection extends StatelessWidget {
                     color: const Color(0xFF0A2342).withOpacity(0.5),
                   ),
                 ),
-              if (!hasReflection) ...[
+              if (!hasReflection && isToday) ...[
                 SizedBox(height: 12.h),
                 GestureDetector(
-                  onTap: () => Get.toNamed(
-                    AppRoutes.dailySummary,
-                    arguments: {'scrollToReflection': true},
-                  ),
+                  onTap: () {
+                    Get.toNamed(
+                      AppRoutes.dailySummary,
+                      arguments: {'scrollToReflection': true},
+                    )?.then((_) {
+                      controller.refetchDailyReflection();
+                    });
+                  },
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

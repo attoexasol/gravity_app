@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:get/get.dart';
 import '../../controllers/today_controller.dart';
 import '../../../../app/theme/app_text_styles.dart';
 
@@ -66,35 +65,6 @@ class ReflectionSection extends StatelessWidget {
                 ),
               ),
           SizedBox(height: 12.h),
-          Obx(() {
-            final isSubmitting = controller.isSubmittingReflection.value;
-            return GestureDetector(
-              onTap: isSubmitting ? null : controller.submitReflection,
-              child: Container(
-                padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
-                decoration: BoxDecoration(
-                  gradient: isSubmitting
-                      ? null
-                      : const LinearGradient(
-                          colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                        ),
-                  color: isSubmitting ? const Color(0xFFF5F6FA) : null,
-                  borderRadius: BorderRadius.circular(12.r),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  isSubmitting ? 'Submitting...' : 'Submit',
-                  style: ResponsiveTextStyles.textBase.copyWith(
-                    color: isSubmitting
-                        ? const Color(0xFF0A2342).withOpacity(0.5)
-                        : Colors.white,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            );
-          }),
-          SizedBox(height: 8.h),
           GestureDetector(
             onTap: controller.clearReflection,
             child: Text(

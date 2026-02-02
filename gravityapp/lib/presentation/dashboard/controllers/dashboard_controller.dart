@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, SocketException;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:get/get.dart';
@@ -8,6 +8,7 @@ import '../../messages/controllers/messages_controllers.dart';
 
 import '../../../core/services/health_sync_service.dart';
 import '../../../core/services/preferences_service.dart';
+import '../../../core/services/app_lifecycle_service.dart';
 import '../../../data/repositories/user_gravity_repository.dart';
 import '../../../data/model/user_gravity_entry.dart';
 import '../../../data/model/api_response.dart';
@@ -178,17 +179,18 @@ class DashboardController extends GetxController {
         debugPrint('📱 Dashboard: App paused');
       },
       onResumed: () {
-        debugPrint('📱 Dashboard: App resumed - syncing health data and reloading goals');
-        // Reload goals when app resumes (in case they were updated in settings)
+        debugPrint('📱 Dashboard: App resumed - will sync health data after delay');
         _loadGoals();
-        
-        final currentMetrics = _healthService.getMetrics();
-        // Sync if health service is initialized and not already syncing
-        if (currentMetrics.syncStatus != SyncStatus.syncing && 
-            (currentMetrics.platform == HealthPlatform.apple || 
-             currentMetrics.platform == HealthPlatform.google)) {
-          _healthService.syncHealthData();
-        }
+        // Delay before triggering sync to avoid DNS/network instability on resume
+        Future.delayed(const Duration(milliseconds: 750), () {
+          if (!Get.isRegistered<DashboardController>()) return;
+          final currentMetrics = _healthService.getMetrics();
+          if (currentMetrics.syncStatus != SyncStatus.syncing &&
+              (currentMetrics.platform == HealthPlatform.apple ||
+                  currentMetrics.platform == HealthPlatform.google)) {
+            _healthService.syncHealthData();
+          }
+        });
       },
     );
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
@@ -221,13 +223,10 @@ class DashboardController extends GetxController {
 
   /// Upsert (create or update) today's gravity entry. Backend write-only (no GET for display).
   Future<void> upsertTodayGravity({required String dataSource}) async {
-    debugPrint('Dashboard: Backend write-only — upsert gravity (create or update); no GET for display.');
-    // Prevent multiple simultaneous saves
-    if (_isSavingGravity) {
-      Get.printInfo(info: '⏳ Save already in progress, skipping...');
-      return;
-    }
+    if (!AppLifecycleService().isAppInForeground) return;
+    if (_isSavingGravity) return;
 
+    debugPrint('Dashboard: Backend write-only — upsert gravity (create or update); no GET for display.');
     try {
       _isSavingGravity = true;
       _lastSaveTime = DateTime.now();
@@ -317,13 +316,17 @@ class DashboardController extends GetxController {
         todayEntryId.value = response.data!.id;
         Get.printInfo(info: '✅ Saved today\'s gravity entry to DB (ID: ${response.data!.id})');
       } else {
-        Get.snackbar(
-          'Save Failed',
-          response.message,
-          snackPosition: SnackPosition.BOTTOM,
-        );
-        Get.printError(info: 'Failed to save: ${response.message}');
+        if (response.message != kNetworkUnavailableMessage) {
+          Get.snackbar(
+            'Save Failed',
+            response.message,
+            snackPosition: SnackPosition.BOTTOM,
+          );
+          Get.printError(info: 'Failed to save: ${response.message}');
+        }
       }
+    } on SocketException catch (_) {
+      debugPrint('Network temporarily unavailable; skipping backend write.');
     } catch (e) {
       Get.snackbar(
         'Save Failed',
@@ -517,13 +520,16 @@ class DashboardController extends GetxController {
   Future<void> handleFastingSubmit() async {
     final value = int.tryParse(fastingInput.value);
     if (value != null && value >= 0 && value <= 2) {
-      // Update local state immediately (optimistic update)
       mealsEaten.value = value;
       fastingInput.value = '';
-      
-      // Save to DB using manual entry API
       await _saveManualEntry(type: 'meals_eaten', value: value.toString());
     }
+  }
+
+  /// Mark meal(s) completed from fasting dropdown modal. Persistence/API can be added later.
+  void markMealCompleted(int count) {
+    mealsEaten.value = count.clamp(0, 2);
+    // TODO: persist via API when ready
   }
 
   /// Write manual entry (weight/hydration/sleep) to device health store.
@@ -580,6 +586,7 @@ class DashboardController extends GetxController {
 
   /// Save manual entry using the create_manual_user_gravity API
   Future<void> _saveManualEntry({required String type, required String value}) async {
+    if (!AppLifecycleService().isAppInForeground) return;
     try {
       final apiToken = PreferencesService.getAuthToken();
       if (apiToken == null || apiToken.isEmpty) {
@@ -643,15 +650,17 @@ class DashboardController extends GetxController {
           Get.find<TodayController>().fetchDateWiseGravity(isRefresh: true);
         }
       } else {
-        debugPrint('❌ Failed to save manual entry: ${response.message}');
-        Get.snackbar(
-          'Error',
-          response.message.isNotEmpty ? response.message : 'Failed to save data',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Color(0xFFE53935),
-          colorText: Colors.white,
-          duration: const Duration(seconds: 2),
-        );
+        if (response.message != kNetworkUnavailableMessage) {
+          debugPrint('❌ Failed to save manual entry: ${response.message}');
+          Get.snackbar(
+            'Error',
+            response.message.isNotEmpty ? response.message : 'Failed to save data',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Color(0xFFE53935),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2),
+          );
+        }
       }
     } catch (e) {
       debugPrint('❌ Error saving manual entry: $e');

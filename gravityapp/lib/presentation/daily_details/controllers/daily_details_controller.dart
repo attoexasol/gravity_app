@@ -75,6 +75,11 @@ class DailyDetailsController extends GetxController {
     dailyReflection.value = reflection;
   }
 
+  /// Refetch daily reflection for the current selected date (e.g. after returning from Today where user added one).
+  Future<void> refetchDailyReflection() async {
+    await _fetchDailyReflectionForSelectedDate();
+  }
+
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
   void _initializeData() {
@@ -331,11 +336,16 @@ class DailyDetailsController extends GetxController {
       weighin: weighin,
     );
 
+    // Count only fully Complete pillars (not Partial) so Summary matches Pillar Breakdown
     int completed = 0;
     for (final p in [nutrition, hydration, sleep, step, weighin]) {
-      if (p.status == PillarStatus.complete || p.status == PillarStatus.partial) completed++;
+      if (p.status == PillarStatus.complete) completed++;
     }
     const totalPillars = 6;
+
+    // Derive morning/evening tags from pillar data (API does not provide them)
+    final morningTag = _deriveMorningTag(sleep, nutrition, hydration);
+    final eveningTag = _deriveEveningTag(step, completed, totalPillars);
 
     DayMood mood;
     String moodLabel;
@@ -367,11 +377,32 @@ class DailyDetailsController extends GetxController {
       moodLabel: moodLabel,
       pillarsCompleted: completed,
       totalPillars: totalPillars,
-      morningTag: '—',
-      eveningTag: '—',
+      morningTag: morningTag,
+      eveningTag: eveningTag,
       pillars: pillars,
       reflection: null,
     );
+  }
+
+  /// Derives morning tag from sleep + nutrition + hydration (start-of-day pillars).
+  static String _deriveMorningTag(Pillar sleep, Pillar nutrition, Pillar hydration) {
+    int n = 0;
+    if (sleep.status == PillarStatus.complete) n++;
+    if (nutrition.status == PillarStatus.complete) n++;
+    if (hydration.status == PillarStatus.complete) n++;
+    if (n >= 3) return 'Energized';
+    if (n == 2) return 'Strong';
+    if (n == 1) return 'Mixed';
+    return 'Slow';
+  }
+
+  /// Derives evening tag from steps and overall completion (end-of-day / activity).
+  static String _deriveEveningTag(Pillar step, int completed, int totalPillars) {
+    final stepsComplete = step.status == PillarStatus.complete;
+    if (stepsComplete && completed >= totalPillars - 1) return 'Focused';
+    if (stepsComplete && completed >= 2) return 'Balanced';
+    if (step.status == PillarStatus.partial || completed == 1) return 'Mixed';
+    return 'Calm';
   }
 
   void _syncCurrentDayIndexFromSelectedDate() {
@@ -391,6 +422,10 @@ class DailyDetailsController extends GetxController {
   /// Disabled when selectedDate is today to prevent navigation to future dates.
   bool get canGoNext =>
       _dateOnly(selectedDate.value).isBefore(_dateOnly(DateTime.now()));
+
+  /// True when the displayed day is today (used to show "+ Add reflection" only for present day).
+  bool get isSelectedDateToday =>
+      _dateOnly(selectedDate.value) == _dateOnly(DateTime.now());
 
   void goToPreviousDay() {
     direction.value = -1;
@@ -449,7 +484,7 @@ class DailyDetailsController extends GetxController {
       case PillarStatus.partial:
         return const Color(0xFFF5E6D3);
       case PillarStatus.missed:
-        return const Color(0xFFE5E7EB);
+        return const Color(0xFFE53935); // Red when data is missing
       case PillarStatus.none:
         return const Color(0xFF0A2342).withOpacity(0.3);
     }

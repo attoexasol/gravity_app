@@ -5,6 +5,14 @@ import '../model/user_gravity_entry.dart';
 import '../model/day_wise_goal_completion.dart';
 import '../model/day_activity.dart';
 
+/// Message returned when request fails due to host lookup / network (do not surface to UI).
+const String kNetworkUnavailableMessage = 'Network temporarily unavailable';
+
+bool _isSocketOrHostLookupError(Object e) {
+  final s = e.toString();
+  return s.contains('SocketException') || s.contains('Failed host lookup');
+}
+
 /// User Gravity Repository - Handles User Gravity API calls
 class UserGravityRepository {
   final ApiService _apiService = ApiService();
@@ -68,6 +76,14 @@ class UserGravityRepository {
         error: e.errors,
       );
     } catch (e) {
+      if (_isSocketOrHostLookupError(e)) {
+        debugPrint('Network temporarily unavailable (host lookup).');
+        return ApiResponse<UserGravityEntry>(
+          status: false,
+          message: kNetworkUnavailableMessage,
+          error: null,
+        );
+      }
       debugPrint('❌ CreateUserGravity Unknown Error: $e');
       return ApiResponse<UserGravityEntry>(
         status: false,
@@ -139,6 +155,14 @@ class UserGravityRepository {
         error: e.errors,
       );
     } catch (e) {
+      if (_isSocketOrHostLookupError(e)) {
+        debugPrint('Network temporarily unavailable (host lookup).');
+        return ApiResponse<UserGravityEntry>(
+          status: false,
+          message: kNetworkUnavailableMessage,
+          error: null,
+        );
+      }
       debugPrint('❌ UpdateUserGravity Unknown Error: $e');
       return ApiResponse<UserGravityEntry>(
         status: false,
@@ -323,6 +347,14 @@ class UserGravityRepository {
         error: e.errors,
       );
     } catch (e) {
+      if (_isSocketOrHostLookupError(e)) {
+        debugPrint('Network temporarily unavailable (host lookup).');
+        return ApiResponse<Map<String, dynamic>>(
+          status: false,
+          message: kNetworkUnavailableMessage,
+          error: null,
+        );
+      }
       debugPrint('❌ CreateManualUserGravity Unknown Error: $e');
       return ApiResponse<Map<String, dynamic>>(
         status: false,
@@ -540,6 +572,14 @@ class UserGravityRepository {
         error: e.errors,
       );
     } catch (e) {
+      if (_isSocketOrHostLookupError(e)) {
+        debugPrint('Network temporarily unavailable (host lookup).');
+        return ApiResponse<Map<String, dynamic>>(
+          status: false,
+          message: kNetworkUnavailableMessage,
+          error: null,
+        );
+      }
       debugPrint('❌ StoreDailyReflection Unknown Error: $e');
       return ApiResponse<Map<String, dynamic>>(
         status: false,

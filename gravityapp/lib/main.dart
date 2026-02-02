@@ -8,6 +8,7 @@ import 'app/theme/app_theme.dart';
 import 'app/routes/app_routes.dart';
 import 'app/routes/app_pages.dart';
 import 'core/services/preferences_service.dart';
+import 'core/services/app_lifecycle_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 
@@ -88,10 +89,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    
-    // Optional: Log lifecycle changes for debugging
-    // Note: With persistent authentication, tokens are preserved across app sessions
-    // Users remain logged in when they close and reopen the app
+    AppLifecycleService().updateState(state);
     if (kDebugMode) {
       debugPrint('📱 App lifecycle state changed: $state');
     }
