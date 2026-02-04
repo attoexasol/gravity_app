@@ -19,10 +19,11 @@ class WeightLossJourneySection extends StatelessWidget {
         // Get starting weight from controller (loaded from storage, set from Settings > Current Weight)
         final double startingWeight = controller.startingWeight.value > 0
             ? controller.startingWeight.value
-            : 85.0; // Fallback default
+            : 0.0; // No default; show 0.0 when no data from Current Weight in Wellness Goals
+        // Current weight = today's health data only; no fallback. Show 0.0 kg when none.
         final double currentWeight = controller.weight.value > 0
             ? controller.weight.value
-            : startingWeight; // Fallback to starting weight if current not available
+            : 0.0;
         final double goalWeight = controller.weightGoal.value;
 
         // Calculate metrics

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 import 'package:gravityapp/data/model/api_response.dart';
@@ -496,12 +497,24 @@ class LoginController extends GetxController {
           Get.offAllNamed(AppRoutes.goalSettings);
         }
       } else {
-        // User has goals → go directly to Dashboard
+        // User has goals → write to local storage so dashboard shows Starting weight from Current Weight
+        final goalData = goalsResponse.data!;
+        final waterIntake = goalData['daily_water_intake']?.toString() ?? '3';
+        final goalsMap = <String, String>{
+          'currentWeight': goalData['current_weight']?.toString() ?? '',
+          'targetWeight': goalData['target_weight']?.toString() ?? '70',
+          'stepGoal': goalData['step_goal']?.toString() ?? '12000',
+          'waterIntake': waterIntake.replaceAll('L', '').replaceAll('l', '').trim(),
+          'sleepHours': goalData['sleep_hours']?.toString() ?? '7-8',
+          'aiTone': goalData['ai_tone']?.toString() ?? 'encouraging',
+        };
+        PreferencesService.getStorage().write('userGoals', jsonEncode(goalsMap));
+        final cw = double.tryParse(goalsMap['currentWeight'] ?? '');
+        if (cw != null && cw > 0) {
+          await PreferencesService.saveStartingWeight(cw);
+        }
         debugPrint('✅ User has goals → Navigating directly to Dashboard');
-        
-        // Update local cache flag for faster future checks (optional optimization)
         await PreferencesService.setFirstTimeSetupCompleted(true);
-        
         await Future.delayed(const Duration(milliseconds: 500));
         if (!isClosed) {
           Get.offAllNamed(AppRoutes.home);

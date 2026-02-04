@@ -133,6 +133,9 @@ class PreferencesService {
     await _storage.remove(_userNameKey);
     await _storage.remove(_userIdKey);
     await _storage.remove(_userTypeKey);
+    // Clear weight/goals so next user does not see previous user's Starting weight or goals
+    await _storage.remove(_startingWeightKey);
+    await _storage.remove('userGoals');
     // Also clear profile image data to prevent old user's image showing for new user
     await clearProfileImage();
   }

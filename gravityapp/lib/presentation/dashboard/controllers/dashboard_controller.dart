@@ -94,32 +94,14 @@ class DashboardController extends GetxController {
         debugPrint('   → Today\'s Progress ring will show sleep: ${metrics.sleepHours.toStringAsFixed(1)} hrs');
       }
       
-      // Update weight from HealthKit if available
+      // Current weight: ONLY today's value from Health Connect / Google Fit. No fallbacks.
       if (metrics.weight != null && metrics.weight! > 0) {
-        // Only update previousWeight if current weight is different
         if (weight.value > 0 && (weight.value - metrics.weight!).abs() > 0.1) {
           previousWeight.value = weight.value;
         }
         weight.value = metrics.weight!;
-      }
-      // If weight is still 0 after HealthKit sync, use currentWeight from goals as fallback
-      if (weight.value == 0 && metrics.syncStatus == SyncStatus.success) {
-        final savedGoals = PreferencesService.getStorage().read('userGoals');
-        if (savedGoals != null) {
-          try {
-            final goalsMap = jsonDecode(savedGoals) as Map<String, dynamic>;
-            final currentWeightStr = goalsMap['currentWeight']?.toString();
-            if (currentWeightStr != null) {
-              final currentWeight = double.tryParse(currentWeightStr);
-              if (currentWeight != null && currentWeight > 0) {
-                weight.value = currentWeight;
-                previousWeight.value = currentWeight;
-              }
-            }
-          } catch (e) {
-            // Ignore errors
-          }
-        }
+      } else {
+        weight.value = 0.0;
       }
       
       // Update water intake only when health has data; do not overwrite with null/0 (health-only display)
@@ -385,35 +367,22 @@ class DashboardController extends GetxController {
           sleepGoal.value = double.tryParse(sleepStr) ?? 7.5;
         }
         
-        // Initialize weight and previousWeight from currentWeight if available
-        // This ensures weight is displayed even if HealthKit doesn't have data
+        // Do NOT set weight/previousWeight from goals — Current Weight = today's health only (0.0 if none).
         final currentWeightStr = goalsMap['currentWeight']?.toString();
-        if (currentWeightStr != null) {
-          final currentWeight = double.tryParse(currentWeightStr);
-          if (currentWeight != null && currentWeight > 0) {
-            // Only update if weight is still 0 (not set from HealthKit)
-            if (weight.value == 0) {
-              weight.value = currentWeight;
-              previousWeight.value = currentWeight;
-              debugPrint('📊 Weight initialized from goals: $currentWeight kg');
-            }
-          }
-        }
         
-        // Load starting weight from storage (set from Settings > Current Weight)
-        final savedStartingWeight = PreferencesService.getStartingWeight();
-        if (savedStartingWeight != null && savedStartingWeight > 0) {
-          startingWeight.value = savedStartingWeight;
-          debugPrint('📊 Starting weight loaded: $savedStartingWeight kg');
+        // Starting weight = current user's Current Weight from Wellness Goals (so each user sees their own)
+        final currentWeightFromGoals = currentWeightStr != null
+            ? double.tryParse(currentWeightStr)
+            : null;
+        if (currentWeightFromGoals != null && currentWeightFromGoals > 0) {
+          startingWeight.value = currentWeightFromGoals;
+          PreferencesService.saveStartingWeight(currentWeightFromGoals);
+          debugPrint('📊 Starting weight from Current Weight (Wellness Goals): $currentWeightFromGoals kg');
         } else {
-          // Fallback: use current weight from goals if starting weight not set yet
-          final currentWeightStr = goalsMap['currentWeight']?.toString();
-          if (currentWeightStr != null) {
-            final currentWeight = double.tryParse(currentWeightStr);
-            if (currentWeight != null && currentWeight > 0) {
-              startingWeight.value = currentWeight;
-              debugPrint('📊 Starting weight fallback to current weight: $currentWeight kg');
-            }
+          final savedStartingWeight = PreferencesService.getStartingWeight();
+          if (savedStartingWeight != null && savedStartingWeight > 0) {
+            startingWeight.value = savedStartingWeight;
+            debugPrint('📊 Starting weight loaded from storage: $savedStartingWeight kg');
           }
         }
         
