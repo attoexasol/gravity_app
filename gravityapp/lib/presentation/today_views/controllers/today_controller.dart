@@ -13,6 +13,7 @@ import '../../../../data/model/date_wise_gravity_response.dart';
 import '../../../../data/model/api_response.dart';
 import '../../../../core/services/preferences_service.dart';
 import '../../../../core/services/app_lifecycle_service.dart';
+import '../../dashboard/controllers/dashboard_controller.dart';
 
 class TodayController extends GetxController {
   // Weight data
@@ -40,6 +41,7 @@ class TodayController extends GetxController {
   final RxBool isLoading = false.obs;
   final RxString errorMessage = ''.obs;
   final RxBool hasError = false.obs;
+  final RxBool _hasLocalWeightOverride = false.obs; // Guard: prevents API refetch from overwriting freshly submitted weight
   
   // Nutrition data
   final RxInt totalNutrition = 0.obs; // Total daily calories
@@ -396,11 +398,40 @@ class TodayController extends GetxController {
       if (response.isSuccess && response.data != null) {
         // Parse the response data
         final data = DateWiseGravityResponse.fromJson(response.data!);
-        dateWiseData.value = data;
         
-        // Update reactive variables from API data
-        if (data.weight != null) {
-          currentWeight.value = data.weight!;
+        // Preserve locally overridden weight if flag is set (prevents stale API response from overwriting fresh submission)
+        double? preservedWeight;
+        if (_hasLocalWeightOverride.value && dateWiseData.value?.weight != null) {
+          preservedWeight = dateWiseData.value!.weight;
+          debugPrint('🔒 Preserving local weight override: $preservedWeight kg (API may have stale data)');
+        }
+        
+        // Merge API data with preserved weight if override is active
+        final mergedData = preservedWeight != null
+            ? DateWiseGravityResponse(
+                weight: preservedWeight,
+                steps: data.steps,
+                sleepHours: data.sleepHours,
+                hydrationLiters: data.hydrationLiters,
+                nutritionCalories: data.nutritionCalories,
+                fastingCompleted: data.fastingCompleted,
+                startingWeight: data.startingWeight,
+                goalWeightLoss: data.goalWeightLoss,
+                createdAt: data.createdAt,
+              )
+            : data;
+        
+        dateWiseData.value = mergedData;
+        
+        // Update reactive variables from merged data
+        if (mergedData.weight != null) {
+          currentWeight.value = mergedData.weight!;
+        }
+        
+        // Reset override flag after refetch completes
+        if (_hasLocalWeightOverride.value) {
+          _hasLocalWeightOverride.value = false;
+          debugPrint('🔓 Local weight override reset (refetch completed)');
         }
         if (data.startingWeight != null) {
           startingWeight.value = data.startingWeight!;
@@ -890,6 +921,57 @@ class TodayController extends GetxController {
         // Update local state immediately (optimistic update)
         currentWeight.value = weightValue;
         
+        // Optimistically update dateWiseData so UI updates instantly
+        // This ensures Weight Journey and Weight-in row update immediately without waiting for fetchDateWiseGravity()
+        if (dateWiseData.value != null) {
+          // Update existing dateWiseData with new weight value
+          final existing = dateWiseData.value!;
+          final updatedData = DateWiseGravityResponse(
+            weight: weightValue,
+            steps: existing.steps,
+            sleepHours: existing.sleepHours,
+            hydrationLiters: existing.hydrationLiters,
+            nutritionCalories: existing.nutritionCalories,
+            fastingCompleted: existing.fastingCompleted,
+            startingWeight: existing.startingWeight,
+            goalWeightLoss: existing.goalWeightLoss,
+            createdAt: existing.createdAt,
+          );
+          dateWiseData.value = updatedData;
+          debugPrint('⚡ Optimistic dateWiseData update: weight=$weightValue kg (UI updated immediately)');
+        } else {
+          // Create minimal DateWiseGravityResponse if dateWiseData doesn't exist yet
+          final newData = DateWiseGravityResponse(
+            weight: weightValue,
+            steps: null,
+            sleepHours: null,
+            hydrationLiters: null,
+            nutritionCalories: null,
+            fastingCompleted: false,
+            startingWeight: null,
+            goalWeightLoss: null,
+            createdAt: null,
+          );
+          dateWiseData.value = newData;
+          debugPrint('⚡ Created new dateWiseData with weight=$weightValue kg (UI updated immediately)');
+        }
+        
+        // Set local override flag to prevent API refetch from overwriting freshly submitted weight
+        _hasLocalWeightOverride.value = true;
+        debugPrint('🔒 Local weight override enabled (prevents API from overwriting optimistic update)');
+        
+        // Use the SAME health sync logic as Dashboard → Add Weight
+        // Get or create DashboardController instance to reuse health sync logic
+        if (!Get.isRegistered<DashboardController>()) {
+          Get.put(DashboardController(), permanent: true);
+        }
+        final dashboardController = Get.find<DashboardController>();
+        
+        // Write to health store and sync (same as Dashboard Quick Actions)
+        await dashboardController.writeManualEntryToHealth(type: 'weight', value: weightValue.toString());
+        await dashboardController.healthService.syncHealthData();
+        debugPrint('💾 Weight saved; health sync completed (same logic as Dashboard)');
+        
         // Close modal
         closeWeighInModal();
         
@@ -905,7 +987,7 @@ class TodayController extends GetxController {
           duration: const Duration(seconds: 2),
         );
         
-        // Reload date-wise gravity data to get updated weight
+        // Reload date-wise gravity data to get updated weight (background refresh)
         await fetchDateWiseGravity();
       } else {
         if (response.message != kNetworkUnavailableMessage) {

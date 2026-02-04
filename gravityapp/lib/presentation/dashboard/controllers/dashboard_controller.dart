@@ -587,7 +587,8 @@ class DashboardController extends GetxController {
 
   /// Write manual entry (weight/hydration/sleep) to device health store.
   /// Never throws; logs errors. DB save is independent.
-  Future<void> _writeManualEntryToHealth({required String type, required String value}) async {
+  /// Public method so other controllers (e.g., TodayController) can reuse the same health sync logic.
+  Future<void> writeManualEntryToHealth({required String type, required String value}) async {
     try {
       if (type != 'weight' && type != 'hydration' && type != 'sleep_hours') return;
       final metrics = _healthService.getMetrics();
@@ -692,7 +693,7 @@ class DashboardController extends GetxController {
         }
         
         // Write manual entry to device health store (Apple Health / Health Connect), then resync
-        await _writeManualEntryToHealth(type: type, value: value);
+        await writeManualEntryToHealth(type: type, value: value);
         await _healthService.syncHealthData();
         debugPrint('Dashboard: Manual entry saved; UI will update from health sync only (no backend GET).');
         
