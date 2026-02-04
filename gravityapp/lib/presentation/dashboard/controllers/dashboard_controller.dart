@@ -24,7 +24,10 @@ class DashboardController extends GetxController {
   // Reactive state variables
   final healthMetrics = Rx<HealthMetrics>(HealthSyncService().getMetrics());
   final isSyncing = false.obs;
-  final waterIntake = 0.0.obs; // in Liters - will be updated from HealthKit
+  final waterIntake = 0.0.obs; // in Liters - will be updated from HealthKit (kept for backward compatibility)
+  final localWaterToday = 0.0.obs; // in Liters - LOCAL source of truth for hydration (accumulates user entries)
+  final _hasUserLoggedHydrationToday = false.obs; // Flag: true once user logs hydration, prevents Health API from overwriting
+  final _lastHydrationDate = Rx<String?>(null); // Track last date hydration was logged (for day change detection)
   final weight = 0.0.obs; // in kg - will be updated from HealthKit
   final previousWeight = 0.0.obs; // in kg
   final mealsEaten = 0.obs; // Number of meals eaten today (0-2)
@@ -69,11 +72,15 @@ class DashboardController extends GetxController {
 
   /// Single subscription to health metrics; cancelled in onClose to avoid duplicate listeners.
   StreamSubscription<HealthMetrics>? _healthSubscription;
+  Timer? _dayChangeTimer; // Timer to check for day change at midnight
 
   @override
   void onInit() {
     super.onInit();
     _loadGoals(); // Load goals first to initialize weight
+    
+    // Initialize local hydration tracking
+    _initializeLocalHydration();
     
     // Listen for goal changes in storage (when updated from settings)
     _setupGoalsListener();
@@ -104,10 +111,15 @@ class DashboardController extends GetxController {
         weight.value = 0.0;
       }
       
-      // Update water intake only when health has data; do not overwrite with null/0 (health-only display)
-      if (metrics.waterIntake != null) {
-        waterIntake.value = metrics.waterIntake!;
-        debugPrint('💧 Updated water intake from health sync: ${waterIntake.value} L (sync status: ${metrics.syncStatus}, platform: ${metrics.platform})');
+      // Hydration: Only use Health API for INITIAL load or fallback (if user hasn't logged hydration today)
+      // Once user logs hydration, localWaterToday is the source of truth and Health API should NOT overwrite it
+      if (metrics.waterIntake != null && !_hasUserLoggedHydrationToday.value) {
+        // Only update from Health API if user hasn't logged hydration today (initial load/fallback)
+        localWaterToday.value = metrics.waterIntake!;
+        waterIntake.value = metrics.waterIntake!; // Keep for backward compatibility
+        debugPrint('💧 Initialized local hydration from health sync: ${localWaterToday.value} L (user has not logged hydration today)');
+      } else if (_hasUserLoggedHydrationToday.value) {
+        debugPrint('💧 Skipping Health API hydration update (user has logged hydration today, localWaterToday=${localWaterToday.value} L is source of truth)');
       }
 
       // When sync finishes successfully, save to DB
@@ -184,6 +196,8 @@ class DashboardController extends GetxController {
     _healthSubscription = null;
     _timeTickerTimer?.cancel();
     _healthSyncTimer?.cancel();
+    _dayChangeTimer?.cancel();
+    _dayChangeTimer = null;
     WidgetsBinding.instance.removeObserver(_lifecycleObserver);
     dashboardScrollController.dispose();
     super.onClose();
@@ -193,6 +207,57 @@ class DashboardController extends GetxController {
   String get _todayString {
     final now = DateTime.now();
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Initialize local hydration tracking and set up day change detection
+  void _initializeLocalHydration() {
+    final todayStr = _todayString;
+    
+    // Check if we've moved to a new day
+    if (_lastHydrationDate.value != null && _lastHydrationDate.value != todayStr) {
+      // Day changed: reset hydration state
+      debugPrint('💧 Day changed detected: resetting hydration state (was ${_lastHydrationDate.value}, now $todayStr)');
+      localWaterToday.value = 0.0;
+      _hasUserLoggedHydrationToday.value = false;
+    }
+    
+    // Initialize from Health API only if user hasn't logged hydration today
+    // This will be updated by the health metrics subscription if needed
+    if (!_hasUserLoggedHydrationToday.value) {
+      // Will be set from Health API in the subscription listener
+      localWaterToday.value = 0.0;
+    }
+    
+    _lastHydrationDate.value = todayStr;
+    
+    // Set up timer to check for day change at midnight
+    _setupDayChangeTimer();
+    
+    debugPrint('💧 Local hydration initialized: localWaterToday=${localWaterToday.value} L, hasUserLogged=${_hasUserLoggedHydrationToday.value}');
+  }
+
+  /// Set up timer to check for day change at midnight (local time)
+  void _setupDayChangeTimer() {
+    _dayChangeTimer?.cancel();
+    
+    final now = DateTime.now();
+    // Calculate time until next midnight
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    final durationUntilMidnight = tomorrow.difference(now);
+    
+    // Schedule timer to fire at midnight
+    _dayChangeTimer = Timer(durationUntilMidnight, () {
+      // Reset hydration at midnight
+      debugPrint('💧 Midnight reached: resetting hydration state');
+      localWaterToday.value = 0.0;
+      _hasUserLoggedHydrationToday.value = false;
+      _lastHydrationDate.value = _todayString;
+      
+      // Schedule next day change check (24 hours later)
+      _setupDayChangeTimer();
+    });
+    
+    debugPrint('💧 Day change timer set: will reset hydration in ${durationUntilMidnight.inHours}h ${durationUntilMidnight.inMinutes % 60}m');
   }
 
   /// Get data source string from platform
@@ -227,7 +292,8 @@ class DashboardController extends GetxController {
       final currentWeight = weight.value > 0 ? weight.value : null;
       final currentSteps = healthMetrics.value.steps;
       final currentSleepHours = healthMetrics.value.sleepHours;
-      final currentHydration = waterIntake.value > 0 ? waterIntake.value : null;
+      // Use localWaterToday as source of truth for hydration
+      final currentHydration = localWaterToday.value > 0 ? localWaterToday.value : null;
 
       // Log the data being sent to API
       Get.printInfo(info: '📤 Preparing to ${todayEntryId.value != null ? "update" : "create"} gravity entry:');
@@ -476,12 +542,30 @@ class DashboardController extends GetxController {
   Future<void> handleHydrationSubmit() async {
     final value = double.tryParse(hydrationInput.value);
     if (value != null && value >= 0) {
-      // Update local state immediately (optimistic update)
-      waterIntake.value = value;
+      // Check for day change before processing
+      final todayStr = _todayString;
+      if (_lastHydrationDate.value != null && _lastHydrationDate.value != todayStr) {
+        // Day changed: reset hydration state
+        debugPrint('💧 Day changed during hydration submit: resetting state');
+        localWaterToday.value = 0.0;
+        _hasUserLoggedHydrationToday.value = false;
+        _lastHydrationDate.value = todayStr;
+      }
+      
+      // ACCUMULATE: Add the entered value to localWaterToday (not replace)
+      localWaterToday.value += value;
+      _hasUserLoggedHydrationToday.value = true; // Mark that user has logged hydration today
+      _lastHydrationDate.value = todayStr;
+      
+      // Keep waterIntake in sync for backward compatibility (but localWaterToday is source of truth)
+      waterIntake.value = localWaterToday.value;
+      
       hydrationInput.value = '';
       showHydrationModal.value = false;
       
-      // Save to DB using manual entry API
+      debugPrint('💧 Hydration logged: +$value L → Total: ${localWaterToday.value} L');
+      
+      // Save to DB using manual entry API (pass the delta, not the total)
       await _saveManualEntry(type: 'hydration', value: value.toString());
     }
   }
@@ -527,18 +611,16 @@ class DashboardController extends GetxController {
       if (type == 'hydration') {
         // Best-effort only: Google Fit / Health Connect hydration write is unreliable by platform design.
         // Local data (backend + UI state) is source of truth; failure must NOT affect app or UI.
-        final newTotal = double.tryParse(value);
-        if (newTotal == null || newTotal < 0) return;
-        final currentTotal = (metrics.syncStatus == SyncStatus.success && metrics.waterIntake != null)
-            ? metrics.waterIntake!
-            : 0.0;
-        final delta = newTotal - currentTotal;
-        if (delta > 0.01) {
-          try {
-            await _healthService.writeWaterLiters(delta);
-          } catch (_) {
-            // Silent failure: hydration write is non-critical; local save already succeeded.
-          }
+        // Write ONLY the delta (entered liters) to Health, not the total.
+        final delta = double.tryParse(value);
+        if (delta == null || delta <= 0) return;
+        
+        try {
+          await _healthService.writeWaterLiters(delta);
+          debugPrint('💧 Wrote hydration delta to Health: $delta L (best-effort export)');
+        } catch (e) {
+          // Silent failure: hydration write is non-critical; local save already succeeded.
+          debugPrint('⚠️ Hydration write to Health failed (non-critical): $e');
         }
         return;
       }
@@ -669,8 +751,9 @@ class DashboardController extends GetxController {
         : 0;
     
     // Water progress: percentage of goal achieved, capped at 100%
+    // Use localWaterToday as source of truth for hydration
     final waterProgress = waterGoal.value > 0 
-        ? ((waterIntake.value / waterGoal.value) * 100).clamp(0.0, 100.0)
+        ? ((localWaterToday.value / waterGoal.value) * 100).clamp(0.0, 100.0)
         : 0;
     
     // Weight progress: Calculate based on current weight vs target weight

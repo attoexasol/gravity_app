@@ -62,9 +62,9 @@ class ProgressRingsSection extends StatelessWidget {
                   color: const Color(0xFF0A2342),
                   suffix: "hrs",
                 ),
-                // Hydration
+                // Hydration: Use localWaterToday as source of truth (accumulates user entries)
                 ProgressRing(
-                  value: controller.waterIntake.value,
+                  value: controller.localWaterToday.value,
                   max: controller.waterGoal.value,
                   label: "Hydration",
                   icon: Icons.water_drop_outlined,
