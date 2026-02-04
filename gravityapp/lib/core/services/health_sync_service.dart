@@ -355,8 +355,6 @@ class HealthSyncService {
       final now = DateTime.now();
       // Calculate today's start in local time (midnight today)
       final todayStart = DateTime(now.year, now.month, now.day);
-      // For sleep, check from yesterday evening (6 PM yesterday) to now
-      final yesterdayEvening = todayStart.subtract(const Duration(hours: 6));
 
       // Fetch Steps (today only)
       int steps = 0;
@@ -417,28 +415,10 @@ class HealthSyncService {
         print('   Stack trace: $stackTrace');
       }
 
-      // Fetch Weight: today only (00:00 local to now). No last-30-days; dashboard shows only today's weight.
+      // Fetch Weight: use date-wise method for today (full day range: 00:00 to 23:59)
       double? weight;
       try {
-        final weightStart = todayStart;
-        DateTime weightEnd = now;
-        if (!weightEnd.isAfter(weightStart)) {
-          weightEnd = weightStart.add(const Duration(seconds: 1));
-        }
-        final weightData = await _health!.getHealthDataFromTypes(
-          types: [HealthDataType.WEIGHT],
-          startTime: weightStart,
-          endTime: weightEnd,
-        );
-        if (weightData.isNotEmpty) {
-          weightData.sort((a, b) => b.dateFrom.compareTo(a.dateFrom));
-          weight = (weightData.first.value as NumericHealthValue).numericValue
-              .toDouble();
-          print('📊 Today\'s weight: $weight kg');
-        } else {
-          final platformName = kIsWeb ? 'Web' : (Platform.isIOS ? 'HealthKit' : 'Health Connect');
-          print('⚠️ No weight data for today in $platformName (returning null)');
-        }
+        weight = await getWeightForDate(now);
       } catch (e) {
         print('⚠️ Error fetching weight: $e');
       }
@@ -517,9 +497,46 @@ class HealthSyncService {
     }
   }
 
+  /// Get weight for a specific date from health platform.
+  /// Queries the full day range (00:00:00 to 23:59:59) and returns the latest weight entry.
+  /// Returns null if no weight data exists for that date.
+  Future<double?> getWeightForDate(DateTime date) async {
+    if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return null;
+    if (_health == null || !_isInitialized) {
+      final ok = await initialize();
+      if (!ok || _health == null) return null;
+    }
+    try {
+      // Query full day range: date at 00:00:00 to date at 23:59:59
+      final dayStart = DateTime(date.year, date.month, date.day, 0, 0, 0);
+      final dayEnd = DateTime(date.year, date.month, date.day, 23, 59, 59);
+      
+      final weightData = await _health!.getHealthDataFromTypes(
+        types: [HealthDataType.WEIGHT],
+        startTime: dayStart,
+        endTime: dayEnd,
+      );
+      
+      if (weightData.isNotEmpty) {
+        // Sort by dateFrom DESC to get the latest entry
+        weightData.sort((a, b) => b.dateFrom.compareTo(a.dateFrom));
+        final latestWeight = (weightData.first.value as NumericHealthValue).numericValue.toDouble();
+        final platformName = Platform.isIOS ? 'HealthKit' : 'Health Connect';
+        print('📊 Weight for ${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}: $latestWeight kg (from $platformName, ${weightData.length} entries)');
+        return latestWeight;
+      } else {
+        final platformName = Platform.isIOS ? 'HealthKit' : 'Health Connect';
+        print('⚠️ No weight data found in $platformName for ${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}');
+        return null;
+      }
+    } catch (e) {
+      print('⚠️ Error fetching weight for date ${date.year}-${date.month}-${date.day}: $e');
+      return null;
+    }
+  }
+
   /// Write weight (kg) to device health store. Returns false on web/unsupported or on error.
-  /// [at] User-selected date/time for the entry. If null, uses today at 08:00 local so Health Connect
-  /// does not override the date to "now" (which can shift the entry to the wrong day).
+  /// [at] User-selected date/time for the entry. If null, uses DateTime.now().
   /// startTime and endTime are never identical (endTime = startTime + 1s) for Health Connect compatibility.
   Future<bool> writeWeightKg(double kg, {DateTime? at}) async {
     if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return false;
@@ -528,8 +545,8 @@ class HealthSyncService {
       if (!ok || _health == null) return false;
     }
     try {
-      final now = DateTime.now();
-      final startTime = at ?? DateTime(now.year, now.month, now.day, 8, 0);
+      // Use provided date/time or current time
+      final startTime = at ?? DateTime.now();
       final endTime = startTime.add(const Duration(seconds: 1));
       final success = await _health!.writeHealthData(
         value: kg,
