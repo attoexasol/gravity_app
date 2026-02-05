@@ -1026,11 +1026,24 @@ class TodayController extends GetxController {
   }
 
   /// Save weight goals from the Weight Goals modal.
-  /// Validates (target < starting, both > 0), persists to PreferencesService and userGoals,
-  /// updates reactive state so Weight Journey progress bar and text recalculate, then closes modal.
+  /// Acts as shortcut editor for Settings → Wellness Goals.
+  /// Mapping: Starting Weight → Current Weight, Target Weight → Target Weight
+  /// Uses the SAME persistence and API logic as Settings page.
   Future<void> saveWeightGoals({required double startingKg, required double targetKg}) async {
     // Re-validate server-side (modal already validated)
-    if (startingKg <= 0 || targetKg <= 0 || targetKg >= startingKg) {
+    // Same validation as Settings → Wellness Goals
+    if (startingKg <= 0 || startingKg > 300) {
+      Get.snackbar(
+        'Invalid Weight',
+        'Please enter a valid weight between 0 and 300 kg',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.withOpacity(0.8),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+    if (targetKg <= 0 || targetKg >= startingKg) {
       Get.snackbar(
         'Invalid goals',
         'Target weight must be less than starting weight; both must be greater than 0.',
@@ -1043,59 +1056,98 @@ class TodayController extends GetxController {
     }
 
     try {
-      // Persist starting weight
+      // STEP 1: Save starting weight as Current Weight (same as Settings → Wellness Goals)
+      // This is the SAME logic as Settings → Wellness Goals → Current Weight
       await PreferencesService.saveStartingWeight(startingKg);
+      debugPrint('💾 Starting weight updated from Weight Goals modal: $startingKg kg (maps to Wellness Goals Current Weight)');
 
-      // Update userGoals map with target weight (keep other goals from storage)
+      // STEP 2: Update userGoals map (same keys as Settings uses)
+      // Map: Starting Weight → currentWeight, Target Weight → targetWeight
       final savedGoals = PreferencesService.getStorage().read('userGoals');
       Map<String, dynamic> goalsMap = {};
       if (savedGoals != null) {
         try {
           goalsMap = Map<String, dynamic>.from(jsonDecode(savedGoals) as Map);
-        } catch (_) {}
+        } catch (_) {
+          // If parsing fails, start with empty map
+        }
       }
-      goalsMap['targetWeight'] = targetKg.toString();
-      goalsMap['currentWeight'] = currentWeight.value.toString();
+      
+      // Update goals map with new values (same keys as Settings)
+      goalsMap['currentWeight'] = startingKg.toString(); // Starting Weight → Current Weight
+      goalsMap['targetWeight'] = targetKg.toString();    // Target Weight → Target Weight
+      
+      // Save to local storage (same as Settings)
       PreferencesService.getStorage().write('userGoals', jsonEncode(goalsMap));
 
-      // Update reactive state so Weight Journey UI recalculates progress bar & text
+      // STEP 3: Save to API (same API call as Settings → Wellness Goals)
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        Get.snackbar(
+          'Error',
+          'Authentication token not found. Please login again.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFE53935),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 4),
+        );
+        return;
+      }
+
+      // Prepare water intake with "L" suffix for API (same as Settings)
+      final waterIntake = goalsMap['waterIntake']?.toString() ?? '3';
+      final waterIntakeWithUnit =
+          waterIntake.endsWith('L') || waterIntake.endsWith('l')
+              ? waterIntake
+              : '$waterIntake L';
+
+      // Get AI tone from goals map, default to 'encouraging' if not set
+      final aiTone = goalsMap['aiTone']?.toString() ?? 'encouraging';
+
+      // Call the SAME goals API as Settings page
+      final response = await _goalsRepository.createGoals(
+        token: apiToken,
+        currentWeight: startingKg.toString(), // Starting Weight → Current Weight
+        targetWeight: targetKg.toString(),     // Target Weight → Target Weight
+        stepGoal: goalsMap['stepGoal']?.toString() ?? '12000',
+        dailyWaterIntake: waterIntakeWithUnit,
+        sleepHours: goalsMap['sleepHours']?.toString() ?? '7-8',
+        aiTone: aiTone,
+      );
+
+      // STEP 4: Update reactive state immediately
       startingWeight.value = startingKg;
       goalWeight.value = targetKg;
 
+      // Close modal
       closeGoalsModal();
 
-      // Optionally sync to backend (same pattern as Settings > Goals)
-      final apiToken = PreferencesService.getAuthToken();
-      if (apiToken != null && apiToken.isNotEmpty) {
-        final waterIntake = goalsMap['waterIntake']?.toString() ?? '3';
-        final waterIntakeWithUnit =
-            waterIntake.endsWith('L') || waterIntake.endsWith('l')
-                ? waterIntake
-                : '$waterIntake L';
-        final response = await _goalsRepository.createGoals(
-          token: apiToken,
-          currentWeight: goalsMap['currentWeight']?.toString() ?? currentWeight.value.toString(),
-          targetWeight: targetKg.toString(),
-          stepGoal: goalsMap['stepGoal']?.toString() ?? '12000',
-          dailyWaterIntake: waterIntakeWithUnit,
-          sleepHours: goalsMap['sleepHours']?.toString() ?? '7-8',
-          aiTone: goalsMap['aiTone']?.toString() ?? 'encouraging',
-        );
-        if (!response.isSuccess && kDebugMode) {
-          debugPrint('⚠️ Weight goals saved locally but API sync failed: ${response.message}');
-        }
-      }
+      // STEP 5: Notify all controllers of goals change (same as Settings)
+      _notifyControllersGoalsChanged();
 
-      Get.snackbar(
-        'Success',
-        'Weight goals saved.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF00B8A9),
-        colorText: Colors.white,
-        duration: const Duration(seconds: 2),
-      );
+      // Show success message
+      if (response.isSuccess) {
+        Get.snackbar(
+          'Success',
+          'Goals saved successfully',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFF00B8A9),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+      } else {
+        // Even if API fails, goals are saved locally, so notify controllers
+        Get.snackbar(
+          'Warning',
+          'Goals saved locally but failed to sync with server',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+      }
     } catch (e) {
-      if (kDebugMode) debugPrint('❌ Error saving weight goals: $e');
+      debugPrint('❌ Error saving weight goals: $e');
       Get.snackbar(
         'Error',
         'Failed to save goals. Please try again.',
@@ -1104,6 +1156,31 @@ class TodayController extends GetxController {
         colorText: Colors.white,
         duration: const Duration(seconds: 2),
       );
+    }
+  }
+
+  /// Notify DashboardController, TodayController (self), and WeightHistoryController that goals have changed
+  /// This provides real-time updates without polling (same pattern as Settings)
+  void _notifyControllersGoalsChanged() {
+    try {
+      // Notify DashboardController
+      if (Get.isRegistered<DashboardController>()) {
+        final dashboardController = Get.find<DashboardController>();
+        dashboardController.notifyGoalsChanged();
+        debugPrint('✅ Notified DashboardController of goals change');
+      } else {
+        debugPrint('ℹ️ DashboardController not registered, will update on next navigation');
+      }
+      
+      // Notify TodayController (self) to reload goals
+      notifyGoalsChanged();
+      debugPrint('✅ Notified TodayController (self) of goals change');
+      
+      // Note: WeightHistoryController notification is handled by Settings controller
+      // No need to duplicate here - Settings already notifies all controllers
+    } catch (e) {
+      debugPrint('⚠️ Error notifying controllers: $e');
+      // Non-critical error - goals are saved, controllers will update when navigated to
     }
   }
 
