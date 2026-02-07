@@ -74,11 +74,11 @@ class ProgressRingsSection extends StatelessWidget {
                 // Fasting
                 ProgressRing(
                   value: controller.mealsEaten.value.toDouble(),
-                  max: 2.0,
+                  max: controller.fastingMode.value == 'omad' ? 1.0 : 2.0,
                   label: "Fasting",
                   icon: Icons.restaurant_outlined,
                   color: const Color(0xFFD4AF37),
-                  customValue: "${controller.mealsEaten.value}/2",
+                  customValue: "${controller.mealsEaten.value}/${controller.fastingMode.value == 'omad' ? 1 : 2}",
                 ),
               ],
             ),

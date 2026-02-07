@@ -177,41 +177,19 @@ class QuickActionsSection extends StatelessWidget {
       context: context,
       barrierDismissible: true,
       barrierColor: AppColors.foreground.withOpacity(0.4),
-      builder: (context) => FastingDropdownModal(controller: controller),
+      builder: (context) => FastingTrackerModal(controller: controller),
     );
   }
 }
 
-// --- Time window helpers for fasting modal ---
-bool _isInMeal1Window(DateTime now) {
-  final h = now.hour + now.minute / 60.0;
-  return h >= 12 && h < 14;
-}
-
-bool _isInMeal2Window(DateTime now) {
-  final h = now.hour + now.minute / 60.0;
-  return h >= 17 && h < 19;
-}
-
-bool _isInOmadWindow(DateTime now) {
-  return _isInMeal1Window(now) || _isInMeal2Window(now);
-}
-
-/// Dropdown-based fasting modal: two expandable sections (2_MEALS / OMAD), time-window radios only.
-class FastingDropdownModal extends StatefulWidget {
+/// Fasting Tracker modal - matches new design with fasting mode selection and meal logging
+class FastingTrackerModal extends StatelessWidget {
   final DashboardController controller;
 
-  const FastingDropdownModal({super.key, required this.controller});
+  const FastingTrackerModal({super.key, required this.controller});
 
-  @override
-  State<FastingDropdownModal> createState() => _FastingDropdownModalState();
-}
-
-class _FastingDropdownModalState extends State<FastingDropdownModal> {
-  /// Which section is expanded: 0 = 2_MEALS, 1 = OMAD, -1 = none. Only one at a time.
-  int _expandedIndex = -1;
-
-  static const Color _kTealAccent = Color(0xFF00B8A9);
+  static const Color _kPrimaryDark = Color(0xFF0A2342);
+  static const Color _kLightGray = Color(0xFFF5F6FA);
 
   @override
   Widget build(BuildContext context) {
@@ -219,98 +197,171 @@ class _FastingDropdownModalState extends State<FastingDropdownModal> {
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
       child: Container(
+        constraints: BoxConstraints(maxWidth: 512),
         decoration: BoxDecoration(
-          color: AppColors.popover,
-          borderRadius: BorderRadius.circular(AppSizes.radiusLg * 2),
-          border: Border.all(color: AppColors.border, width: 1),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20.r),
+          border: Border.all(color: _kPrimaryDark.withOpacity(0.08), width: 1),
           boxShadow: [
             BoxShadow(
-              color: AppColors.foreground.withOpacity(0.08),
+              color: Colors.black.withOpacity(0.08),
               blurRadius: 20.r,
               offset: Offset(0, 8.h),
             ),
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 20.h),
+        child: Stack(
+          clipBehavior: Clip.none,
           children: [
             Padding(
-              padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 8.h),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Fasting Mark meal',
-                    style: ResponsiveTextStyles.textLg.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.popoverForeground,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).pop(),
-                    child: Container(
-                      padding: EdgeInsets.all(8.r),
-                      decoration: BoxDecoration(
-                        color: AppColors.secondary,
-                        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                      ),
-                      child: Icon(Icons.close, size: 18.sp, color: AppColors.popoverForeground),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(12.w, 0, 12.w, 20.h),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  dividerColor: Colors.transparent,
-                  splashColor: _kTealAccent.withOpacity(0.1),
-                  highlightColor: _kTealAccent.withOpacity(0.05),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+              padding: EdgeInsets.only(top: 24.h),
+              child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                SizedBox(height: 8.h),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    ExpansionTile(
-                      key: ValueKey('two_meals_$_expandedIndex'),
-                      initiallyExpanded: _expandedIndex == 0,
-                      onExpansionChanged: (expanded) {
-                        setState(() => _expandedIndex = expanded ? 0 : -1);
-                      },
-                      tilePadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-                      childrenPadding: EdgeInsets.fromLTRB(8.w, 0, 8.w, 12.h),
-                      iconColor: _kTealAccent,
-                      collapsedIconColor: _kTealAccent,
-                      title: Text(
-                        'Two Meals Plan',
-                        style: ResponsiveTextStyles.textBase.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.popoverForeground,
-                        ),
+                    Text(
+                      'Fasting Tracker',
+                      style: ResponsiveTextStyles.textLg.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: _kPrimaryDark,
                       ),
-                      children: [Obx(() => _buildTwoMealsContent())],
                     ),
-                    ExpansionTile(
-                      key: ValueKey('omad_$_expandedIndex'),
-                      initiallyExpanded: _expandedIndex == 1,
-                      onExpansionChanged: (expanded) {
-                        setState(() => _expandedIndex = expanded ? 1 : -1);
-                      },
-                      tilePadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-                      childrenPadding: EdgeInsets.fromLTRB(8.w, 0, 8.w, 12.h),
-                      iconColor: _kTealAccent,
-                      collapsedIconColor: _kTealAccent,
-                      title: Text(
-                        'OMAD Plan',
-                        style: ResponsiveTextStyles.textBase.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.popoverForeground,
-                        ),
+                    SizedBox(height: 8.h),
+                    Text(
+                      'Manage your daily meal plan',
+                      style: ResponsiveTextStyles.textSm.copyWith(
+                        color: _kPrimaryDark.withOpacity(0.6),
                       ),
-                      children: [Obx(() => _buildOmadContent())],
                     ),
                   ],
+                ),
+                SizedBox(height: 16.h),
+                // Fasting Mode section
+                Text(
+                  'Fasting Mode:',
+                  style: ResponsiveTextStyles.textSm.copyWith(
+                    color: _kPrimaryDark.withOpacity(0.7),
+                  ),
+                ),
+                SizedBox(height: 12.h),
+                Obx(() => Row(
+                  children: [
+                    Expanded(
+                      child: _FastingModeButton(
+                        label: 'Normal',
+                        subtitle: '2 Meals/Day',
+                        isSelected: controller.fastingMode.value == 'normal',
+                        onTap: () => controller.setFastingMode('normal'),
+                      ),
+                    ),
+                    SizedBox(width: 16.w),
+                    Expanded(
+                      child: _FastingModeButton(
+                        label: 'O.M.A.D',
+                        subtitle: '1 Meal/Day',
+                        isSelected: controller.fastingMode.value == 'omad',
+                        onTap: () => controller.setFastingMode('omad'),
+                      ),
+                    ),
+                  ],
+                )),
+                SizedBox(height: 24.h),
+                // Divider
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: _kPrimaryDark.withOpacity(0.1),
+                ),
+                SizedBox(height: 24.h),
+                // Log Your Meals section
+                Text(
+                  'Log Your Meals:',
+                  style: ResponsiveTextStyles.textSm.copyWith(
+                    color: _kPrimaryDark.withOpacity(0.7),
+                  ),
+                ),
+                SizedBox(height: 12.h),
+                Obx(() {
+                  final mode = controller.fastingMode.value;
+                  final meals = controller.mealsEaten.value;
+                  final maxMeals = mode == 'omad' ? 1 : 2;
+                  return Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _MealLogButton(
+                              label: 'Meal 1',
+                              isLogged: meals >= 1,
+                              onTap: () {
+                                controller.markMealCompleted(meals >= 1 ? 0 : 1);
+                              },
+                            ),
+                          ),
+                          if (maxMeals == 2) ...[
+                            SizedBox(width: 12.w),
+                            Expanded(
+                              child: _MealLogButton(
+                                label: 'Meal 2',
+                                isLogged: meals >= 2,
+                                onTap: () {
+                                  controller.markMealCompleted(meals >= 2 ? 1 : 2);
+                                },
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      SizedBox(height: 12.h),
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton(
+                          onPressed: () => controller.resetMeals(),
+                          style: TextButton.styleFrom(
+                            backgroundColor: _kLightGray,
+                            foregroundColor: _kPrimaryDark.withOpacity(0.6),
+                            padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12.r),
+                            ),
+                          ),
+                          child: Text(
+                            'Reset All',
+                            style: ResponsiveTextStyles.textSm.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+            ),
+            // Close button
+            Positioned(
+              top: 0,
+              right: 0,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  padding: EdgeInsets.all(8.r),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    size: 20.sp,
+                    color: _kPrimaryDark.withOpacity(0.7),
+                  ),
                 ),
               ),
             ),
@@ -319,122 +370,148 @@ class _FastingDropdownModalState extends State<FastingDropdownModal> {
       ),
     );
   }
+}
 
-  Widget _buildTwoMealsContent() {
-    final now = DateTime.now();
-    final meals = widget.controller.mealsEaten.value;
-    final inWindow1 = _isInMeal1Window(now);
-    final inWindow2 = _isInMeal2Window(now);
-    final meal1Done = meals >= 1;
-    final meal2Done = meals >= 2;
-    final canSelect1 = inWindow1 && !meal1Done;
-    final canSelect2 = inWindow2 && !meal2Done;
+class _FastingModeButton extends StatelessWidget {
+  final String label;
+  final String subtitle;
+  final bool isSelected;
+  final VoidCallback onTap;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildRadioRow(
-          value: 1,
-          groupValue: meals,
-          label: 'Meal 1 completed',
-          subtitle: 'Allowed: 12:00 PM – 2:00 PM',
-          enabled: canSelect1,
-          selected: meal1Done,
-          onChanged: canSelect1 ? () => widget.controller.markMealCompleted(1) : null,
+  const _FastingModeButton({
+    required this.label,
+    required this.subtitle,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  static const Color _kPrimaryDark = Color(0xFF0A2342);
+  static const Color _kLightGray = Color(0xFFF5F6FA);
+  static const Color _kGoldStart = Color(0xFFD4AF37);
+  static const Color _kGoldEnd = Color(0xFFB8941F);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 16.h, horizontal: 12.w),
+        decoration: BoxDecoration(
+          gradient: isSelected
+              ? const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [_kGoldStart, _kGoldEnd],
+                )
+              : null,
+          color: isSelected ? null : _kLightGray,
+          borderRadius: BorderRadius.circular(16.r),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8.r,
+              offset: Offset(0, 2.h),
+            ),
+          ],
         ),
-        SizedBox(height: 12.h),
-        _buildRadioRow(
-          value: 2,
-          groupValue: meals,
-          label: 'Meal 2 completed',
-          subtitle: 'Allowed: 5:00 PM – 7:00 PM',
-          enabled: canSelect2,
-          selected: meal2Done,
-          onChanged: canSelect2 ? () => widget.controller.markMealCompleted(2) : null,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOmadContent() {
-    final now = DateTime.now();
-    final meals = widget.controller.mealsEaten.value;
-    final inWindow = _isInOmadWindow(now);
-    final done = meals >= 1;
-    final canSelect = inWindow && !done;
-
-    return _buildRadioRow(
-      value: 1,
-      groupValue: meals >= 1 ? 1 : 0,
-      label: 'Meal completed',
-      subtitle: 'Allowed: 12:00–2:00 PM OR 5:00–7:00 PM',
-      enabled: canSelect,
-      selected: done,
-      onChanged: canSelect ? () => widget.controller.markMealCompleted(1) : null,
-    );
-  }
-
-  Widget _buildRadioRow({
-    required int value,
-    required int groupValue,
-    required String label,
-    required String subtitle,
-    required bool enabled,
-    required bool selected,
-    required VoidCallback? onChanged,
-  }) {
-    return InkWell(
-      onTap: enabled ? onChanged : null,
-      borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-      splashColor: _kTealAccent.withOpacity(0.1),
-      highlightColor: _kTealAccent.withOpacity(0.05),
-      child: Opacity(
-        opacity: enabled ? 1.0 : 0.6,
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 12.w),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 24.w,
-                height: 24.h,
-                child: Radio<int>(
-                  value: value,
-                  groupValue: groupValue,
-                  onChanged: enabled ? (_) => onChanged?.call() : null,
-                  activeColor: _kTealAccent,
-                  fillColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.selected)) {
-                      return _kTealAccent;
-                    }
-                    return AppColors.mutedForeground;
-                  }),
-                ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.restaurant_menu,
+              size: 24.sp,
+              color: isSelected ? Colors.white : _kPrimaryDark,
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              label,
+              style: ResponsiveTextStyles.textBase.copyWith(
+                fontWeight: FontWeight.w600,
+                color: isSelected ? Colors.white : _kPrimaryDark,
               ),
-              SizedBox(width: 12.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: ResponsiveTextStyles.textSm.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.popoverForeground,
-                      ),
-                    ),
-                    SizedBox(height: 2.h),
-                    Text(
-                      subtitle,
-                      style: ResponsiveTextStyles.textXs.copyWith(
-                        color: AppColors.mutedForeground,
-                      ),
-                    ),
-                  ],
+            ),
+            SizedBox(height: 2.h),
+            Text(
+              subtitle,
+              style: ResponsiveTextStyles.textXs.copyWith(
+                color: isSelected ? Colors.white.withOpacity(0.8) : _kPrimaryDark.withOpacity(0.8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MealLogButton extends StatelessWidget {
+  final String label;
+  final bool isLogged;
+  final VoidCallback onTap;
+
+  const _MealLogButton({
+    required this.label,
+    required this.isLogged,
+    required this.onTap,
+  });
+
+  static const Color _kPrimaryDark = Color(0xFF0A2342);
+  static const Color _kLightGray = Color(0xFFF5F6FA);
+  // Teal gradient for logged meals (from #00B8A9 to #0A2342)
+  static const Color _kTealStart = Color(0xFF00B8A9);
+  static const Color _kTealEnd = Color(0xFF0A2342);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 16.h, horizontal: 12.w),
+        decoration: BoxDecoration(
+          gradient: isLogged
+              ? const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [_kTealStart, _kTealEnd],
+                )
+              : null,
+          color: isLogged ? null : _kLightGray,
+          borderRadius: BorderRadius.circular(14.r),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8.r,
+              offset: Offset(0, 2.h),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.restaurant_menu,
+              size: 20.sp,
+              color: isLogged ? Colors.white : _kPrimaryDark.withOpacity(0.4),
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              label,
+              style: ResponsiveTextStyles.textSm.copyWith(
+                fontWeight: FontWeight.w600,
+                color: isLogged ? Colors.white : _kPrimaryDark.withOpacity(0.4),
+              ),
+            ),
+            if (isLogged) ...[
+              SizedBox(height: 2.h),
+              Text(
+                '✓ Logged',
+                style: ResponsiveTextStyles.textXs.copyWith(
+                  color: Colors.white.withOpacity(0.9),
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
-          ),
+          ],
         ),
       ),
     );

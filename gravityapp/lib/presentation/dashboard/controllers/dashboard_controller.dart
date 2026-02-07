@@ -4,6 +4,7 @@ import 'dart:io' show Platform, SocketException;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
 import '../../messages/controllers/messages_controllers.dart';
 
 import '../../../core/services/health_sync_service.dart';
@@ -31,6 +32,8 @@ class DashboardController extends GetxController {
   final weight = 0.0.obs; // in kg - will be updated from HealthKit
   final previousWeight = 0.0.obs; // in kg
   final mealsEaten = 0.obs; // Number of meals eaten today (0-2)
+  /// Fasting mode: 'normal' = 2 meals/day, 'omad' = 1 meal/day
+  final fastingMode = 'normal'.obs;
 
   // Today's entry ID (set when creating/updating entry, used for upsert logic)
   final todayEntryId = Rx<int?>(null);
@@ -74,10 +77,18 @@ class DashboardController extends GetxController {
   StreamSubscription<HealthMetrics>? _healthSubscription;
   Timer? _dayChangeTimer; // Timer to check for day change at midnight
 
+  static const String _fastingModeKey = 'fasting_mode';
+
   @override
   void onInit() {
     super.onInit();
     _loadGoals(); // Load goals first to initialize weight
+    
+    // Load fasting mode from storage
+    final stored = GetStorage().read(_fastingModeKey);
+    if (stored == 'omad' || stored == 'normal') {
+      fastingMode.value = stored;
+    }
     
     // Initialize local hydration tracking
     _initializeLocalHydration();
@@ -579,9 +590,29 @@ class DashboardController extends GetxController {
     }
   }
 
-  /// Mark meal(s) completed from fasting dropdown modal. Persistence/API can be added later.
+  /// Mark meal(s) completed from fasting modal.
   void markMealCompleted(int count) {
-    mealsEaten.value = count.clamp(0, 2);
+    final max = fastingMode.value == 'omad' ? 1 : 2;
+    mealsEaten.value = count.clamp(0, max);
+    // TODO: persist via API when ready
+  }
+
+  /// Set fasting mode: 'normal' (2 meals/day) or 'omad' (1 meal/day)
+  void setFastingMode(String mode) {
+    if (mode != 'normal' && mode != 'omad') return;
+    fastingMode.value = mode;
+    GetStorage().write(_fastingModeKey, mode);
+    // If switching to OMAD and meals > 1, reset to 1
+    if (mode == 'omad' && mealsEaten.value > 1) {
+      mealsEaten.value = 1;
+    } else if (mode == 'normal' && mealsEaten.value > 2) {
+      mealsEaten.value = 2;
+    }
+  }
+
+  /// Reset all meals to 0
+  void resetMeals() {
+    mealsEaten.value = 0;
     // TODO: persist via API when ready
   }
 
