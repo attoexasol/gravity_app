@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
@@ -171,7 +173,7 @@ class QuickActionsSection extends StatelessWidget {
     );
   }
 
-  /// Show Fasting Mode Modal (dropdown-based; time-window rules; no numeric input)
+  /// Show Fasting Mode Modal
   void _showFastingModal(BuildContext context) {
     showDialog(
       context: context,
@@ -183,13 +185,36 @@ class QuickActionsSection extends StatelessWidget {
 }
 
 /// Fasting Tracker modal - matches new design with fasting mode selection and meal logging
-class FastingTrackerModal extends StatelessWidget {
+class FastingTrackerModal extends StatefulWidget {
   final DashboardController controller;
 
   const FastingTrackerModal({super.key, required this.controller});
 
+  @override
+  State<FastingTrackerModal> createState() => _FastingTrackerModalState();
+}
+
+class _FastingTrackerModalState extends State<FastingTrackerModal> {
+  Timer? _mealWindowTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _mealWindowTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      widget.controller.mealWindowTicker.value++;
+    });
+  }
+
+  @override
+  void dispose() {
+    _mealWindowTimer?.cancel();
+    super.dispose();
+  }
+
   static const Color _kPrimaryDark = Color(0xFF0A2342);
   static const Color _kLightGray = Color(0xFFF5F6FA);
+
+  DashboardController get controller => widget.controller;
 
   @override
   Widget build(BuildContext context) {
@@ -288,9 +313,16 @@ class FastingTrackerModal extends StatelessWidget {
                 ),
                 SizedBox(height: 12.h),
                 Obx(() {
+                  controller.mealWindowTicker.value; // Trigger rebuild when time window changes
                   final mode = controller.fastingMode.value;
                   final meals = controller.mealsEaten.value;
                   final maxMeals = mode == 'omad' ? 1 : 2;
+                  final canLog1 = controller.canLogMeal(1);
+                  final canLog2 = controller.canLogMeal(2);
+                  // Normal mode: only one meal at a time (meals==1 or meals==2)
+                  // OMAD: meals>=1 means logged
+                  final meal1Logged = mode == 'omad' ? meals >= 1 : meals == 1;
+                  final meal2Logged = meals == 2;
                   return Column(
                     children: [
                       Row(
@@ -298,9 +330,25 @@ class FastingTrackerModal extends StatelessWidget {
                           Expanded(
                             child: _MealLogButton(
                               label: 'Meal 1',
-                              isLogged: meals >= 1,
+                              isLogged: meal1Logged,
+                              allowedTime: controller.mealAllowedTime(1),
+                              canLog: canLog1,
+                              isLoading: controller.isMealLogging.value,
                               onTap: () {
-                                controller.markMealCompleted(meals >= 1 ? 0 : 1);
+                                final isLogging = !meal1Logged;
+                                if (isLogging && !canLog1) {
+                                  final time = controller.mealAllowedTime(1);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Meal 1 can only be logged between $time',
+                                      ),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                  return;
+                                }
+                                controller.markMealCompleted(1, isLogging);
                               },
                             ),
                           ),
@@ -309,9 +357,25 @@ class FastingTrackerModal extends StatelessWidget {
                             Expanded(
                               child: _MealLogButton(
                                 label: 'Meal 2',
-                                isLogged: meals >= 2,
+                                isLogged: meal2Logged,
+                                allowedTime: controller.mealAllowedTime(2),
+                                canLog: canLog2,
+                                isLoading: controller.isMealLogging.value,
                                 onTap: () {
-                                  controller.markMealCompleted(meals >= 2 ? 1 : 2);
+                                  final isLogging = !meal2Logged;
+                                  if (isLogging && !canLog2) {
+                                    final time = controller.mealAllowedTime(2);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Meal 2 can only be logged between $time',
+                                        ),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  controller.markMealCompleted(2, isLogging);
                                 },
                               ),
                             ),
@@ -319,26 +383,75 @@ class FastingTrackerModal extends StatelessWidget {
                         ],
                       ),
                       SizedBox(height: 12.h),
-                      SizedBox(
+                      // Submit button - calls API when tapped
+                      Obx(() => SizedBox(
                         width: double.infinity,
-                        child: TextButton(
-                          onPressed: () => controller.resetMeals(),
-                          style: TextButton.styleFrom(
-                            backgroundColor: _kLightGray,
-                            foregroundColor: _kPrimaryDark.withOpacity(0.6),
+                        child: GestureDetector(
+                          onTap: controller.mealsEaten.value >= 1 && !controller.isMealLogging.value
+                              ? () => controller.submitFastMeal()
+                              : null,
+                          child: Container(
                             padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
-                            shape: RoundedRectangleBorder(
+                            decoration: BoxDecoration(
+                              gradient: controller.mealsEaten.value >= 1 && !controller.isMealLogging.value
+                                  ? const LinearGradient(
+                                      colors: [Color(0xFFD4AF37), Color(0xFFB8941F)],
+                                    )
+                                  : null,
+                              color: controller.mealsEaten.value < 1 || controller.isMealLogging.value
+                                  ? _kLightGray
+                                  : null,
                               borderRadius: BorderRadius.circular(12.r),
                             ),
-                          ),
-                          child: Text(
-                            'Reset All',
-                            style: ResponsiveTextStyles.textSm.copyWith(
-                              fontWeight: FontWeight.w500,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (controller.isMealLogging.value)
+                                  SizedBox(
+                                    width: 18.w,
+                                    height: 18.h,
+                                    child: const CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0A2342)),
+                                    ),
+                                  ),
+                                if (controller.isMealLogging.value) SizedBox(width: 8.w),
+                                Text(
+                                  'Submit',
+                                  style: ResponsiveTextStyles.textSm.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: controller.mealsEaten.value >= 1 && !controller.isMealLogging.value
+                                        ? Colors.white
+                                        : _kPrimaryDark.withOpacity(0.5),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      ),
+                      )),
+                      SizedBox(height: 8.h),
+                      // Reset All button
+                      // SizedBox(
+                      //   width: double.infinity,
+                      //   child: TextButton(
+                      //     onPressed: controller.isMealLogging.value ? null : () => controller.resetMeals(),
+                      //     style: TextButton.styleFrom(
+                      //       backgroundColor: _kLightGray,
+                      //       foregroundColor: _kPrimaryDark.withOpacity(0.6),
+                      //       padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
+                      //       shape: RoundedRectangleBorder(
+                      //         borderRadius: BorderRadius.circular(12.r),
+                      //       ),
+                      //     ),
+                      //     child: Text(
+                      //       'Reset All',
+                      //       style: ResponsiveTextStyles.textSm.copyWith(
+                      //         fontWeight: FontWeight.w500,
+                      //       ),
+                      //     ),
+                      //   ),
+                      // ),
                     ],
                   );
                 }),
@@ -447,11 +560,17 @@ class _FastingModeButton extends StatelessWidget {
 class _MealLogButton extends StatelessWidget {
   final String label;
   final bool isLogged;
+  final String allowedTime;
+  final bool canLog;
+  final bool isLoading;
   final VoidCallback onTap;
 
   const _MealLogButton({
     required this.label,
     required this.isLogged,
+    required this.allowedTime,
+    required this.canLog,
+    required this.isLoading,
     required this.onTap,
   });
 
@@ -464,55 +583,87 @@ class _MealLogButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 16.h, horizontal: 12.w),
-        decoration: BoxDecoration(
-          gradient: isLogged
-              ? const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [_kTealStart, _kTealEnd],
-                )
-              : null,
-          color: isLogged ? null : _kLightGray,
-          borderRadius: BorderRadius.circular(14.r),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8.r,
-              offset: Offset(0, 2.h),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.restaurant_menu,
-              size: 20.sp,
-              color: isLogged ? Colors.white : _kPrimaryDark.withOpacity(0.4),
-            ),
-            SizedBox(height: 8.h),
-            Text(
-              label,
-              style: ResponsiveTextStyles.textSm.copyWith(
-                fontWeight: FontWeight.w600,
-                color: isLogged ? Colors.white : _kPrimaryDark.withOpacity(0.4),
+      // Disable tap when loading to prevent double-tap
+      onTap: isLoading ? null : onTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Opacity(
+            opacity: isLoading ? 0.6 : 1.0,
+            child: Container(
+              padding: EdgeInsets.symmetric(vertical: 16.h, horizontal: 12.w),
+              decoration: BoxDecoration(
+                gradient: isLogged
+                    ? const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [_kTealStart, _kTealEnd],
+                      )
+                    : null,
+                color: isLogged ? null : _kLightGray,
+                borderRadius: BorderRadius.circular(14.r),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 8.r,
+                    offset: Offset(0, 2.h),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.restaurant_menu,
+                    size: 20.sp,
+                    color: isLogged ? Colors.white : _kPrimaryDark.withOpacity(canLog ? 0.4 : 0.25),
+                  ),
+                  SizedBox(height: 8.h),
+                  Text(
+                    label,
+                    style: ResponsiveTextStyles.textSm.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: isLogged ? Colors.white : _kPrimaryDark.withOpacity(canLog ? 0.4 : 0.25),
+                    ),
+                  ),
+                  if (isLogged) ...[
+                    SizedBox(height: 2.h),
+                    Text(
+                      '✓ Logged',
+                      style: ResponsiveTextStyles.textXs.copyWith(
+                        color: Colors.white.withOpacity(0.9),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ] else ...[
+                    SizedBox(height: 2.h),
+                    Text(
+                      allowedTime,
+                      style: ResponsiveTextStyles.textXs.copyWith(
+                        color: _kPrimaryDark.withOpacity(canLog ? 0.5 : 0.3),
+                        fontWeight: FontWeight.w400,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ],
               ),
             ),
-            if (isLogged) ...[
-              SizedBox(height: 2.h),
-              Text(
-                '✓ Logged',
-                style: ResponsiveTextStyles.textXs.copyWith(
-                  color: Colors.white.withOpacity(0.9),
-                  fontWeight: FontWeight.w500,
+          ),
+          if (isLoading)
+            Positioned.fill(
+              child: Center(
+                child: SizedBox(
+                  width: 24.w,
+                  height: 24.h,
+                  child: const CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00B8A9)),
+                  ),
                 ),
               ),
-            ],
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }

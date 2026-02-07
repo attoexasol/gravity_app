@@ -71,14 +71,24 @@ class ProgressRingsSection extends StatelessWidget {
                   color: const Color(0xFF00B8A9),
                   suffix: "L",
                 ),
-                // Fasting
+                // Fasting: from API (fast-meal/get), Normal=(meal1_done+meal2_done)/2, OMAD=meal1_done/1
                 ProgressRing(
-                  value: controller.mealsEaten.value.toDouble(),
-                  max: controller.fastingMode.value == 'omad' ? 1.0 : 2.0,
+                  value: controller.fastMealData.value != null
+                      ? controller.fastMealData.value!.progressValue
+                      : (controller.fastingMode.value == 'omad'
+                          ? controller.mealsEaten.value.toDouble()
+                          : (controller.mealsEaten.value >= 1 ? 1.0 : 0.0)),
+                  max: controller.fastMealData.value != null
+                      ? controller.fastMealData.value!.progressMax
+                      : (controller.fastingMode.value == 'omad' ? 1.0 : 2.0),
                   label: "Fasting",
                   icon: Icons.restaurant_outlined,
                   color: const Color(0xFFD4AF37),
-                  customValue: "${controller.mealsEaten.value}/${controller.fastingMode.value == 'omad' ? 1 : 2}",
+                  customValue: controller.fastMealData.value != null
+                      ? controller.fastMealData.value!.progressLabel
+                      : (controller.fastingMode.value == 'omad'
+                          ? "${controller.mealsEaten.value}/1"
+                          : (controller.mealsEaten.value >= 1 ? "1/2" : "0/2")),
                 ),
               ],
             ),

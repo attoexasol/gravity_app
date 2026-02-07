@@ -10,6 +10,8 @@ import '../../messages/controllers/messages_controllers.dart';
 import '../../../core/services/health_sync_service.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../core/services/app_lifecycle_service.dart';
+import '../../../core/services/api_service.dart';
+import '../../../core/services/fast_meal_service.dart';
 import '../../../data/repositories/user_gravity_repository.dart';
 import '../../../data/model/user_gravity_entry.dart';
 import '../../../data/model/api_response.dart';
@@ -18,6 +20,7 @@ import '../../today_views/controllers/today_controller.dart';
 class DashboardController extends GetxController {
   final HealthSyncService _healthService = HealthSyncService();
   final UserGravityRepository _gravityRepository = UserGravityRepository();
+  final FastMealService _fastMealService = FastMealService();
   
   // Expose healthService for sync_status_section
   HealthSyncService get healthService => _healthService;
@@ -34,6 +37,12 @@ class DashboardController extends GetxController {
   final mealsEaten = 0.obs; // Number of meals eaten today (0-2)
   /// Fasting mode: 'normal' = 2 meals/day, 'omad' = 1 meal/day
   final fastingMode = 'normal'.obs;
+  /// Ticker for meal-window UI refresh (increment to force Obx rebuild)
+  final mealWindowTicker = 0.obs;
+  /// Loading state while fast-meal API request is in progress (prevents double-tap)
+  final isMealLogging = false.obs;
+  /// Fast meal data from API (get) - used for Fasting Progress Ring
+  final fastMealData = Rx<FastMealResponse?>(null);
 
   // Today's entry ID (set when creating/updating entry, used for upsert logic)
   final todayEntryId = Rx<int?>(null);
@@ -89,7 +98,10 @@ class DashboardController extends GetxController {
     if (stored == 'omad' || stored == 'normal') {
       fastingMode.value = stored;
     }
-    
+
+    // Fetch fast meal data for Today's Progress Fasting ring
+    fetchFastMeal();
+
     // Initialize local hydration tracking
     _initializeLocalHydration();
     
@@ -263,7 +275,10 @@ class DashboardController extends GetxController {
       localWaterToday.value = 0.0;
       _hasUserLoggedHydrationToday.value = false;
       _lastHydrationDate.value = _todayString;
-      
+
+      // Refresh fast meal data for new day
+      fetchFastMeal();
+
       // Schedule next day change check (24 hours later)
       _setupDayChangeTimer();
     });
@@ -590,11 +605,117 @@ class DashboardController extends GetxController {
     }
   }
 
-  /// Mark meal(s) completed from fasting modal.
-  void markMealCompleted(int count) {
+  /// Meal 1 window: 12:00 PM – 2:00 PM
+  bool isInMeal1Window(DateTime now) {
+    final h = now.hour + now.minute / 60.0;
+    return h >= 12 && h < 24;
+    //return h >= 12 && h < 14;
+  }
+
+  /// Meal 2 window: 5:00 PM – 7:00 PM
+  bool isInMeal2Window(DateTime now) {
+    final h = now.hour + now.minute / 60.0;
+    return h >= 12 && h < 24;
+    //return h >= 17 && h < 19;
+  }
+
+  /// OMAD window: either 12–2 PM or 5–7 PM
+  bool isInOmadWindow(DateTime now) {
+    return isInMeal1Window(now) || isInMeal2Window(now);
+  }
+
+  /// Whether the user can log the given meal right now (within time window).
+  bool canLogMeal(int mealNumber) {
+    final now = DateTime.now();
+    if (fastingMode.value == 'omad') {
+      return isInOmadWindow(now); // OMAD: one meal in either window
+    }
+    if (mealNumber == 1) return isInMeal1Window(now); // 12–2 PM
+    if (mealNumber == 2) return isInMeal2Window(now); // 5–7 PM
+    return false;
+  }
+
+  /// Human-readable allowed time for a meal (for UI).
+  String mealAllowedTime(int mealNumber) {
+    if (fastingMode.value == 'omad') {
+      return '12–2 PM or 5–7 PM';
+    }
+    if (mealNumber == 1) return '12–2 PM';
+    if (mealNumber == 2) return '5–7 PM';
+    return '';
+  }
+
+  /// Mark meal(s) completed from fasting modal. Updates local state only (no API call).
+  /// In Normal mode: only one meal can be selected at a time (Meal 1 OR Meal 2, not both).
+  /// Use submitFastMeal() to call the API when Submit button is tapped.
+  void markMealCompleted(int mealNumber, bool isLogging) {
     final max = fastingMode.value == 'omad' ? 1 : 2;
-    mealsEaten.value = count.clamp(0, max);
-    // TODO: persist via API when ready
+    if (isLogging) {
+      if (!canLogMeal(mealNumber)) return;
+      mealsEaten.value = mealNumber.clamp(1, max);
+    } else {
+      mealsEaten.value = 0;
+    }
+  }
+
+  /// Submit fast meal - calls fast-meal/update API with selected meal. Called when Submit button is tapped.
+  Future<void> submitFastMeal() async {
+    if (mealsEaten.value < 1) return;
+    if (isMealLogging.value) return;
+
+    isMealLogging.value = true;
+    try {
+      final fastMealCategory = fastingMode.value == 'omad' ? 2 : 1;
+      final mealNumber = mealsEaten.value.clamp(1, 2);
+      final date = _todayString;
+
+      final response = await _fastMealService.updateFastMeal(
+        fastMealCategory: fastMealCategory,
+        mealNumber: mealNumber,
+        date: date,
+      );
+
+      if (response != null) {
+        if (response.meal2Done) {
+          mealsEaten.value = 2;
+        } else if (response.meal1Done) {
+          mealsEaten.value = 1;
+        }
+        debugPrint('✅ Fast meal submitted: meal1_done=${response.meal1Done}, meal2_done=${response.meal2Done}, status=${response.status}');
+        Get.snackbar(
+          'Success',
+          'Meal logged successfully',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFF00B8A9),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2),
+        );
+        Get.back();
+        fetchFastMeal();
+      }
+    } on ApiException catch (e) {
+      debugPrint('❌ Fast meal API error: ${e.message}');
+      Get.snackbar(
+        'Error',
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFE53935),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+    } catch (e) {
+      debugPrint('❌ Fast meal error: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to log meal. Please try again.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFE53935),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+    } finally {
+      isMealLogging.value = false;
+    }
   }
 
   /// Set fasting mode: 'normal' (2 meals/day) or 'omad' (1 meal/day)
@@ -610,10 +731,24 @@ class DashboardController extends GetxController {
     }
   }
 
-  /// Reset all meals to 0
+  /// Reset all meals to 0 (local state only; do not call other APIs)
   void resetMeals() {
     mealsEaten.value = 0;
-    // TODO: persist via API when ready
+  }
+
+  /// Fetch fast meal data from API for Today's Progress Fasting ring
+  Future<void> fetchFastMeal() async {
+    try {
+      final response = await _fastMealService.getFastMeal(date: _todayString);
+      if (response != null) {
+        fastMealData.value = response;
+        fastingMode.value = response.fastMealCategory == 2 ? 'omad' : 'normal';
+        mealsEaten.value = response.meal2Done ? 2 : (response.meal1Done ? 1 : 0);
+        debugPrint('✅ Fast meal loaded: category=${response.fastMealCategory}, meal1=${response.meal1Done}, meal2=${response.meal2Done}');
+      }
+    } catch (e) {
+      debugPrint('⚠️ fetchFastMeal error: $e');
+    }
   }
 
   /// Write manual entry (weight/hydration/sleep) to device health store.
