@@ -7,6 +7,10 @@ class DateWiseGravityResponse {
   final double? hydrationLiters;
   final int? nutritionCalories;
   final bool fastingCompleted;
+  /// Fasting status from API: "complete", "partial", "missed", "missing"
+  final String? fastingStatusRaw;
+  /// Fasting summary for display (e.g. "OMAD 1/1") when fasting object is present
+  final String? fastingSummary;
   final double? startingWeight;
   final double? goalWeightLoss;
   final DateTime? createdAt;
@@ -18,6 +22,8 @@ class DateWiseGravityResponse {
     this.hydrationLiters,
     this.nutritionCalories,
     required this.fastingCompleted,
+    this.fastingStatusRaw,
+    this.fastingSummary,
     this.startingWeight,
     this.goalWeightLoss,
     this.createdAt,
@@ -72,7 +78,7 @@ class DateWiseGravityResponse {
       parsedHydrationLiters = double.tryParse(numericStr);
     }
 
-    // Parse nutrition_calories
+    // Parse nutrition_calories (and fallback to nutration if numeric)
     int? parsedNutritionCalories;
     if (json['nutrition_calories'] != null) {
       if (json['nutrition_calories'] is int) {
@@ -83,11 +89,29 @@ class DateWiseGravityResponse {
         parsedNutritionCalories = int.tryParse(json['nutrition_calories'] as String);
       }
     }
+    if (parsedNutritionCalories == null && json['nutration'] != null) {
+      final nutration = json['nutration'];
+      if (nutration is int) {
+        parsedNutritionCalories = nutration;
+      } else if (nutration is num) {
+        parsedNutritionCalories = nutration.toInt();
+      } else if (nutration is String) {
+        parsedNutritionCalories = int.tryParse(nutration);
+      }
+    }
 
-    // Parse fasting_completed
-    final fastingCompleted = json['fasting_completed'] == true ||
+    // Parse fasting: object { summary, status } or legacy fasting_completed
+    bool fastingCompleted = json['fasting_completed'] == true ||
         json['fasting_completed'] == 1 ||
         (json['fasting_completed'] is String && json['fasting_completed'].toString().toLowerCase() == 'true');
+    String? fastingStatusRaw;
+    String? fastingSummary;
+    if (json['fasting'] is Map<String, dynamic>) {
+      final fasting = json['fasting'] as Map<String, dynamic>;
+      fastingSummary = fasting['summary']?.toString();
+      fastingStatusRaw = fasting['status']?.toString().toLowerCase();
+      fastingCompleted = fastingStatusRaw == 'complete' || fastingStatusRaw == 'completed';
+    }
 
     // Parse starting_weight
     double? parsedStartingWeight;
@@ -126,6 +150,8 @@ class DateWiseGravityResponse {
       hydrationLiters: parsedHydrationLiters,
       nutritionCalories: parsedNutritionCalories,
       fastingCompleted: fastingCompleted,
+      fastingStatusRaw: fastingStatusRaw,
+      fastingSummary: fastingSummary,
       startingWeight: parsedStartingWeight,
       goalWeightLoss: parsedGoalWeightLoss,
       createdAt: parsedCreatedAt,
@@ -141,6 +167,8 @@ class DateWiseGravityResponse {
       if (hydrationLiters != null) 'hydration_liters': hydrationLiters,
       if (nutritionCalories != null) 'nutrition_calories': nutritionCalories,
       'fasting_completed': fastingCompleted,
+      if (fastingStatusRaw != null) 'fasting_status_raw': fastingStatusRaw,
+      if (fastingSummary != null) 'fasting_summary': fastingSummary,
       if (startingWeight != null) 'starting_weight': startingWeight,
       if (goalWeightLoss != null) 'goal_weight_loss': goalWeightLoss,
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),

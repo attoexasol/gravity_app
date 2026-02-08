@@ -415,6 +415,8 @@ class TodayController extends GetxController {
                 hydrationLiters: data.hydrationLiters,
                 nutritionCalories: data.nutritionCalories,
                 fastingCompleted: data.fastingCompleted,
+                fastingStatusRaw: data.fastingStatusRaw,
+                fastingSummary: data.fastingSummary,
                 startingWeight: data.startingWeight,
                 goalWeightLoss: data.goalWeightLoss,
                 createdAt: data.createdAt,
@@ -629,16 +631,27 @@ class TodayController extends GetxController {
     return PillarStatus.borderline; // Yellow - partial
   }
   
-  // Get fasting status
+  // Get fasting status (complete=green, partial=yellow, missed/missing=red)
   PillarStatus get fastingStatus {
     if (isLoading.value) {
       return PillarStatus.borderline;
     }
-    final completed = dateWiseData.value?.fastingCompleted ?? false;
-    if (completed) {
-      return PillarStatus.onTrack; // Green - stayed within
+    final statusRaw = dateWiseData.value?.fastingStatusRaw;
+    if (statusRaw != null) {
+      switch (statusRaw) {
+        case 'complete':
+        case 'completed':
+          return PillarStatus.onTrack;
+        case 'partial':
+          return PillarStatus.borderline;
+        case 'missed':
+        case 'missing':
+        default:
+          return PillarStatus.missed;
+      }
     }
-    return PillarStatus.missed; // Red - didn't stay within
+    final completed = dateWiseData.value?.fastingCompleted ?? false;
+    return completed ? PillarStatus.onTrack : PillarStatus.missed;
   }
   
   // Get weight-in status
@@ -711,10 +724,14 @@ class TodayController extends GetxController {
     return '$value steps';
   }
   
-  // Get fasting display text
+  // Get fasting display text (use summary when available, e.g. "OMAD 1/1")
   String get fastingDisplayText {
     if (isLoading.value) {
       return 'Loading...';
+    }
+    final summary = dateWiseData.value?.fastingSummary;
+    if (summary != null && summary.isNotEmpty) {
+      return summary;
     }
     final completed = dateWiseData.value?.fastingCompleted ?? false;
     if (completed) {
@@ -933,6 +950,8 @@ class TodayController extends GetxController {
             hydrationLiters: existing.hydrationLiters,
             nutritionCalories: existing.nutritionCalories,
             fastingCompleted: existing.fastingCompleted,
+            fastingStatusRaw: existing.fastingStatusRaw,
+            fastingSummary: existing.fastingSummary,
             startingWeight: existing.startingWeight,
             goalWeightLoss: existing.goalWeightLoss,
             createdAt: existing.createdAt,
@@ -948,6 +967,8 @@ class TodayController extends GetxController {
             hydrationLiters: null,
             nutritionCalories: null,
             fastingCompleted: false,
+            fastingStatusRaw: null,
+            fastingSummary: null,
             startingWeight: null,
             goalWeightLoss: null,
             createdAt: null,

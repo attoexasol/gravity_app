@@ -146,10 +146,12 @@ class WeeklyReviewController extends GetxController {
     PillarStatus mapStatus(String status) {
       switch (status.toLowerCase()) {
         case 'completed':
+        case 'complete':
           return PillarStatus.complete;
         case 'partial':
           return PillarStatus.partial;
         case 'missed':
+        case 'missing':
         default:
           return PillarStatus.missed;
       }
@@ -189,7 +191,7 @@ class WeeklyReviewController extends GetxController {
           sleep[weekdayIndex] = mapStatus(dayData.sleep.status);
           steps[weekdayIndex] = mapStatus(dayData.steps.status);
           weighin[weekdayIndex] = mapStatus(dayData.weight.status);
-          // Note: Fasting is not in API response, keep as missed
+          fasting[weekdayIndex] = mapStatus(dayData.fasting.status);
         } else {
           debugPrint('⚠️ Invalid weekday index: $weekdayIndex for date: ${dayData.date}');
         }
@@ -204,7 +206,7 @@ class WeeklyReviewController extends GetxController {
       hydration: hydration,
       sleep: sleep,
       steps: steps,
-      fasting: fasting, // Not in API, keep as missed
+      fasting: fasting,
       weighin: weighin,
     );
 

@@ -7,6 +7,7 @@ class DayWiseGoalCompletion {
   final GoalStatus sleep;
   final GoalStatus steps;
   final GoalStatus weight;
+  final GoalStatus fasting;
 
   DayWiseGoalCompletion({
     required this.date,
@@ -15,6 +16,7 @@ class DayWiseGoalCompletion {
     required this.sleep,
     required this.steps,
     required this.weight,
+    required this.fasting,
   });
 
   factory DayWiseGoalCompletion.fromJson(Map<String, dynamic> json) {
@@ -25,6 +27,7 @@ class DayWiseGoalCompletion {
       sleep: GoalStatus.fromJson(json['sleep']),
       steps: GoalStatus.fromJson(json['steps']),
       weight: GoalStatus.fromJson(json['weight']),
+      fasting: GoalStatus.fromJson(json['fasting']),
     );
   }
 }

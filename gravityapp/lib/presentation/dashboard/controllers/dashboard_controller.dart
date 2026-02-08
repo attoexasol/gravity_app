@@ -4,7 +4,6 @@ import 'dart:io' show Platform, SocketException;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:get/get.dart';
-import 'package:get_storage/get_storage.dart';
 import '../../messages/controllers/messages_controllers.dart';
 
 import '../../../core/services/health_sync_service.dart';
@@ -86,18 +85,10 @@ class DashboardController extends GetxController {
   StreamSubscription<HealthMetrics>? _healthSubscription;
   Timer? _dayChangeTimer; // Timer to check for day change at midnight
 
-  static const String _fastingModeKey = 'fasting_mode';
-
   @override
   void onInit() {
     super.onInit();
     _loadGoals(); // Load goals first to initialize weight
-    
-    // Load fasting mode from storage
-    final stored = GetStorage().read(_fastingModeKey);
-    if (stored == 'omad' || stored == 'normal') {
-      fastingMode.value = stored;
-    }
 
     // Fetch fast meal data for Today's Progress Fasting ring
     fetchFastMeal();
@@ -718,11 +709,11 @@ class DashboardController extends GetxController {
     }
   }
 
-  /// Set fasting mode: 'normal' (2 meals/day) or 'omad' (1 meal/day)
+  /// Set fasting mode: 'normal' (2 meals/day) or 'omad' (1 meal/day).
+  /// Not persisted to local storage; API response (fetchFastMeal) is source of truth.
   void setFastingMode(String mode) {
     if (mode != 'normal' && mode != 'omad') return;
     fastingMode.value = mode;
-    GetStorage().write(_fastingModeKey, mode);
     // If switching to OMAD and meals > 1, reset to 1
     if (mode == 'omad' && mealsEaten.value > 1) {
       mealsEaten.value = 1;

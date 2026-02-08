@@ -1,6 +1,6 @@
 /// Day Activity API response model
 /// API: POST /user/day-activity
-/// Response data: weight, steps, sleep, hydration, nutration (per-pillar goal/actual/status)
+/// Response data: weight, steps, sleep, hydration, nutration, fasting (per-pillar goal/actual/status)
 class DayActivityData {
   final String date;
   final DayActivityPillar? weight;
@@ -8,6 +8,7 @@ class DayActivityData {
   final DayActivityPillar? sleep;
   final DayActivityPillar? hydration;
   final DayActivityNutration? nutration;
+  final DayActivityFasting? fasting;
 
   DayActivityData({
     required this.date,
@@ -16,6 +17,7 @@ class DayActivityData {
     this.sleep,
     this.hydration,
     this.nutration,
+    this.fasting,
   });
 
   factory DayActivityData.fromJson(Map<String, dynamic> json) {
@@ -37,7 +39,43 @@ class DayActivityData {
           ? DayActivityNutration.fromJson(
               json['nutration'] as Map<String, dynamic>)
           : null,
+      fasting: json['fasting'] is Map<String, dynamic>
+          ? DayActivityFasting.fromJson(
+              json['fasting'] as Map<String, dynamic>)
+          : null,
     );
+  }
+}
+
+/// Fasting pillar from day-activity API
+/// Structure: { "type": "OMAD", "meals": "1/1", "status": "complete" }
+class DayActivityFasting {
+  final String? type;
+  final String? meals;
+  final String status;
+
+  DayActivityFasting({
+    this.type,
+    this.meals,
+    this.status = 'none',
+  });
+
+  factory DayActivityFasting.fromJson(Map<String, dynamic> json) {
+    return DayActivityFasting(
+      type: json['type']?.toString(),
+      meals: json['meals']?.toString(),
+      status: json['status'] is String ? json['status'] as String : 'none',
+    );
+  }
+
+  /// Build detail string for display (e.g. "OMAD - 1/1" or "1/1")
+  String get detailString {
+    if (type != null && type!.isNotEmpty && meals != null && meals!.isNotEmpty) {
+      return '$type - $meals';
+    }
+    if (meals != null && meals!.isNotEmpty) return meals!;
+    if (type != null && type!.isNotEmpty) return type!;
+    return '—';
   }
 }
 

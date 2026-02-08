@@ -269,10 +269,12 @@ class DailyDetailsController extends GetxController {
   static PillarStatus _apiStatusToPillarStatus(String status) {
     switch (status.toLowerCase()) {
       case 'completed':
+      case 'complete':
         return PillarStatus.complete;
       case 'partial':
         return PillarStatus.partial;
       case 'missed':
+      case 'missing':
         return PillarStatus.missed;
       default:
         return PillarStatus.none;
@@ -317,7 +319,12 @@ class DailyDetailsController extends GetxController {
                 : (api.steps!.goal ?? '—'),
           )
         : Pillar(status: PillarStatus.none, detail: '—');
-    final fasting = Pillar(status: PillarStatus.none, detail: 'Not scheduled');
+    final fasting = api.fasting != null
+        ? Pillar(
+            status: _apiStatusToPillarStatus(api.fasting!.status),
+            detail: api.fasting!.detailString,
+          )
+        : Pillar(status: PillarStatus.none, detail: 'Not scheduled');
     final weighin = api.weight != null
         ? Pillar(
             status: _apiStatusToPillarStatus(api.weight!.status),
@@ -338,7 +345,7 @@ class DailyDetailsController extends GetxController {
 
     // Count only fully Complete pillars (not Partial) so Summary matches Pillar Breakdown
     int completed = 0;
-    for (final p in [nutrition, hydration, sleep, step, weighin]) {
+    for (final p in [nutrition, hydration, sleep, step, fasting, weighin]) {
       if (p.status == PillarStatus.complete) completed++;
     }
     const totalPillars = 6;
