@@ -142,6 +142,28 @@ class SignupController extends GetxController {
   bool get passwordsMatch =>
       passwordController.text == confirmPasswordController.text;
 
+  /// Parse API errors object for email/phone already taken; return user-friendly message or null.
+  String? _getSignupErrorMessage(dynamic errors) {
+    if (errors == null || errors is! Map) return null;
+    final errMap = errors as Map<dynamic, dynamic>;
+    final emailErrors = errMap['email'];
+    final phoneErrors = errMap['phone'];
+    final hasEmail = emailErrors != null &&
+        (emailErrors is List ? (emailErrors as List).isNotEmpty : true);
+    final hasPhone = phoneErrors != null &&
+        (phoneErrors is List ? (phoneErrors as List).isNotEmpty : true);
+    if (hasEmail && hasPhone) {
+      return 'An account already exists with this email and phone number. Please try signing in or use different credentials.';
+    }
+    if (hasEmail) {
+      return 'This email is already registered. Please try signing in or use a different email.';
+    }
+    if (hasPhone) {
+      return 'This phone number is already registered. Please try a different phone number.';
+    }
+    return null;
+  }
+
   /// Handle signup - UPDATED WITH REAL API CALL
   Future<void> handleSignup() async {
     // Check if controller is still mounted before accessing controllers
@@ -212,10 +234,11 @@ class SignupController extends GetxController {
           duration: const Duration(seconds: 3),
         );
       } else {
-        // Error from API
+        // Error from API - check for email/phone already taken validation
+        final userMessage = _getSignupErrorMessage(response.error);
         Get.snackbar(
           'Signup Failed',
-          response.message,
+          userMessage ?? response.message,
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Get.theme.colorScheme.error,
           colorText: Get.theme.colorScheme.onError,

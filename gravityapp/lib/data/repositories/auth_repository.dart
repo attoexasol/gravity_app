@@ -45,6 +45,7 @@ class AuthRepository {
             response['user'] != null && response['user'] is Map<String, dynamic>
             ? UserModel.fromJson(response['user'] as Map<String, dynamic>)
             : null,
+        error: response['errors'],
       );
     } on ApiException catch (e) {
       debugPrint('❌ CreateUser API Error: ${e.message}');
