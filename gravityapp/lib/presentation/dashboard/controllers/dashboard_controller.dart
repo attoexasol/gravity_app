@@ -650,9 +650,10 @@ class DashboardController extends GetxController {
   }
 
   /// Submit fast meal - calls fast-meal/update API with selected meal. Called when Submit button is tapped.
-  Future<void> submitFastMeal() async {
-    if (mealsEaten.value < 1) return;
-    if (isMealLogging.value) return;
+  /// Returns true on success; caller should close modal and navigate to dashboard.
+  Future<bool> submitFastMeal() async {
+    if (mealsEaten.value < 1) return false;
+    if (isMealLogging.value) return false;
 
     isMealLogging.value = true;
     try {
@@ -681,9 +682,10 @@ class DashboardController extends GetxController {
           colorText: Colors.white,
           duration: const Duration(seconds: 2),
         );
-        Get.back();
         fetchFastMeal();
+        return true;
       }
+      return false;
     } on ApiException catch (e) {
       debugPrint('❌ Fast meal API error: ${e.message}');
       Get.snackbar(
@@ -707,6 +709,7 @@ class DashboardController extends GetxController {
     } finally {
       isMealLogging.value = false;
     }
+    return false;
   }
 
   /// Set fasting mode: 'normal' (2 meals/day) or 'omad' (1 meal/day).

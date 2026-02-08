@@ -196,6 +196,8 @@ class FastingTrackerModal extends StatefulWidget {
 
 class _FastingTrackerModalState extends State<FastingTrackerModal> {
   Timer? _mealWindowTimer;
+  /// Modal-local: true only after user taps Normal or O.M.A.D. Log Your Meals hidden until then.
+  bool _hasSelectedFastingMode = false;
 
   @override
   void initState() {
@@ -203,6 +205,12 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
     _mealWindowTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       widget.controller.mealWindowTicker.value++;
     });
+  }
+
+  void _onFastingModeSelected(String mode) {
+    setState(() => _hasSelectedFastingMode = true);
+    controller.setFastingMode(mode);
+    controller.resetMeals();
   }
 
   @override
@@ -218,37 +226,38 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
 
   @override
   Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.of(context).size.height - 48.h;
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
-      child: Container(
-        constraints: BoxConstraints(maxWidth: 512),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20.r),
-          border: Border.all(color: _kPrimaryDark.withOpacity(0.08), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 20.r,
-              offset: Offset(0, 8.h),
-            ),
-          ],
-        ),
-        padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 20.h),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Padding(
-              padding: EdgeInsets.only(top: 24.h),
-              child: Column(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 512, maxHeight: maxHeight),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20.r),
+            border: Border.all(color: _kPrimaryDark.withOpacity(0.08), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 20.r,
+                offset: Offset(0, 8.h),
+              ),
+            ],
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(20.w, 44.h, 20.w, 20.h),
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
+                // Header: title + subtitle with meal icon, all left-aligned
                 SizedBox(height: 8.h),
                 Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Fasting Tracker',
@@ -258,11 +267,22 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
                       ),
                     ),
                     SizedBox(height: 8.h),
-                    Text(
-                      'Manage your daily meal plan',
-                      style: ResponsiveTextStyles.textSm.copyWith(
-                        color: _kPrimaryDark.withOpacity(0.6),
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.restaurant_menu,
+                          size: 16.sp,
+                          color: _kPrimaryDark.withOpacity(0.6),
+                        ),
+                        SizedBox(width: 8.w),
+                        Text(
+                          'Manage your daily meal plan',
+                          style: ResponsiveTextStyles.textSm.copyWith(
+                            color: _kPrimaryDark.withOpacity(0.6),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -275,14 +295,16 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
                   ),
                 ),
                 SizedBox(height: 12.h),
-                Obx(() => Row(
+                // Use Row directly - selection is driven by setState (_hasSelectedFastingMode) and controller
+                // Obx would mix local state with observables, causing GetX "improper use" error
+                Row(
                   children: [
                     Expanded(
                       child: _FastingModeButton(
                         label: 'Normal',
                         subtitle: '2 Meals/Day',
-                        isSelected: controller.fastingMode.value == 'normal',
-                        onTap: () => controller.setFastingMode('normal'),
+                        isSelected: _hasSelectedFastingMode && controller.fastingMode.value == 'normal',
+                        onTap: () => _onFastingModeSelected('normal'),
                       ),
                     ),
                     SizedBox(width: 16.w),
@@ -290,29 +312,29 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
                       child: _FastingModeButton(
                         label: 'O.M.A.D',
                         subtitle: '1 Meal/Day',
-                        isSelected: controller.fastingMode.value == 'omad',
-                        onTap: () => controller.setFastingMode('omad'),
+                        isSelected: _hasSelectedFastingMode && controller.fastingMode.value == 'omad',
+                        onTap: () => _onFastingModeSelected('omad'),
                       ),
                     ),
                   ],
-                )),
-                SizedBox(height: 24.h),
-                // Divider
-                Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: _kPrimaryDark.withOpacity(0.1),
                 ),
-                SizedBox(height: 24.h),
-                // Log Your Meals section
-                Text(
-                  'Log Your Meals:',
-                  style: ResponsiveTextStyles.textSm.copyWith(
-                    color: _kPrimaryDark.withOpacity(0.7),
+                // Log Your Meals section: only visible AFTER fasting mode is selected
+                if (_hasSelectedFastingMode) ...[
+                  SizedBox(height: 24.h),
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: _kPrimaryDark.withOpacity(0.1),
                   ),
-                ),
-                SizedBox(height: 12.h),
-                Obx(() {
+                  SizedBox(height: 24.h),
+                  Text(
+                    'Log Your Meals:',
+                    style: ResponsiveTextStyles.textSm.copyWith(
+                      color: _kPrimaryDark.withOpacity(0.7),
+                    ),
+                  ),
+                  SizedBox(height: 12.h),
+                  Obx(() {
                   controller.mealWindowTicker.value; // Trigger rebuild when time window changes
                   final mode = controller.fastingMode.value;
                   final meals = controller.mealsEaten.value;
@@ -383,22 +405,29 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
                         ],
                       ),
                       SizedBox(height: 12.h),
-                      // Submit button - calls API when tapped
-                      Obx(() => SizedBox(
+                      // Submit button: API work first, then close modal and return to dashboard on success
+                      Obx(() {
+                        final canSubmit = _hasSelectedFastingMode &&
+                            controller.mealsEaten.value >= 1 &&
+                            !controller.isMealLogging.value;
+                        return SizedBox(
                         width: double.infinity,
                         child: GestureDetector(
-                          onTap: controller.mealsEaten.value >= 1 && !controller.isMealLogging.value
-                              ? () => controller.submitFastMeal()
-                              : null,
+                          onTap: canSubmit ? () async {
+                            final success = await controller.submitFastMeal();
+                            if (success && context.mounted) {
+                              Navigator.of(context).pop();
+                            }
+                          } : null,
                           child: Container(
                             padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
                             decoration: BoxDecoration(
-                              gradient: controller.mealsEaten.value >= 1 && !controller.isMealLogging.value
+                              gradient: canSubmit
                                   ? const LinearGradient(
                                       colors: [Color(0xFFD4AF37), Color(0xFFB8941F)],
                                     )
                                   : null,
-                              color: controller.mealsEaten.value < 1 || controller.isMealLogging.value
+                              color: !canSubmit
                                   ? _kLightGray
                                   : null,
                               borderRadius: BorderRadius.circular(12.r),
@@ -420,7 +449,7 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
                                   'Submit',
                                   style: ResponsiveTextStyles.textSm.copyWith(
                                     fontWeight: FontWeight.w600,
-                                    color: controller.mealsEaten.value >= 1 && !controller.isMealLogging.value
+                                    color: canSubmit
                                         ? Colors.white
                                         : _kPrimaryDark.withOpacity(0.5),
                                   ),
@@ -429,7 +458,7 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
                             ),
                           ),
                         ),
-                      )),
+                      ); }),
                       SizedBox(height: 8.h),
                       // Reset All button
                       // SizedBox(
@@ -455,9 +484,10 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
                     ],
                   );
                 }),
+                ],
               ],
             ),
-            ),
+              ),
             // Close button
             Positioned(
               top: 0,
@@ -479,6 +509,7 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );
@@ -580,6 +611,9 @@ class _MealLogButton extends StatelessWidget {
   static const Color _kTealStart = Color(0xFF00B8A9);
   static const Color _kTealEnd = Color(0xFF0A2342);
 
+  // Fixed min height so logged/unlogged/Normal/OMAD cards are visually consistent
+  static const double _kCardMinHeight = 100;
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -591,6 +625,8 @@ class _MealLogButton extends StatelessWidget {
           Opacity(
             opacity: isLoading ? 0.6 : 1.0,
             child: Container(
+              // Fixed min height: prevents content from defining height; same for all states
+              constraints: BoxConstraints(minHeight: _kCardMinHeight.h),
               padding: EdgeInsets.symmetric(vertical: 16.h, horizontal: 12.w),
               decoration: BoxDecoration(
                 gradient: isLogged
@@ -610,8 +646,10 @@ class _MealLogButton extends StatelessWidget {
                   ),
                 ],
               ),
+              // Vertically center content; keeps spacing consistent regardless of state
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
                     Icons.restaurant_menu,
@@ -626,26 +664,31 @@ class _MealLogButton extends StatelessWidget {
                       color: isLogged ? Colors.white : _kPrimaryDark.withOpacity(canLog ? 0.4 : 0.25),
                     ),
                   ),
-                  if (isLogged) ...[
-                    SizedBox(height: 2.h),
-                    Text(
-                      '✓ Logged',
-                      style: ResponsiveTextStyles.textXs.copyWith(
-                        color: Colors.white.withOpacity(0.9),
-                        fontWeight: FontWeight.w500,
-                      ),
+                  // Fixed-height slot for third line: logged and unlogged use same vertical space
+                  SizedBox(height: 2.h),
+                  SizedBox(
+                    height: 16.h,
+                    child: Center(
+                      child: isLogged
+                          ? Text(
+                              '✓ Logged',
+                              style: ResponsiveTextStyles.textXs.copyWith(
+                                color: Colors.white.withOpacity(0.9),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            )
+                          : Text(
+                              allowedTime,
+                              style: ResponsiveTextStyles.textXs.copyWith(
+                                color: _kPrimaryDark.withOpacity(canLog ? 0.5 : 0.3),
+                                fontWeight: FontWeight.w400,
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                     ),
-                  ] else ...[
-                    SizedBox(height: 2.h),
-                    Text(
-                      allowedTime,
-                      style: ResponsiveTextStyles.textXs.copyWith(
-                        color: _kPrimaryDark.withOpacity(canLog ? 0.5 : 0.3),
-                        fontWeight: FontWeight.w400,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                  ),
                 ],
               ),
             ),
