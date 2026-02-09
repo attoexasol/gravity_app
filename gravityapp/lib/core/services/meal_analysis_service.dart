@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 import 'package:flutter/foundation.dart';
 import '../../data/model/meal_analysis.dart';
+import 'preferences_service.dart';
 
 class MealAnalysisService {
   static final MealAnalysisService _instance = MealAnalysisService._internal();
@@ -15,8 +15,8 @@ class MealAnalysisService {
   int _totalCalls = 0;
   double _totalCost = 0.0;
 
-  /// API endpoint for food analysis
-  static const String _apiUrl = 'https://n8n.srv937754.hstgr.cloud/webhook/foodanalysis';
+  /// Gravity AI endpoint for food analysis (replaces n8n webhook)
+  static const String _apiUrl = 'https://gravity.attoexasolutions.com/api/ai/analyze-post';
 
   /// Get remaining analyses for today
   int getRemainingAnalyses() {
@@ -37,9 +37,16 @@ class MealAnalysisService {
   }
 
   /// Analyze meal from image file
+  /// Uses Gravity AI endpoint: POST /api/ai/analyze-post with base64 JSON body
   Future<MealAnalysis> analyzeMeal(File imageFile, String provider) async {
     if (getRemainingAnalyses() <= 0) {
       throw Exception('Daily limit reached');
+    }
+
+    // Get api_token from existing auth storage (same as other Gravity API calls)
+    final apiToken = PreferencesService.getAuthToken();
+    if (apiToken == null || apiToken.isEmpty) {
+      throw Exception('Authentication token not found. Please login again.');
     }
 
     _dailyAnalyses++;
@@ -47,61 +54,55 @@ class MealAnalysisService {
     _totalCost += 0.002; // $0.002 per analysis
 
     try {
-      debugPrint('🌐 Uploading image to food analysis API...');
+      debugPrint('🌐 Uploading image to Gravity AI food analysis API...');
       debugPrint('📁 Image path: ${imageFile.path}');
       debugPrint('📁 Image size: ${await imageFile.length()} bytes');
 
-      // Create multipart request
-      final request = http.MultipartRequest('POST', Uri.parse(_apiUrl));
-      
-      // Read image bytes
+      // Convert image to base64 with data URI prefix (required by Gravity API)
       final imageBytes = await imageFile.readAsBytes();
-      final fileName = imageFile.path.split('/').last;
-      
-      // Determine content type based on file extension
-      String contentType = 'image/jpeg'; // Default
+      final fileName = imageFile.path.split(RegExp(r'[/\\]')).last;
+      final base64Image = base64Encode(imageBytes);
+
+      // Determine MIME type from file extension for data URI
+      String mimeType = 'image/jpeg';
       if (fileName.toLowerCase().endsWith('.png')) {
-        contentType = 'image/png';
-      } else if (fileName.toLowerCase().endsWith('.jpg') || 
-                 fileName.toLowerCase().endsWith('.jpeg')) {
-        contentType = 'image/jpeg';
+        mimeType = 'image/png';
+      } else if (fileName.toLowerCase().endsWith('.jpg') ||
+          fileName.toLowerCase().endsWith('.jpeg')) {
+        mimeType = 'image/jpeg';
       } else if (fileName.toLowerCase().endsWith('.webp')) {
-        contentType = 'image/webp';
+        mimeType = 'image/webp';
       }
-      
-      // Create multipart file with proper content type using stream
-      // This ensures the content-type header is set correctly like Postman does
-      final multipartFile = http.MultipartFile(
-        'image', // Field name as required by API
-        http.ByteStream.fromBytes(imageBytes),
-        imageBytes.length,
-        filename: fileName,
-        contentType: MediaType.parse(contentType),
-      );
-      
-      request.files.add(multipartFile);
-      
-      // Set headers to match Postman behavior
-      request.headers['Accept'] = 'application/json';
-      // Note: Content-Type with boundary is set automatically by MultipartRequest
+      final imageBase64 = 'data:$mimeType;base64,$base64Image';
+
+      // Build JSON request body (replaces multipart upload)
+      final requestBody = {
+        'api_token': apiToken,
+        'message': '', // Meal description - empty when analyzing from image
+        'community_id': 2,
+        'image_base64': imageBase64,
+      };
 
       debugPrint('📤 Sending request to: $_apiUrl');
-      debugPrint('📤 File field name: image');
-      debugPrint('📤 File name: $fileName');
-      debugPrint('📤 Content-Type: $contentType');
-      debugPrint('📤 File size: ${imageBytes.length} bytes');
-      debugPrint('📤 Request headers: ${request.headers}');
+      debugPrint('📤 Content-Type: application/json');
+      debugPrint('📤 Payload keys: ${requestBody.keys}');
 
-      // Send request
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
+      // POST JSON (replaces multipart)
+      final response = await http.post(
+        Uri.parse(_apiUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(requestBody),
+      );
 
       debugPrint('📡 Response Status: ${response.statusCode}');
-      debugPrint('📡 Response Headers: ${response.headers}');
       debugPrint('📄 Response Body: ${response.body}');
 
       if (response.statusCode != 200) {
-        throw Exception('API request failed with status ${response.statusCode}: ${response.body}');
+        throw Exception(
+            'API request failed with status ${response.statusCode}: ${response.body}');
       }
 
       // Parse JSON response
@@ -115,8 +116,20 @@ class MealAnalysisService {
         throw Exception('Invalid response format from server: $e');
       }
 
-      // Map API response to MealAnalysis model
-      final result = _mapApiResponseToMealAnalysis(jsonResponse);
+      // Validate success before parsing ai_result
+      if (jsonResponse['success'] != true) {
+        final message = jsonResponse['message']?.toString() ?? 'Unknown error';
+        throw Exception('Gravity AI analysis failed: $message');
+      }
+
+      // Extract ai_result - response wraps data in ai_result object
+      final aiResult = jsonResponse['ai_result'];
+      if (aiResult == null || aiResult is! Map<String, dynamic>) {
+        throw Exception('API response missing ai_result object');
+      }
+
+      // Map Gravity API ai_result to MealAnalysis model (same fields as before)
+      final result = _mapApiResponseToMealAnalysis(aiResult);
       debugPrint('✅ Successfully created MealAnalysis from API response');
       return result;
     } catch (e) {
@@ -224,7 +237,7 @@ class MealAnalysisService {
       nutritionInfo: nutritionInfo,
       feedback: feedback,
       suggestions: [], // API doesn't provide suggestions, so empty list
-      aiProvider: 'n8n', // API provider identifier
+      aiProvider: 'gravity', // Gravity AI endpoint (replaced n8n webhook)
       cached: false,
     );
   }

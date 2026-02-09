@@ -599,15 +599,15 @@ class DashboardController extends GetxController {
   /// Meal 1 window: 12:00 PM – 2:00 PM
   bool isInMeal1Window(DateTime now) {
     final h = now.hour + now.minute / 60.0;
-    return h >= 12 && h < 24;
-    //return h >= 12 && h < 14;
+    // return h >= 12 && h < 24;
+    return h >= 12 && h < 14;
   }
 
   /// Meal 2 window: 5:00 PM – 7:00 PM
   bool isInMeal2Window(DateTime now) {
     final h = now.hour + now.minute / 60.0;
-    return h >= 12 && h < 24;
-    //return h >= 17 && h < 19;
+    // return h >= 12 && h < 24;
+    return h >= 17 && h < 19;
   }
 
   /// OMAD window: either 12–2 PM or 5–7 PM
