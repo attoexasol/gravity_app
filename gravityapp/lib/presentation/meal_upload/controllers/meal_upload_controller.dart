@@ -16,6 +16,16 @@ class MealUploadController extends GetxController {
   final Rx<String?> error = Rx<String?>(null);
   final RxBool showLimitWarning = false.obs;
 
+  /// Optional meal context (max 150 chars). Bound to Review screen text field.
+  static const int mealDetailsMaxLength = 150;
+  final mealDetailsEditingController = TextEditingController();
+
+  @override
+  void onClose() {
+    mealDetailsEditingController.dispose();
+    super.onClose();
+  }
+
   // Reactive computed properties
   int get remainingAnalyses => _mealService.getRemainingAnalyses();
   UsageStats get usageStats => _mealService.getUsageStats();
@@ -41,7 +51,7 @@ class MealUploadController extends GetxController {
       );
 
       if (image != null) {
-        await _handleImageSelect(File(image.path));
+        _setSelectedImageOnly(File(image.path));
       }
     } catch (e) {
       debugPrint('❌ Camera Error: $e');
@@ -63,7 +73,7 @@ class MealUploadController extends GetxController {
       );
 
       if (image != null) {
-        await _handleImageSelect(File(image.path));
+        _setSelectedImageOnly(File(image.path));
       }
     } catch (e) {
       debugPrint('❌ Gallery Error: $e');
@@ -71,37 +81,62 @@ class MealUploadController extends GetxController {
     }
   }
 
-  /// Handle image selection and analysis
-  Future<void> _handleImageSelect(File imageFile) async {
+  /// Set selected image in local state only (no upload). User must tap "Analyze Meal" to upload.
+  void _setSelectedImageOnly(File imageFile) {
+    error.value = null;
+    selectedImagePath.value = imageFile.path;
+    mealDetailsEditingController.clear();
+  }
+
+  /// Called when user taps "Analyze Meal". Uploads image and optional text, then runs AI analysis.
+  Future<void> analyzeMeal() async {
+    final path = selectedImagePath.value;
+    if (path == null) return;
     if (remainingAnalyses <= 0) {
       showLimitWarning.value = true;
       return;
     }
 
-    error.value = null;
-    selectedImagePath.value = imageFile.path;
+    final imageFile = File(path);
+    if (!await imageFile.exists()) {
+      error.value = 'Selected image no longer available';
+      return;
+    }
 
-    // Analyze meal
+    error.value = null;
     isAnalyzing.value = true;
     try {
-      final result = await _mealService.analyzeMeal(imageFile, 'gemini');
+      final details = mealDetailsEditingController.text.trim();
+      final result = await _mealService.analyzeMeal(
+        imageFile,
+        'gemini',
+        mealDetails: details.isEmpty ? null : details,
+      );
       analysis.value = result;
-      _refreshStats(); // Refresh stats after analysis
+      _refreshStats();
 
       if (result.cached) {
         debugPrint('Using cached analysis');
       }
     } catch (e) {
       error.value = e.toString();
-      selectedImagePath.value = null;
     } finally {
       isAnalyzing.value = false;
     }
   }
 
-  /// Reset to initial state
+  /// Clear selected image and optional text; return to upload state.
+  void clearSelection() {
+    selectedImagePath.value = null;
+    mealDetailsEditingController.clear();
+    error.value = null;
+    analysis.value = null;
+  }
+
+  /// Reset to initial state (upload screen)
   void reset() {
     selectedImagePath.value = null;
+    mealDetailsEditingController.clear();
     analysis.value = null;
     error.value = null;
   }

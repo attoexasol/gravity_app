@@ -34,11 +34,18 @@ class MealUploadScreen extends GetView<MealUploadController> {
                   child: SafeArea(
                     top: false, // Don't apply top safe area (header handles it)
                     child: Obx(() {
-                      if (controller.selectedImagePath.value == null) {
+                      final hasImage = controller.selectedImagePath.value != null;
+                      final hasResult = controller.analysis.value != null;
+                      final isAnalyzing = controller.isAnalyzing.value;
+                      final hasError = controller.error.value != null;
+
+                      if (!hasImage) {
                         return _buildUploadState();
-                      } else {
-                        return _buildAnalysisState();
                       }
+                      if (hasImage && !hasResult && !isAnalyzing && !hasError) {
+                        return _buildReviewState();
+                      }
+                      return _buildAnalysisState();
                     }),
                   ),
                 ),
@@ -480,6 +487,140 @@ class MealUploadScreen extends GetView<MealUploadController> {
           ),
         ),
       ],
+    );
+  }
+
+  // -------------------------
+  // REVIEW MEAL STATE (preview + optional details + Analyze / Change photo)
+  // -------------------------
+  Widget _buildReviewState() {
+    final imagePath = controller.selectedImagePath.value!;
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
+      child: Column(
+        children: [
+          /// Image preview card
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(28.r),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 240.h,
+                  width: double.infinity,
+                  color: const Color(0xFFF5F6FA),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(28.r),
+                      topRight: Radius.circular(28.r),
+                    ),
+                    child: Image.file(
+                      File(imagePath),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.all(20.w),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        "Add meal details (optional)",
+                        style: ResponsiveTextStyles.textSm.copyWith(
+                          color: const Color(0xFF0A2342),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      SizedBox(height: 10.h),
+                      TextField(
+                        controller: controller.mealDetailsEditingController,
+                        maxLength: MealUploadController.mealDetailsMaxLength,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText:
+                              "e.g. Grilled chicken with rice, homemade, medium portion",
+                          hintStyle: ResponsiveTextStyles.textSm.copyWith(
+                            color: const Color(0xFF0A2342).withOpacity(0.45),
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF5F6FA),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14.r),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14.r),
+                            borderSide: BorderSide(
+                              color: const Color(0xFF0A2342).withOpacity(0.12),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14.r),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF00B8A9),
+                              width: 2,
+                            ),
+                          ),
+                          counterText: '',
+                        ),
+                        style: ResponsiveTextStyles.textBase.copyWith(
+                          color: const Color(0xFF0A2342),
+                        ),
+                      ),
+                      SizedBox(height: 8.h),
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: controller.mealDetailsEditingController,
+                        builder: (_, value, __) => Text(
+                          "${value.text.length}/${MealUploadController.mealDetailsMaxLength}",
+                          style: ResponsiveTextStyles.textXs.copyWith(
+                            color: const Color(0xFF0A2342).withOpacity(0.5),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 24.h),
+
+          /// Primary: Analyze Meal
+          Obx(() {
+            controller.statsTrigger.value;
+            final remaining = controller.remainingAnalyses;
+            final disabled = remaining <= 0;
+            return _GradientButton(
+              enabled: !disabled,
+              icon: Icons.auto_awesome,
+              text: "Analyze Meal",
+              onPressed: !disabled ? controller.analyzeMeal : null,
+            );
+          }),
+          SizedBox(height: 16.h),
+
+          /// Secondary: Change / retake photo
+          _OutlinedButton(
+            enabled: true,
+            icon: Icons.camera_alt_outlined,
+            text: "Change or retake photo",
+            onPressed: controller.clearSelection,
+          ),
+        ],
+      ),
     );
   }
 

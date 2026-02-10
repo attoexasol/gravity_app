@@ -38,7 +38,9 @@ class MealAnalysisService {
 
   /// Analyze meal from image file
   /// Uses Gravity AI endpoint: POST /api/ai/analyze-post with base64 JSON body
-  Future<MealAnalysis> analyzeMeal(File imageFile, String provider) async {
+  /// [mealDetails] optional user-provided context (e.g. "Grilled chicken, medium portion")
+  Future<MealAnalysis> analyzeMeal(File imageFile, String provider,
+      {String? mealDetails}) async {
     if (getRemainingAnalyses() <= 0) {
       throw Exception('Daily limit reached');
     }
@@ -76,9 +78,12 @@ class MealAnalysisService {
       final imageBase64 = 'data:$mimeType;base64,$base64Image';
 
       // Build JSON request body (replaces multipart upload)
+      final message = (mealDetails?.trim().isNotEmpty == true)
+          ? mealDetails!.trim()
+          : '';
       final requestBody = {
         'api_token': apiToken,
-        'message': '', // Meal description - empty when analyzing from image
+        'message': message, // Optional user meal context
         'community_id': 2,
         'image_base64': imageBase64,
       };
