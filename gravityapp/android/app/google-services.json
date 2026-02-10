@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "463881413794-1png1o4546m4mg6vlv0f2t5e7u5b2qei.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.attoexa.gravityapp",
+            "certificate_hash": "002b9afe909a65e080838a79d5928551e58a1a14"
+          }
+        },
+        {
           "client_id": "463881413794-8b3pae680kb9haljj2vfsf3r80c14dld.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -22,7 +30,15 @@
           }
         },
         {
-          "client_id": "463881413794-nduoq1mdd5680upif7h149n0p66vt0iu.apps.googleusercontent.com",
+          "client_id": "463881413794-acapobc6psbcnpna2dganrqgrokkqaqd.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.attoexa.gravityapp",
+            "certificate_hash": "9593c8abcc88ca9d2608953baec2ba8fbc650c66"
+          }
+        },
+        {
+          "client_id": "463881413794-u4renp2vuq3q5eqlr9bm95vh201rr33i.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
@@ -37,6 +53,13 @@
             {
               "client_id": "463881413794-lfrv9i8nb1r8ug9adq7kue5mlbarop8g.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "463881413794-se5fth40762gqsq5bsb07a5776o8sice.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.attoexa.gravityapp"
+              }
             }
           ]
         }
