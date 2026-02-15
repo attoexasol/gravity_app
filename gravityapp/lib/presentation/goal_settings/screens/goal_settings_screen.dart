@@ -73,7 +73,8 @@ class GoalSettingsScreen extends GetView<GoalSettingsController> {
         const SizedBox(height: 8),
 
         _buildTextField(
-          label: 'Current Weight (kg)',
+          // label: 'Current Weight (kg)',
+           label: 'Starting Weight (kg)',
           controller: controller.currentWeightController,
           hint: 'e.g., 75',
           keyboardType: TextInputType.number,

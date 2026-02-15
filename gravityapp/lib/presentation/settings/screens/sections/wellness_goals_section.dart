@@ -72,7 +72,8 @@ class WellnessGoalsSection extends StatelessWidget {
           child: Column(
             children: [
               _buildGoalInput(
-                label: 'Current Weight (kg)',
+                label: 'Starting Weight (kg)',
+                // label: 'Current Weight (kg)',
                 value: controller.goals['currentWeight'] ?? '',
                 onChanged: (value) => controller.goals['currentWeight'] = value,
               ),
