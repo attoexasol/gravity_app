@@ -20,8 +20,8 @@ class MainLayoutScreen extends GetView<MainLayoutController> {
       () => Scaffold(
         backgroundColor: const Color(0xFFF6F7FA),
 
-        // App Bar - Hide for Coach Dashboard (index 4) as it has its own header
-        appBar: controller.currentIndex.value == 4
+        // App Bar - Hide for Messages (3) and Coach Dashboard (4); they use their own headers
+        appBar: (controller.currentIndex.value == 3 || controller.currentIndex.value == 4)
             ? null
             : MainAppBar(
                 userName: controller.userName.value,
@@ -39,14 +39,19 @@ class MainLayoutScreen extends GetView<MainLayoutController> {
           onLogout: controller.handleLogout,
         ),
 
-        // Body - Dynamic content based on selected tab
-        body: controller.currentIndex.value == 4
-            ? _buildBody() // CoachDashboardScreen handles its own SafeArea
+        // Body - Messages (3) and Coach (4) use full screen for their headers; others use SafeArea
+        body: (controller.currentIndex.value == 3 || controller.currentIndex.value == 4)
+            ? Stack(
+                children: [
+                  _buildBody(),
+                  if (controller.currentIndex.value == 0)
+                    _buildStickySyncStatus(),
+                ],
+              )
             : SafeArea(
                 child: Stack(
                   children: [
                     _buildBody(),
-                    // Sticky sync status section that overlaps with header (only for dashboard)
                     if (controller.currentIndex.value == 0)
                       _buildStickySyncStatus(),
                   ],

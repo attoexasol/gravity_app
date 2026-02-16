@@ -21,14 +21,14 @@ class GoalSettingsScreen extends GetView<GoalSettingsController> {
             colors: [Color(0xFFF5F6FA), Colors.white],
           ),
         ),
-        child: SafeArea(
-          child: Column(
+        child: Column(
             children: [
-              // UPDATED HEADER — IDENTICAL TO LOGIN SCREEN
-              buildHeader(),
+              buildHeader(context),
 
               Expanded(
-                child: SingleChildScrollView(
+                child: SafeArea(
+                  top: false,
+                  child: SingleChildScrollView(
                   padding: EdgeInsets.symmetric(
                     horizontal: isSmallScreen ? 24 : 32,
                     vertical: 32,
@@ -54,8 +54,8 @@ class GoalSettingsScreen extends GetView<GoalSettingsController> {
                   ),
                 ),
               ),
+            ),
             ],
-          ),
         ),
       ),
     );

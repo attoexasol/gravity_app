@@ -69,71 +69,161 @@ class _ListViewItem {
   }
 }
 
+/// UI constants: teal → deep green, stacked below global header
+class _MessagesUI {
+  static const Color teal = Color(0xFF00B8A9);
+  static const Color deepGreen = Color(0xFF0A2342);
+  static const List<Color> headerGradient = [teal, deepGreen];
+  static const Color bubbleIncoming = Color(0xFFE8E8EC);
+  static const double pad = 16.0;
+  static const double radiusSearch = 20.0;
+  static const double radiusCard = 16.0;
+  static const double radiusIncoming = 16.0;
+  static const double radiusOutgoing = 20.0;
+}
+
 class MessagesPage extends GetView<MessagesController> {
   const MessagesPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      // If conversation selected, show chat view
       if (controller.selectedConversationId.value.isNotEmpty) {
-        return _buildChatView();
+        return _buildChatView(context);
       }
-
-      // Otherwise show conversations list
-      return _buildConversationsList();
+      return _buildConversationsList(context);
     });
   }
 
-  Widget _buildConversationsList() {
+  /// Messages header: gradient extends to status bar; content padded below it
+  Widget _buildMessagesListHeader(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: _MessagesUI.headerGradient,
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(24.r),
+          bottomRight: Radius.circular(24.r),
+        ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: _MessagesUI.pad.w,
+          right: _MessagesUI.pad.w,
+          top: topPadding + 12.h,
+          bottom: 18.h,
+        ),
+        child: Row(
+            children: [
+              Text(
+                'Messages',
+                style: ResponsiveTextStyles.textLg.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              SizedBox(width: 8.w),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 3.h),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(10.r),
+                ),
+                child: Text(
+                  '2 new',
+                  style: ResponsiveTextStyles.textXs.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 10.sp,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(Icons.notifications_outlined, color: Colors.white, size: 24.sp),
+                  Positioned(
+                    top: -2.h,
+                    right: -2.w,
+                    child: Container(
+                      width: 10.w,
+                      height: 10.w,
+                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(width: 12.w),
+              InkWell(
+                onTap: () => Get.toNamed('/settings'),
+                borderRadius: BorderRadius.circular(24.r),
+                child: Padding(
+                  padding: EdgeInsets.all(8.w),
+                  child: Icon(Icons.settings_outlined, color: Colors.white, size: 24.sp),
+                ),
+              ),
+            ],
+          ),
+      ),
+    );
+  }
+
+  Widget _buildConversationsList(BuildContext context) {
     return Column(
       children: [
-        // Search bar
+        _buildMessagesListHeader(context),
         Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: 20.w,
-            vertical: 16.h,
+            horizontal: _MessagesUI.pad.w,
+            vertical: _MessagesUI.pad.h,
           ),
-          child: TextField(
-            controller: controller.searchController,
-            onChanged: (value) => controller.searchQuery.value = value,
-            decoration: InputDecoration(
-              hintText: 'Search messages...',
-              hintStyle: ResponsiveTextStyles.textSm.copyWith(
-                color: const Color(0xFF0A2342).withOpacity(0.4),
-              ),
-              prefixIcon: Icon(
-                Icons.search,
-                color: const Color(0xFF0A2342).withOpacity(0.4),
-                size: 20.sp,
-              ),
-              filled: true,
-              fillColor: AppColors.inputBackground,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16.r),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 16.w,
-                vertical: 12.h,
-              ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.95),
+              borderRadius: BorderRadius.circular(_MessagesUI.radiusSearch.r),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 10.r,
+                  offset: Offset(0, 2.h),
+                ),
+              ],
             ),
-            style: ResponsiveTextStyles.textSm,
+            child: TextField(
+              controller: controller.searchController,
+              onChanged: (value) => controller.searchQuery.value = value,
+              decoration: InputDecoration(
+                hintText: 'Search messages…',
+                hintStyle: ResponsiveTextStyles.textSm.copyWith(
+                  color: const Color(0xFF0A2342).withOpacity(0.4),
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: const Color(0xFF0A2342).withOpacity(0.4),
+                  size: 20.sp,
+                ),
+                filled: true,
+                fillColor: Colors.transparent,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+              ),
+              style: ResponsiveTextStyles.textSm,
+            ),
           ),
         ),
-
-        // Conversations list
         Expanded(
           child: Obx(() {
-            // Show loading indicator
             if (controller.isLoadingConversations.value) {
               return Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const CircularProgressIndicator(
-                      color: Color(0xFF00B8A9),
-                    ),
+                    const CircularProgressIndicator(color: Color(0xFF00B8A9)),
                     SizedBox(height: 16.h),
                     Text(
                       'Loading conversations...',
@@ -145,19 +235,16 @@ class MessagesPage extends GetView<MessagesController> {
                 ),
               );
             }
-
             final filteredConvs = controller.filteredConversations;
-
             if (filteredConvs.isEmpty) {
               return _buildEmptyState();
             }
-
             return ListView.builder(
               controller: controller.conversationsScrollController,
               padding: EdgeInsets.only(
-                left: 20.w,
-                right: 20.w,
-                bottom: 20.h,
+                left: _MessagesUI.pad.w,
+                right: _MessagesUI.pad.w,
+                bottom: _MessagesUI.pad.h,
               ),
               itemCount: filteredConvs.length,
               itemBuilder: (context, index) {
@@ -172,33 +259,27 @@ class MessagesPage extends GetView<MessagesController> {
 
   Widget _buildConversationCard(Conversation conversation) {
     return Padding(
-      padding: EdgeInsets.only(bottom: 12.h),
+      padding: EdgeInsets.only(bottom: 14.h),
       child: InkWell(
         onTap: () => controller.selectConversation(conversation.id),
-        borderRadius: BorderRadius.circular(20.r),
+        borderRadius: BorderRadius.circular(_MessagesUI.radiusCard.r),
         child: Container(
-          padding: EdgeInsets.all(16.r),
+          padding: EdgeInsets.all(_MessagesUI.pad.r),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20.r),
+            borderRadius: BorderRadius.circular(_MessagesUI.radiusCard.r),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10.r,
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 12.r,
                 offset: Offset(0, 2.h),
               ),
             ],
           ),
           child: Row(
             children: [
-              // Avatar
-              _buildUserAvatar(
-                imageUrl: conversation.avatar,
-                size: 48.w,
-              ),
+              _buildUserAvatar(imageUrl: conversation.avatar, size: 48.w),
               SizedBox(width: 12.w),
-
-              // Content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -210,31 +291,26 @@ class MessagesPage extends GetView<MessagesController> {
                             conversation.name,
                             style: ResponsiveTextStyles.textBase.copyWith(
                               color: const Color(0xFF0A2342),
-                              fontWeight: conversation.unreadCount > 0
-                                  ? FontWeight.w600
-                                  : FontWeight.w500,
+                              fontWeight: FontWeight.bold,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        SizedBox(width: 8.w),
                         Text(
                           controller.formatTime(conversation.timestamp),
                           style: ResponsiveTextStyles.textXs.copyWith(
-                            color: const Color(0xFF0A2342).withOpacity(0.4),
+                            color: const Color(0xFF0A2342).withOpacity(0.5),
+                            fontSize: 11.sp,
                           ),
                         ),
                       ],
                     ),
-                    SizedBox(height: 4.h),
+                    SizedBox(height: 6.h),
                     Text(
                       conversation.lastMessage,
                       style: ResponsiveTextStyles.textSm.copyWith(
                         color: const Color(0xFF0A2342).withOpacity(0.6),
-                        fontWeight: conversation.unreadCount > 0
-                            ? FontWeight.w500
-                            : FontWeight.normal,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -242,6 +318,27 @@ class MessagesPage extends GetView<MessagesController> {
                   ],
                 ),
               ),
+              if (conversation.unreadCount > 0) ...[
+                SizedBox(width: 8.w),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                  decoration: const BoxDecoration(
+                    color: _MessagesUI.teal,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: BoxConstraints(minWidth: 22.w, minHeight: 22.w),
+                  child: Center(
+                    child: Text(
+                      conversation.unreadCount > 99 ? '99+' : '${conversation.unreadCount}',
+                      style: ResponsiveTextStyles.textXs.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11.sp,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -293,26 +390,21 @@ class MessagesPage extends GetView<MessagesController> {
     );
   }
 
-  Widget _buildChatView() {
-    // No Obx wrapper - structure is static, only child widgets are reactive
+  Widget _buildChatView(BuildContext context) {
     return Column(
       children: [
-        // Chat header - reactive to currentConversation and typingUserId
         Obx(() {
           final conversation = controller.currentConversation;
           final typingUserId = controller.typingUserId.value;
           final currentUserId = controller.currentUserId;
-          
-          // Show typing only if someone else is typing (not current user)
-          final isOtherUserTyping = typingUserId != null && 
+          final isOtherUserTyping = typingUserId != null &&
               typingUserId != currentUserId &&
               conversation != null &&
               controller.selectedConversationId.value.isNotEmpty;
-          
           if (conversation == null) {
             return const SizedBox.shrink();
           }
-          return _buildChatHeader(conversation, isTyping: isOtherUserTyping);
+          return _buildChatHeader(context, conversation, isTyping: isOtherUserTyping);
         }),
 
         // Messages list - reactive to messages list only
@@ -358,10 +450,10 @@ class MessagesPage extends GetView<MessagesController> {
                   key: ValueKey('messages_${conversation.id}'),
                   controller: controller.messagesScrollController,
                   padding: EdgeInsets.only(
-                    left: 20.w,
-                    right: 20.w,
-                    top: 20.h,
-                    bottom: 20.h,
+                    left: _MessagesUI.pad.w,
+                    right: _MessagesUI.pad.w,
+                    top: _MessagesUI.pad.h,
+                    bottom: _MessagesUI.pad.h,
                   ),
                   itemCount: totalItems,
                   itemBuilder: (context, index) {
@@ -398,8 +490,8 @@ class MessagesPage extends GetView<MessagesController> {
               Obx(() {
                 if (controller.hasNewIncomingMessage.value && !controller.isNearBottom.value) {
                   return Positioned(
-                    bottom: 100.h, // Position above input area
-                    right: 20.w,
+                    bottom: 100.h,
+                    right: _MessagesUI.pad.w,
                     child: _buildNewMessagesButton(),
                   );
                 }
@@ -415,94 +507,82 @@ class MessagesPage extends GetView<MessagesController> {
     );
   }
 
-  Widget _buildChatHeader(Conversation conversation, {bool isTyping = false}) {
+  Widget _buildChatHeader(BuildContext context, Conversation conversation, {bool isTyping = false}) {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: 20.w,
-        vertical: 16.h,
+      padding: EdgeInsets.only(
+        left: _MessagesUI.pad.w,
+        right: _MessagesUI.pad.w,
+        top: topPadding + _MessagesUI.pad.h,
+        bottom: _MessagesUI.pad.h,
       ),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: const Color(0xFF0A2342).withOpacity(0.1),
-            width: 1,
-          ),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: _MessagesUI.headerGradient,
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(24.r),
+          bottomRight: Radius.circular(24.r),
         ),
       ),
       child: Row(
-        children: [
-          // Back button
-          InkWell(
-            onTap: controller.closeConversation,
-            borderRadius: BorderRadius.circular(20.r),
-            child: Container(
-              width: 40.w,
-              height: 40.w,
-              decoration: BoxDecoration(
-                color: AppColors.inputBackground,
-                borderRadius: BorderRadius.circular(20.r),
-              ),
-              child: Icon(
-                Icons.arrow_back,
-                size: 20.sp,
-                color: const Color(0xFF0A2342),
-              ),
-            ),
-          ),
-          SizedBox(width: 12.w),
-
-          // Avatar
-          _buildUserAvatar(
-            imageUrl: conversation.avatar,
-            size: 40.w,
-          ),
-          SizedBox(width: 12.w),
-
-          // Name and status
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  conversation.name,
-                  style: ResponsiveTextStyles.textBase.copyWith(
-                    color: const Color(0xFF0A2342),
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          children: [
+            InkWell(
+              onTap: controller.closeConversation,
+              borderRadius: BorderRadius.circular(24.r),
+              child: Container(
+                width: 40.w,
+                height: 40.w,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
                 ),
-                Text(
-                  isTyping ? 'typing...' : 'Active now',
-                  style: ResponsiveTextStyles.textXs.copyWith(
-                    color: const Color(0xFF0A2342).withOpacity(0.6),
+                child: Icon(Icons.arrow_back, size: 20.sp, color: Colors.white),
+              ),
+            ),
+            SizedBox(width: 12.w),
+            _buildUserAvatar(imageUrl: conversation.avatar, size: 40.w),
+            SizedBox(width: 12.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    conversation.name,
+                    style: ResponsiveTextStyles.textBase.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
+                  Text(
+                    isTyping ? 'typing...' : 'Active now',
+                    style: ResponsiveTextStyles.textXs.copyWith(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 12.sp,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            InkWell(
+              onTap: () {},
+              borderRadius: BorderRadius.circular(24.r),
+              child: Container(
+                width: 40.w,
+                height: 40.w,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
                 ),
-              ],
-            ),
-          ),
-
-          // More button
-          InkWell(
-            onTap: () {},
-            borderRadius: BorderRadius.circular(20.r),
-            child: Container(
-              width: 40.w,
-              height: 40.w,
-              decoration: BoxDecoration(
-                color: AppColors.inputBackground,
-                borderRadius: BorderRadius.circular(20.r),
-              ),
-              child: Icon(
-                Icons.more_vert,
-                size: 20.sp,
-                color: const Color(0xFF0A2342),
+                child: Icon(Icons.more_vert, size: 20.sp, color: Colors.white),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
     );
   }
 
@@ -570,23 +650,23 @@ class MessagesPage extends GetView<MessagesController> {
                           decoration: BoxDecoration(
                             gradient: message.isSent
                                 ? const LinearGradient(
-                              colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                            )
+                                    colors: _MessagesUI.headerGradient,
+                                  )
                                 : null,
-                            color: message.isSent 
-                                ? null 
-                                : (shouldHighlight 
-                                    ? const Color(0xFF00B8A9).withOpacity(0.15) // Highlight color
-                                    : Colors.white),
+                            color: message.isSent
+                                ? null
+                                : (shouldHighlight
+                                    ? _MessagesUI.teal.withOpacity(0.15)
+                                    : _MessagesUI.bubbleIncoming),
                             borderRadius: _getMessageBorderRadius(
                               message.isSent,
                               messageGroupInfo,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 10.r,
-                                offset: Offset(0, 2.h),
+                                color: Colors.black.withOpacity(0.06),
+                                blurRadius: 8.r,
+                                offset: Offset(0, 1.h),
                               ),
                             ],
                           ),
@@ -595,14 +675,13 @@ class MessagesPage extends GetView<MessagesController> {
                             style: ResponsiveTextStyles.textSm.copyWith(
                               color: message.isSent
                                   ? Colors.white
-                                  : const Color(0xFF0A2342).withOpacity(0.8),
+                                  : const Color(0xFF0A2342).withOpacity(0.85),
                               height: 1.4,
                             ),
                           ),
                         ),
                     ),
 
-                  // Timestamp & read status (only show when not editing and last in group)
                   if (!isEditing && messageGroupInfo.isLastInGroup)
                     Padding(
                       padding: EdgeInsets.only(
@@ -617,7 +696,7 @@ class MessagesPage extends GetView<MessagesController> {
                             controller.formatMessageTime(message.timestamp),
                             style: TextStyle(
                               fontSize: 10.sp,
-                              color: const Color(0xFF0A2342).withOpacity(0.4),
+                              color: const Color(0xFF0A2342).withOpacity(0.45),
                             ),
                           ),
                           if (message.isSent) ...[
@@ -683,34 +762,29 @@ class MessagesPage extends GetView<MessagesController> {
     );
   }
 
-  /// Get border radius based on message grouping (WhatsApp-like)
-  /// Maintains original sent/received corner pattern while grouping
   BorderRadius _getMessageBorderRadius(
     bool isSent,
     MessageGroupInfo groupInfo,
   ) {
-    // If last in group, fully rounded (original pattern)
+    final rFirst = isSent ? _MessagesUI.radiusOutgoing : _MessagesUI.radiusIncoming;
+    const rTail = 4.0;
     if (groupInfo.isLastInGroup) {
       return BorderRadius.only(
-        topLeft: Radius.circular(20.r),
-        topRight: Radius.circular(20.r),
-        bottomLeft: Radius.circular(isSent ? 20.r : 4.r),
-        bottomRight: Radius.circular(isSent ? 4.r : 20.r),
+        topLeft: Radius.circular(rFirst.r),
+        topRight: Radius.circular(rFirst.r),
+        bottomLeft: Radius.circular(isSent ? rFirst.r : rTail.r),
+        bottomRight: Radius.circular(isSent ? rTail.r : rFirst.r),
       );
     }
-
-    // If first in group, round top corners, flat bottom
     if (groupInfo.isFirstInGroup) {
       return BorderRadius.only(
-        topLeft: Radius.circular(20.r),
-        topRight: Radius.circular(20.r),
-        bottomLeft: Radius.circular(4.r),
-        bottomRight: Radius.circular(4.r),
+        topLeft: Radius.circular(rFirst.r),
+        topRight: Radius.circular(rFirst.r),
+        bottomLeft: Radius.circular(rTail.r),
+        bottomRight: Radius.circular(rTail.r),
       );
     }
-
-    // If middle in group, minimal rounding on all corners (connected look)
-    return BorderRadius.all(Radius.circular(4.r));
+    return BorderRadius.all(Radius.circular(rTail.r));
   }
 
   Widget _buildEditMessageField(String conversationId, Message message) {
@@ -822,25 +896,21 @@ class MessagesPage extends GetView<MessagesController> {
           ),
           SizedBox(width: 8.w),
 
-          // Typing animation
           Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: 20.w,
-              vertical: 12.h,
-            ),
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: _MessagesUI.bubbleIncoming,
               borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(20.r),
-                topRight: Radius.circular(20.r),
+                topLeft: Radius.circular(_MessagesUI.radiusIncoming.r),
+                topRight: Radius.circular(_MessagesUI.radiusIncoming.r),
                 bottomLeft: Radius.circular(4.r),
-                bottomRight: Radius.circular(20.r),
+                bottomRight: Radius.circular(_MessagesUI.radiusIncoming.r),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10.r,
-                  offset: Offset(0, 2.h),
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 8.r,
+                  offset: Offset(0, 1.h),
                 ),
               ],
             ),
@@ -893,120 +963,103 @@ class MessagesPage extends GetView<MessagesController> {
           duration: const Duration(milliseconds: 100),
           curve: Curves.easeOut,
           padding: EdgeInsets.only(
-            left: 20.w,
-            right: 20.w,
-            top: 16.h,
-            bottom: 16.h + keyboardHeight,
+            left: _MessagesUI.pad.w,
+            right: _MessagesUI.pad.w,
+            top: _MessagesUI.pad.h,
+            bottom: _MessagesUI.pad.h + keyboardHeight,
           ),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(
-            top: BorderSide(
-              color: const Color(0xFF0A2342).withOpacity(0.1),
-              width: 1,
-            ),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10.r,
-              offset: Offset(0, -2.h),
-            ),
-          ],
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-          // Avatar
-          Container(
-            width: 40.w,
-            height: 40.w,
-            decoration: BoxDecoration(
-              color: AppColors.inputBackground,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.person,
-              color: const Color(0xFF0A2342).withOpacity(0.5),
-              size: 20.sp,
-            ),
-          ),
-          SizedBox(width: 12.w),
-
-          // Input field with smooth multiline expansion
-          Expanded(
-            child: TextField(
-              controller: controller.messageController,
-              focusNode: controller.messageFocusNode,
-              onChanged: (value) => controller.handleTyping(value),
-              onSubmitted: (_) {
-                if (controller.messageInput.value.trim().isNotEmpty) {
-                  controller.sendMessage();
-                }
-              },
-              minLines: 1,
-              maxLines: 5, // Limit to 5 lines to prevent excessive expansion
-              textInputAction: TextInputAction.newline,
-              style: ResponsiveTextStyles.textSm.copyWith(
-                color: const Color(0xFF0A2342), // Dark text color
-              ),
-              cursorColor: const Color(0xFF0A2342), // Dark cursor
-              decoration: InputDecoration(
-                hintText: 'Type a message...',
-                hintStyle: ResponsiveTextStyles.textSm.copyWith(
-                  color: const Color(0xFF0A2342).withOpacity(0.4),
-                ),
-                filled: true,
-                fillColor: AppColors.inputBackground,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24.r),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 16.w,
-                  vertical: 12.h,
-                ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border(
+              top: BorderSide(
+                color: const Color(0xFF0A2342).withOpacity(0.08),
+                width: 1,
               ),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8.r,
+                offset: Offset(0, -2.h),
+              ),
+            ],
           ),
-          SizedBox(width: 8.w),
-
-          // Send button with scale animation
-          Obx(() {
-            final canSend = controller.messageInput.value.trim().isNotEmpty;
-            return AnimatedScale(
-              scale: canSend ? 1.0 : 0.85,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              child: InkWell(
-                onTap: canSend ? controller.sendMessage : null,
-                borderRadius: BorderRadius.circular(24.r),
-                child: Container(
-                  width: 48.w,
-                  height: 48.w,
-                  decoration: BoxDecoration(
-                    gradient: canSend
-                        ? const LinearGradient(
-                      colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                    )
-                        : null,
-                    color: canSend ? null : const Color(0xFF0A2342).withOpacity(0.1),
-                    shape: BoxShape.circle,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller.messageController,
+                  focusNode: controller.messageFocusNode,
+                  onChanged: (value) => controller.handleTyping(value),
+                  onSubmitted: (_) {
+                    if (controller.messageInput.value.trim().isNotEmpty) {
+                      controller.sendMessage();
+                    }
+                  },
+                  minLines: 1,
+                  maxLines: 5,
+                  textInputAction: TextInputAction.newline,
+                  style: ResponsiveTextStyles.textSm.copyWith(
+                    color: const Color(0xFF0A2342),
                   ),
-                  child: Icon(
-                    Icons.send,
-                    color: canSend
-                        ? Colors.white
-                        : const Color(0xFF0A2342).withOpacity(0.4),
-                    size: 22.sp,
+                  cursorColor: const Color(0xFF0A2342),
+                  decoration: InputDecoration(
+                    hintText: 'Type a message…',
+                    hintStyle: ResponsiveTextStyles.textSm.copyWith(
+                      color: const Color(0xFF0A2342).withOpacity(0.4),
+                    ),
+                    filled: true,
+                    fillColor: AppColors.inputBackground,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(_MessagesUI.radiusSearch.r),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16.w,
+                      vertical: 12.h,
+                    ),
                   ),
                 ),
               ),
-            );
-          }),
-          ],
-        ),
-      );
+              SizedBox(width: 12.w),
+              Obx(() {
+                final canSend = controller.messageInput.value.trim().isNotEmpty;
+                return AnimatedScale(
+                  scale: canSend ? 1.0 : 0.9,
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  child: InkWell(
+                    onTap: canSend ? controller.sendMessage : null,
+                    borderRadius: BorderRadius.circular(24.r),
+                    child: Container(
+                      width: 48.w,
+                      height: 48.w,
+                      decoration: BoxDecoration(
+                        gradient: canSend
+                            ? const LinearGradient(
+                                colors: _MessagesUI.headerGradient,
+                              )
+                            : null,
+                        color: canSend
+                            ? null
+                            : const Color(0xFF0A2342).withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.send_rounded,
+                        color: canSend
+                            ? Colors.white
+                            : const Color(0xFF0A2342).withOpacity(0.4),
+                        size: 22.sp,
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
       },
     );
   }
@@ -1275,7 +1328,6 @@ class MessagesPage extends GetView<MessagesController> {
     }
   }
 
-  /// Build date separator widget
   Widget _buildDateSeparator(DateTime date) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 16.h),
@@ -1283,20 +1335,17 @@ class MessagesPage extends GetView<MessagesController> {
         children: [
           Expanded(
             child: Divider(
-              color: const Color(0xFF0A2342).withOpacity(0.2),
+              color: const Color(0xFF0A2342).withOpacity(0.18),
               thickness: 1,
             ),
           ),
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 12.w),
             child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: 12.w,
-                vertical: 6.h,
-              ),
+              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 6.h),
               decoration: BoxDecoration(
-                color: const Color(0xFF0A2342).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12.r),
+                color: const Color(0xFF0A2342).withOpacity(0.12),
+                borderRadius: BorderRadius.circular(14.r),
               ),
               child: Text(
                 _formatDateSeparator(date),
@@ -1309,7 +1358,7 @@ class MessagesPage extends GetView<MessagesController> {
           ),
           Expanded(
             child: Divider(
-              color: const Color(0xFF0A2342).withOpacity(0.2),
+              color: const Color(0xFF0A2342).withOpacity(0.18),
               thickness: 1,
             ),
           ),
@@ -1351,30 +1400,15 @@ class MessagesPage extends GetView<MessagesController> {
     );
   }
 
-  /// Build status icon based on message status
   Widget _buildStatusIcon(MessageStatus status, {Key? key}) {
+    const grey = Color(0xFF0A2342);
     switch (status) {
       case MessageStatus.sent:
-        return Icon(
-          Icons.done,
-          key: key,
-          size: 12.sp,
-          color: Colors.white.withOpacity(0.7),
-        );
+        return Icon(Icons.done_all, key: key, size: 12.sp, color: grey.withOpacity(0.5));
       case MessageStatus.delivered:
-        return Icon(
-          Icons.done_all,
-          key: key,
-          size: 12.sp,
-          color: Colors.white.withOpacity(0.7),
-        );
+        return Icon(Icons.done_all, key: key, size: 12.sp, color: grey.withOpacity(0.5));
       case MessageStatus.read:
-        return Icon(
-          Icons.done_all,
-          key: key,
-          size: 12.sp,
-          color: const Color(0xFF00B8A9), // Colored for read status
-        );
+        return Icon(Icons.done_all, key: key, size: 12.sp, color: _MessagesUI.teal);
     }
   }
 }

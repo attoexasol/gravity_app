@@ -3,17 +3,18 @@ import 'package:flutter/material.dart';
 // if using SVG icons
 import 'package:flutter_animate/flutter_animate.dart'; // for motion-like animation
 
-Widget buildHeader() {
+Widget buildHeader(BuildContext context) {
+  final topPadding = MediaQuery.of(context).padding.top;
   return Column(
     children: [
-      // Background Gradient Header
+      // Background Gradient Header — extends to status bar
       Container(
         width: double.infinity,
-        padding: const EdgeInsets.only(
+        padding: EdgeInsets.only(
           left: 24,
           right: 24,
-          top: 56, // pt-14
-          bottom: 32, // pb-8
+          top: topPadding + 24,
+          bottom: 32,
         ),
         decoration: const BoxDecoration(
           gradient: LinearGradient(
