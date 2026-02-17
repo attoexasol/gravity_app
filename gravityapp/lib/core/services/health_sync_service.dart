@@ -416,9 +416,13 @@ class HealthSyncService {
       }
 
       // Fetch Weight: use date-wise method for today (full day range: 00:00 to 23:59)
+      // If no weight for today, use latest available weight from Health (any previous date)
       double? weight;
       try {
         weight = await getWeightForDate(now);
+        if (weight == null) {
+          weight = await getLatestWeight();
+        }
       } catch (e) {
         print('⚠️ Error fetching weight: $e');
       }
@@ -531,6 +535,37 @@ class HealthSyncService {
       }
     } catch (e) {
       print('⚠️ Error fetching weight for date ${date.year}-${date.month}-${date.day}: $e');
+      return null;
+    }
+  }
+
+  /// Get the latest available weight from Health (any date).
+  /// Queries from year 2000 to now, sorts by date descending, returns the most recent value.
+  /// Returns null if no weight has ever been recorded.
+  Future<double?> getLatestWeight() async {
+    if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return null;
+    if (_health == null || !_isInitialized) {
+      final ok = await initialize();
+      if (!ok || _health == null) return null;
+    }
+    try {
+      final startTime = DateTime(2000, 1, 1);
+      final endTime = DateTime.now();
+      final weightData = await _health!.getHealthDataFromTypes(
+        types: [HealthDataType.WEIGHT],
+        startTime: startTime,
+        endTime: endTime,
+      );
+      if (weightData.isNotEmpty) {
+        weightData.sort((a, b) => b.dateFrom.compareTo(a.dateFrom));
+        final latestWeight = (weightData.first.value as NumericHealthValue).numericValue.toDouble();
+        final platformName = Platform.isIOS ? 'HealthKit' : 'Health Connect';
+        print('📊 Latest weight (no today entry): $latestWeight kg from $platformName (${weightData.first.dateFrom})');
+        return latestWeight;
+      }
+      return null;
+    } catch (e) {
+      print('⚠️ Error fetching latest weight: $e');
       return null;
     }
   }
