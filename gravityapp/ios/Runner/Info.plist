@@ -22,18 +22,27 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.463881413794-se5fth40762gqsq5bsb07a5776o8sice</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>We need access to your camera to take a profile photo.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>We need access to your health data to track your steps, sleep, weight, and hydration for your wellness goals.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>We need permission to update your health data to help you track your wellness progress.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We need access to your photo library to select a profile image.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>We need access to your camera to take a profile photo.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -52,15 +61,6 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>CFBundleURLTypes</key>
-	<array>
- 	 <dict>
-    	<key>CFBundleURLSchemes</key>
-    	<array>
-      		<string>com.googleusercontent.apps.463881413794-se5fth40762gqsq5bsb07a5776o8sice</string>
-    	</array>
-  	</dict>
 	</array>
 </dict>
 </plist>
