@@ -14,16 +14,14 @@ import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Firebase with error handling
+
+  // 1. Firebase must initialize first (before GetStorage/PreferencesService or any Firebase-dependent code).
+  //    Android: requires android/app/google-services.json
+  //    iOS: requires ios/Runner/GoogleService-Info.plist added to Xcode Runner target.
   try {
-    // Check if running on iOS and verify GoogleService-Info.plist exists
     if (!kIsWeb && Platform.isIOS) {
       debugPrint('🔍 Checking Firebase configuration for iOS...');
-      // Firebase.initializeApp() should automatically find GoogleService-Info.plist
-      // if it's properly added to the Xcode project
     }
-    
     await Firebase.initializeApp();
     debugPrint('✅ Firebase initialized successfully');
   } catch (e, stackTrace) {
@@ -46,7 +44,7 @@ void main() async {
     // Continue app initialization even if Firebase fails
   }
 
-  // Initialize storage
+  // 2. Initialize storage (GetStorage) after Firebase
   await PreferencesService.init();
 
   // PERSISTENT AUTHENTICATION: Token persists across app sessions

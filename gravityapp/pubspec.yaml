@@ -50,11 +50,13 @@ dependencies:
   path_provider: ^2.1.2
   health: ^12.0.0
   permission_handler: ^11.3.0
+  # Firebase (initialize in main.dart before runApp)
   firebase_core: ^3.6.0
-  firebase_auth: ^5.3.1
   cloud_firestore: ^5.5.0
-  firebase_messaging: ^15.0.0 # optional
-  firebase_storage: ^12.0.0   # optional
+  firebase_auth: ^5.3.1
+  firebase_messaging: ^15.0.0   # optional – push notifications
+  firebase_analytics: ^11.3.3   # optional – analytics
+  firebase_storage: ^12.0.0     # optional – file storage
   google_sign_in: ^6.2.1
   sign_in_with_apple: ^6.1.0
   scrollable_positioned_list: ^0.3.8
