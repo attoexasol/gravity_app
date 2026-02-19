@@ -4,6 +4,16 @@ import 'package:get/get.dart';
 import '../../controllers/weekly_review_controller.dart';
 import '../../../../app/theme/app_text_styles.dart';
 
+/// Icons matching WeeklyConsistencyGrid per pillar.
+const Map<String, IconData> _pillarIcons = {
+  'Nutrition': Icons.restaurant,
+  'Hydration': Icons.water_drop,
+  'Sleep': Icons.bedtime,
+  'Steps': Icons.directions_walk,
+  'Fasting': Icons.access_time,
+  'Weigh-in': Icons.monitor_weight,
+};
+
 class PatternsSection extends StatelessWidget {
   final WeeklyReviewController controller;
 
@@ -31,22 +41,18 @@ class PatternsSection extends StatelessWidget {
             ),
           ),
           SizedBox(height: 12.h),
-          
-          ...review.patterns.map((pattern) {
-            final isNutrition = pattern.category == 'Nutrition';
+          // Exactly 2 cards: index 0 = highest (green), index 1 = lowest (yellow)
+          ...review.patterns.asMap().entries.map((entry) {
+            final index = entry.key;
+            final pattern = entry.value;
+            final isHighest = index == 0;
             return Padding(
               padding: EdgeInsets.only(bottom: 12.h),
               child: _buildPatternCard(
-                icon: isNutrition ? Icons.restaurant : Icons.directions_walk,
-                iconColor: isNutrition ? const Color(0xFFD4AF37) : const Color(0xFF00B8A9),
+                icon: _pillarIcons[pattern.category] ?? Icons.circle,
+                isHighest: isHighest,
                 category: pattern.category,
                 insight: pattern.insight,
-                backgroundColor: isNutrition
-                    ? const Color(0xFFFFF9E6)
-                    : const Color(0xFFE6F7F5),
-                borderColor: isNutrition
-                    ? const Color(0xFFD4AF37).withOpacity(0.2)
-                    : const Color(0xFF00B8A9).withOpacity(0.2),
               ),
             );
           }),
@@ -57,22 +63,34 @@ class PatternsSection extends StatelessWidget {
 
   Widget _buildPatternCard({
     required IconData icon,
-    required Color iconColor,
+    required bool isHighest,
     required String category,
     required String insight,
-    required Color backgroundColor,
-    required Color borderColor,
   }) {
+    // Green style (Complete tone) for highest; yellow style (Partial tone) for lowest
+    const greenColor = Color(0xFF00B8A9);
+    const yellowColor = Color(0xFFD4AF37);
+    final iconColor = isHighest ? greenColor : yellowColor;
+    final borderColor = isHighest
+        ? greenColor.withOpacity(0.3)
+        : yellowColor.withOpacity(0.3);
+    final gradientColors = isHighest
+        ? const [Color(0xFFE6F9F6), Colors.white]
+        : const [Color(0xFFFFF9E6), Colors.white];
+
     return Container(
       padding: EdgeInsets.all(16.r),
       decoration: BoxDecoration(
-        color: backgroundColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: gradientColors,
+        ),
         borderRadius: BorderRadius.circular(20.r),
         border: Border.all(color: borderColor),
       ),
       child: Row(
         children: [
-          // Icon
           Container(
             width: 32.w,
             height: 32.h,
@@ -87,8 +105,6 @@ class PatternsSection extends StatelessWidget {
             ),
           ),
           SizedBox(width: 12.w),
-          
-          // Text content
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

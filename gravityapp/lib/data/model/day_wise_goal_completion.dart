@@ -36,9 +36,12 @@ class DayWiseGoalCompletion {
 /// Represents the status of a specific goal for a day
 class GoalStatus {
   final String status; // "completed", "partial", "missed"
+  /// Optional numeric value (e.g. weight in kg when goal is weight)
+  final double? value;
 
   GoalStatus({
     required this.status,
+    this.value,
   });
 
   factory GoalStatus.fromJson(dynamic json) {
@@ -47,8 +50,15 @@ class GoalStatus {
     }
     
     if (json is Map<String, dynamic>) {
+      double? v;
+      final valueDynamic = json['value'];
+      if (valueDynamic != null) {
+        if (valueDynamic is num) v = valueDynamic.toDouble();
+        else if (valueDynamic is String) v = double.tryParse(valueDynamic);
+      }
       return GoalStatus(
         status: json['status'] as String? ?? 'missed',
+        value: v,
       );
     }
     
