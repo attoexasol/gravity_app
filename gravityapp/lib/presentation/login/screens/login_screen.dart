@@ -101,7 +101,7 @@ class LoginScreen extends GetView<LoginController> {
                             const SizedBox(height: 12),
                             _buildForgotPasswordLink(),
                             const SizedBox(height: 24),
-                            _buildLoginButton(),
+                            _buildLoginButton(context),
                             const SizedBox(height: 24),
                             _buildDivider(),
                             const SizedBox(height: 24),
@@ -502,14 +502,14 @@ class LoginScreen extends GetView<LoginController> {
     );
   }
 
-  Widget _buildLoginButton() {
+  Widget _buildLoginButton(BuildContext context) {
     final controller = this.controller;
     return Obx(
       () => SizedBox(
         width: double.infinity,
         height: 56,
         child: ElevatedButton(
-          onPressed: controller.isLoading.value ? null : controller.handleLogin,
+          onPressed: controller.isLoading.value ? null : () => controller.handleLogin(context),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF00B8A9),
             foregroundColor: Colors.white,

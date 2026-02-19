@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 import '../../../data/repositories/goals_repository.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../app/routes/app_routes.dart';
+import '../../dashboard/controllers/dashboard_controller.dart';
 
 class GoalSettingsController extends GetxController {
   /// Safely show snackbar with overlay check
@@ -250,7 +252,31 @@ class GoalSettingsController extends GetxController {
         // Flow: Sign up → Login → Goal Settings (first time, this method) → Dashboard (subsequent)
         await PreferencesService.setFirstTimeSetupCompleted(true);
         debugPrint('✅ First-time setup marked as completed');
-        
+
+        // Write goals to local storage so dashboard Weight Journey shows starting weight immediately
+        // (Dashboard reads userGoals and starting_weight on load; without this, it only appears after re-login.)
+        final waterValue = waterIntake.endsWith('L') || waterIntake.endsWith('l')
+            ? waterIntake.replaceAll('L', '').replaceAll('l', '').trim()
+            : waterIntake.trim();
+        final goalsMap = <String, String>{
+          'currentWeight': currentWeightController.text.trim(),
+          'targetWeight': targetWeightController.text.trim(),
+          'stepGoal': stepGoalController.text.trim(),
+          'waterIntake': waterValue,
+          'sleepHours': sleepHoursController.text.trim(),
+          'aiTone': aiTone,
+        };
+        PreferencesService.getStorage().write('userGoals', jsonEncode(goalsMap));
+        final currentWeightKg = double.tryParse(currentWeightController.text.trim());
+        if (currentWeightKg != null && currentWeightKg > 0) {
+          await PreferencesService.saveStartingWeight(currentWeightKg);
+        }
+        debugPrint('✅ Goals written to local storage for immediate dashboard display');
+        // If dashboard is already in memory, refresh so Weight Journey shows starting weight immediately
+        if (Get.isRegistered<DashboardController>()) {
+          Get.find<DashboardController>().notifyGoalsChanged();
+        }
+
         // Navigate to dashboard after successful API call (skip snackbar since we're navigating)
         await Future.delayed(const Duration(milliseconds: 300));
         Get.offAllNamed(AppRoutes.home);

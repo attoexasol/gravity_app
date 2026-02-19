@@ -792,6 +792,86 @@ class TodayController extends GetxController {
     ),
   ];
 
+  /// Wins today messages from pillars that are onTrack or logged. Max 3.
+  List<String> get winsTodayMessages {
+    final messages = <String>[];
+    for (final pillar in pillars) {
+      if (pillar.status == PillarStatus.onTrack ||
+          pillar.status == PillarStatus.logged) {
+        final msg = _winMessageFor(pillar.name);
+        if (msg.isNotEmpty) {
+          messages.add(msg);
+        }
+      }
+    }
+    return messages.take(3).toList();
+  }
+
+  /// Single watch message by priority (first borderline/missed pillar in order). Null if none.
+  String? get oneThingToWatchMessage {
+    const priorityOrder = [
+      'Sleep',
+      'Steps',
+      'Nutrition',
+      'Hydration',
+      'Fasting window',
+      'Weight-in',
+    ];
+    for (final name in priorityOrder) {
+      try {
+        final pillar = pillars.firstWhere((p) => p.name == name);
+        if (pillar.status == PillarStatus.borderline ||
+            pillar.status == PillarStatus.missed) {
+          final msg = _watchMessageFor(name);
+          if (msg.isNotEmpty) {
+            return msg;
+          }
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  String _winMessageFor(String name) {
+    switch (name) {
+      case 'Hydration':
+        return 'You stayed well hydrated today.';
+      case 'Sleep':
+        return 'You prioritized rest and recovery.';
+      case 'Steps':
+        return 'You stayed active and kept moving.';
+      case 'Nutrition':
+        return 'You stayed aligned with your nutrition target.';
+      case 'Fasting window':
+        return 'You followed your fasting window successfully.';
+      case 'Weight-in':
+        return 'You logged your weight consistently.';
+      default:
+        return '';
+    }
+  }
+
+  String _watchMessageFor(String name) {
+    switch (name) {
+      case 'Sleep':
+        return 'Sleep was lighter than usual. Rest supports recovery.';
+      case 'Steps':
+        return 'Activity dipped today. Even a short walk can boost energy.';
+      case 'Nutrition':
+        return 'Nutrition intake was below target. Balanced fuel supports metabolism.';
+      case 'Hydration':
+        return 'Hydration was low. Water intake supports focus and energy.';
+      case 'Fasting window':
+        return 'Fasting window was not completed. Planning improves consistency.';
+      case 'Weight-in':
+        return 'Weight was not logged today. Consistency helps track progress.';
+      default:
+        return '';
+    }
+  }
+
   // Get current date string
   String get currentDateString {
     final now = DateTime.now();

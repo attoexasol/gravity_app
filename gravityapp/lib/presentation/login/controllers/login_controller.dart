@@ -91,6 +91,67 @@ class LoginController extends GetxController {
     super.onClose();
   }
 
+  /// Show styled floating SnackBar when user does not exist (matches Sign Up duplicate Gmail style).
+  /// [scaffoldContext] should be the LoginScreen's BuildContext so the snackbar attaches to the correct Scaffold.
+  void _showUserNotFoundSnackBar(BuildContext? scaffoldContext) {
+    if (isClosed) return;
+    final context = scaffoldContext ?? Get.context;
+    if (context == null || !context.mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (isClosed) return;
+      final ctx = scaffoldContext ?? Get.context;
+      if (ctx == null || !ctx.mounted) return;
+      try {
+        ScaffoldMessenger.of(ctx).hideCurrentSnackBar();
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'No account found with this email. Please sign up first.',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            backgroundColor: const Color(0xFFE53935),
+            behavior: SnackBarBehavior.floating,
+            elevation: 8,
+            margin: const EdgeInsets.fromLTRB(20, 0, 20, 90),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } catch (e) {
+        debugPrint('⚠️ Error showing user-not-found snackbar: $e');
+      }
+    });
+  }
+
+  /// Returns true if the API response indicates user/account does not exist.
+  bool _isUserNotFoundResponse(ApiResponse<UserModel> response) {
+    final message = (response.message ?? '').toLowerCase();
+    final error = response.error;
+    String errorStr = '';
+    if (error is String) {
+      errorStr = error.toLowerCase();
+    } else if (error is List && error.isNotEmpty && error.first is String) {
+      errorStr = (error.first as String).toLowerCase();
+    } else if (error is Map && error['message'] != null) {
+      errorStr = error['message'].toString().toLowerCase();
+    }
+    final combined = '$message $errorStr';
+    return combined.contains('user not found') ||
+        combined.contains('account not found') ||
+        combined.contains('no account found') ||
+        combined.contains('user does not exist') ||
+        combined.contains('account does not exist') ||
+        combined.contains('email not found') ||
+        combined.contains('not registered') ||
+        combined.contains('no user') ||
+        combined.contains('user not registered');
+  }
+
   /// Safely show snackbar with overlay check
   void _safeSnackbar({
     required String title,
@@ -160,7 +221,8 @@ class LoginController extends GetxController {
   }
 
   /// Handle login
-  Future<void> handleLogin() async {
+  /// [scaffoldContext] optional context from LoginScreen for showing snackbar on the correct Scaffold.
+  Future<void> handleLogin([BuildContext? scaffoldContext]) async {
     // Check if controller is still mounted before accessing controllers
     if (isClosed) return;
 
@@ -333,6 +395,13 @@ class LoginController extends GetxController {
       } else {
         // Determine which field has the error and display appropriate message
         _setFieldSpecificError(response.message);
+        // When user does not exist, show styled floating SnackBar (matches Sign Up duplicate Gmail).
+        // Trigger if: backend message matches user-not-found, OR we're showing "Email not found" on the email field.
+        final shouldShowUserNotFoundSnackBar = _isUserNotFoundResponse(response) ||
+            emailErrorMessage.value == 'Email not found';
+        if (shouldShowUserNotFoundSnackBar) {
+          _showUserNotFoundSnackBar(scaffoldContext);
+        }
       }
     } catch (e) {
       if (!isClosed) {
