@@ -6,6 +6,7 @@ import '../../../data/repositories/goals_repository.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/preferences_service.dart';
+import '../../../core/utils/app_snackbar.dart';
 
 enum UserType { customer, coach }
 
@@ -180,12 +181,10 @@ class SignupController extends GetxController {
         validateEmail(email) != null ||
         validatePassword(password) != null ||
         password != confirmPassword) {
-      Get.snackbar(
-        'Validation Error',
-        'Please check your inputs',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
+      AppSnackbar.show(
+        title: 'Validation Error',
+        message: 'Please check your inputs',
+        isSuccess: false,
       );
       return;
     }
@@ -225,35 +224,26 @@ class SignupController extends GetxController {
         FocusManager.instance.primaryFocus?.unfocus();
         isSignupSuccess.value = true;
 
-        Get.snackbar(
-          'Success',
-          response.message,
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: const Color(0xFF00B8A9),
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
+        AppSnackbar.show(
+          title: 'Account Created',
+          message: 'Welcome to Gravity!',
+          isSuccess: true,
         );
       } else {
         // Error from API - check for email/phone already taken validation
         final userMessage = _getSignupErrorMessage(response.error);
-        Get.snackbar(
-          'Signup Failed',
-          userMessage ?? response.message,
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
-          duration: const Duration(seconds: 4),
+        AppSnackbar.show(
+          title: 'Signup Failed',
+          message: userMessage ?? response.message,
+          isSuccess: false,
         );
       }
     } catch (e) {
       // Network or unexpected error
-      Get.snackbar(
-        'Signup Failed',
-        'An unexpected error occurred. Please check your connection and try again.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-        duration: const Duration(seconds: 4),
+      AppSnackbar.show(
+        title: 'Signup Failed',
+        message: 'An unexpected error occurred. Please check your connection and try again.',
+        isSuccess: false,
       );
       debugPrint('❌ Signup Error: $e');
     } finally {
@@ -277,7 +267,13 @@ class SignupController extends GetxController {
       if (result['success'] == true) {
         // Mark onboarding as completed when user successfully signs up with Google
         await PreferencesService.setOnboardingCompleted(true);
-        
+
+        AppSnackbar.show(
+          title: 'Account Created',
+          message: 'Welcome to Gravity!',
+          isSuccess: true,
+        );
+
         final token = result['token'] as String;
         await _checkUserDataAndNavigate(token);
       } else {
@@ -287,16 +283,14 @@ class SignupController extends GetxController {
     } catch (e) {
       debugPrint('❌ Google Signup Error: $e');
       if (!isClosed) {
-        Get.snackbar(
-          'Google Signup Failed',
-          e.toString().contains('Server error')
+        AppSnackbar.show(
+          title: 'Signup Failed',
+          message: e.toString().contains('Server error')
               ? 'Server error. Please try again later.'
               : e.toString().contains('cancelled')
                   ? 'Sign-up was cancelled'
                   : 'Please try again',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
+          isSuccess: false,
         );
       }
     } finally {
@@ -382,20 +376,16 @@ class SignupController extends GetxController {
       // TODO: Implement Apple Sign-Up when available
       await Future.delayed(const Duration(seconds: 1));
 
-      Get.snackbar(
-        'Coming Soon',
-        'Apple Sign-Up will be available soon',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF00B8A9),
-        colorText: Colors.white,
+      AppSnackbar.show(
+        title: 'Coming Soon',
+        message: 'Apple Sign-Up will be available soon',
+        isSuccess: true,
       );
     } catch (e) {
-      Get.snackbar(
-        'Apple Signup Failed',
-        e.toString(),
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
+      AppSnackbar.show(
+        title: 'Apple Signup Failed',
+        message: e.toString(),
+        isSuccess: false,
       );
     } finally {
       isLoading.value = false;

@@ -13,6 +13,7 @@ import '../../../core/services/preferences_service.dart';
 import '../../../core/services/token_manager.dart';
 import '../../../core/services/session_manager.dart';
 import '../../../core/services/device_manager.dart';
+import '../../../core/utils/app_snackbar.dart';
 
 enum UserType { customer, coach }
 
@@ -89,67 +90,6 @@ class LoginController extends GetxController {
       }
     });
     super.onClose();
-  }
-
-  /// Show styled floating SnackBar when user does not exist (matches Sign Up duplicate Gmail style).
-  /// [scaffoldContext] should be the LoginScreen's BuildContext so the snackbar attaches to the correct Scaffold.
-  void _showUserNotFoundSnackBar(BuildContext? scaffoldContext) {
-    if (isClosed) return;
-    final context = scaffoldContext ?? Get.context;
-    if (context == null || !context.mounted) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (isClosed) return;
-      final ctx = scaffoldContext ?? Get.context;
-      if (ctx == null || !ctx.mounted) return;
-      try {
-        ScaffoldMessenger.of(ctx).hideCurrentSnackBar();
-        ScaffoldMessenger.of(ctx).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'No account found with this email. Please sign up first.',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            backgroundColor: const Color(0xFFE53935),
-            behavior: SnackBarBehavior.floating,
-            elevation: 8,
-            margin: const EdgeInsets.fromLTRB(20, 0, 20, 90),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      } catch (e) {
-        debugPrint('⚠️ Error showing user-not-found snackbar: $e');
-      }
-    });
-  }
-
-  /// Returns true if the API response indicates user/account does not exist.
-  bool _isUserNotFoundResponse(ApiResponse<UserModel> response) {
-    final message = (response.message ?? '').toLowerCase();
-    final error = response.error;
-    String errorStr = '';
-    if (error is String) {
-      errorStr = error.toLowerCase();
-    } else if (error is List && error.isNotEmpty && error.first is String) {
-      errorStr = (error.first as String).toLowerCase();
-    } else if (error is Map && error['message'] != null) {
-      errorStr = error['message'].toString().toLowerCase();
-    }
-    final combined = '$message $errorStr';
-    return combined.contains('user not found') ||
-        combined.contains('account not found') ||
-        combined.contains('no account found') ||
-        combined.contains('user does not exist') ||
-        combined.contains('account does not exist') ||
-        combined.contains('email not found') ||
-        combined.contains('not registered') ||
-        combined.contains('no user') ||
-        combined.contains('user not registered');
   }
 
   /// Safely show snackbar with overlay check
@@ -376,37 +316,36 @@ class LoginController extends GetxController {
           }
         }
 
-        // Skip snackbar before navigation to avoid overlay errors
-        // Navigation happens immediately after, which can cause overlay to be unavailable
-        // _safeSnackbar(
-        //   title: 'Success',
-        //   message: response.message,
-        //   backgroundColor: const Color(0xFF00B8A9),
-        //   colorText: Colors.white,
-        //   duration: const Duration(seconds: 2),
-        // );
-
         // Clear any error messages
         emailErrorMessage.value = '';
         passwordErrorMessage.value = '';
-        
+
+        // Show success SnackBar (matches Sign-Up page style)
+        AppSnackbar.show(
+          title: 'Login Successful',
+          message: 'Welcome back!',
+          isSuccess: true,
+        );
+
         // Check consent and goals data availability
         await _checkUserDataAndNavigate(accessToken);
       } else {
-        // Determine which field has the error and display appropriate message
-        _setFieldSpecificError(response.message);
-        // When user does not exist, show styled floating SnackBar (matches Sign Up duplicate Gmail).
-        // Trigger if: backend message matches user-not-found, OR we're showing "Email not found" on the email field.
-        final shouldShowUserNotFoundSnackBar = _isUserNotFoundResponse(response) ||
-            emailErrorMessage.value == 'Email not found';
-        if (shouldShowUserNotFoundSnackBar) {
-          _showUserNotFoundSnackBar(scaffoldContext);
-        }
+        // Server-side login failure: show only SnackBar (no field-level errors)
+        AppSnackbar.show(
+          title: 'Login Failed',
+          message: response.message.isNotEmpty
+              ? response.message
+              : 'Invalid email or password',
+          isSuccess: false,
+        );
       }
     } catch (e) {
       if (!isClosed) {
-        // For unexpected errors, show on password field as default
-        passwordErrorMessage.value = 'An unexpected error occurred. Please check your connection and try again.';
+        AppSnackbar.show(
+          title: 'Login Failed',
+          message: 'An unexpected error occurred. Please check your connection and try again.',
+          isSuccess: false,
+        );
       }
       debugPrint('❌ Login Error: $e');
     } finally {
@@ -446,7 +385,13 @@ class LoginController extends GetxController {
           await PreferencesService.saveUserType(roleString);
           debugPrint('⚠️ Role was missing, saved selected role: $roleString');
         }
-        
+
+        AppSnackbar.show(
+          title: 'Login Successful',
+          message: 'Welcome back!',
+          isSuccess: true,
+        );
+
         final token = result['token'] as String;
         await _checkUserDataAndNavigate(token);
       } else {
@@ -456,15 +401,14 @@ class LoginController extends GetxController {
     } catch (e) {
       debugPrint('❌ Google Login Error: $e');
       if (!isClosed) {
-        _safeSnackbar(
+        AppSnackbar.show(
           title: 'Google Login Failed',
           message: e.toString().contains('Server error')
               ? 'Server error. Please try again later.'
               : e.toString().contains('cancelled')
                   ? 'Sign-in was cancelled'
                   : 'Please try again',
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
+          isSuccess: false,
         );
       }
     } finally {
@@ -486,21 +430,19 @@ class LoginController extends GetxController {
       await Future.delayed(const Duration(seconds: 1));
 
       if (!isClosed) {
-        _safeSnackbar(
-          title: 'Success',
-          message: 'Logged in with Apple',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
+        AppSnackbar.show(
+          title: 'Login Successful',
+          message: 'Welcome back!',
+          isSuccess: true,
         );
       }
     } catch (e) {
       debugPrint('❌ Apple Login Error: $e');
       if (!isClosed) {
-        _safeSnackbar(
+        AppSnackbar.show(
           title: 'Apple Login Failed',
           message: e.toString(),
-          backgroundColor: Get.theme.colorScheme.error,
-          colorText: Get.theme.colorScheme.onError,
+          isSuccess: false,
         );
       }
     } finally {
@@ -610,107 +552,5 @@ class LoginController extends GetxController {
         }
       }
     }
-  }
-
-  /// Set field-specific error messages based on the API response
-  /// Maps email-related errors to emailErrorMessage
-  /// Maps password-related errors to passwordErrorMessage
-  void _setFieldSpecificError(String? originalMessage) {
-    // Clear both errors first
-    emailErrorMessage.value = '';
-    passwordErrorMessage.value = '';
-
-    if (originalMessage == null || originalMessage.isEmpty) {
-      // Default to password error if message is empty
-      passwordErrorMessage.value = 'Wrong password';
-      return;
-    }
-
-    final message = originalMessage.toLowerCase();
-
-    // PRIORITY 1: Check for messages that mention BOTH email AND password
-    // These are ambiguous - default to password error since email format is validated client-side
-    if (message.contains('email') && message.contains('password')) {
-      // Generic "Invalid email or password" type messages
-      // Since email format is validated client-side, assume password is wrong
-      passwordErrorMessage.value = 'Wrong password';
-      return;
-    }
-
-    // PRIORITY 2: Check for explicit password-only errors (password mentioned but NOT email)
-    // These are clear password errors
-    if (message.contains('password') && !message.contains('email')) {
-      if (message.contains('incorrect') || 
-          message.contains('wrong') ||
-          message.contains('invalid') ||
-          message.contains('not match') ||
-          message.contains('does not match') ||
-          message.contains('mismatch')) {
-        passwordErrorMessage.value = 'Wrong password';
-        return;
-      }
-      if (message.contains('required') || message.contains('missing')) {
-        passwordErrorMessage.value = 'Password is required. Please enter your password.';
-        return;
-      }
-      // Generic password error
-      passwordErrorMessage.value = 'Password incorrect';
-      return;
-    }
-
-    // PRIORITY 3: Check for explicit email-only errors (email mentioned but NOT password)
-    // Only trigger if password is NOT mentioned in the message
-    if (message.contains('email') && !message.contains('password')) {
-      if (message.contains('not found') || 
-          message.contains('does not exist') ||
-          message.contains('not registered')) {
-        emailErrorMessage.value = 'Email not found';
-        return;
-      }
-      if (message.contains('invalid') || message.contains('incorrect')) {
-        emailErrorMessage.value = 'Invalid email address';
-        return;
-      }
-      // Generic email error
-      emailErrorMessage.value = 'Invalid email address';
-      return;
-    }
-
-    // PRIORITY 4: Check for user/account not found - this is an email error
-    // Only if password is NOT mentioned in the message
-    if (!message.contains('password') &&
-        (message.contains('user not found') || 
-         message.contains('account not found') ||
-         message.contains('no account found') ||
-         message.contains('user does not exist'))) {
-      emailErrorMessage.value = 'Email not found';
-      return;
-    }
-
-    // PRIORITY 5: Check for generic authentication/credential errors
-    // These are ambiguous, but since email format is validated client-side,
-    // we'll default to password error for these
-    if (message.contains('credentials') || 
-        message.contains('authentication failed') ||
-        message.contains('unauthorized') ||
-        message.contains('login failed') ||
-        message.contains('invalid credentials')) {
-      // Default to password error since email validation happens client-side
-      passwordErrorMessage.value = 'Wrong password';
-      return;
-    }
-
-    // PRIORITY 6: Check for "incorrect" without email/username context - assume password
-    if (message.contains('incorrect') && 
-        !message.contains('email') && 
-        !message.contains('username') &&
-        !message.contains('user')) {
-      passwordErrorMessage.value = 'Wrong password';
-      return;
-    }
-
-    // PRIORITY 7: For any other errors, default to password error
-    // (since email format is validated client-side, most API errors are password-related)
-    passwordErrorMessage.value = 'Wrong password';
   }
 }
