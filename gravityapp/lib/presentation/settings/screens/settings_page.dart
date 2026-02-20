@@ -646,7 +646,7 @@ class SettingsPage extends GetView<SettingsController> {
       child: Column(
         children: [
           Text(
-            'Gravity v1.0',
+            'Gravity v2.0.1',
             style: ResponsiveTextStyles.textSm.copyWith(
               color: const Color(0xFF0A2342).withOpacity(0.4),
             ),
