@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Message {
   final String id;
   final String senderId;
@@ -14,6 +16,31 @@ class Message {
     required this.isRead,
     required this.isSent,
   });
+
+  /// Create a [Message] from a Firestore document snapshot.
+  /// Handles Timestamp and common field names (snake_case / camelCase).
+  factory Message.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? {};
+    final createdAt = data['created_at'] ?? data['createdAt'];
+    DateTime timestamp = DateTime.now();
+    if (createdAt != null) {
+      if (createdAt is Timestamp) {
+        timestamp = createdAt.toDate();
+      } else if (createdAt is DateTime) {
+        timestamp = createdAt;
+      } else if (createdAt is String) {
+        timestamp = DateTime.tryParse(createdAt) ?? timestamp;
+      }
+    }
+    return Message(
+      id: doc.id,
+      senderId: (data['sender_id'] ?? data['senderId'] ?? '').toString(),
+      text: (data['message'] ?? data['message_content'] ?? data['text'] ?? '').toString(),
+      timestamp: timestamp,
+      isRead: (data['is_read'] ?? data['isRead'] ?? false) as bool,
+      isSent: (data['is_sent'] ?? data['isSent'] ?? false) as bool,
+    );
+  }
 
   Message copyWith({
     String? id,

@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/services/api_service.dart';
 import '../model/api_response.dart';
+import '../model/message.dart';
 
-/// Messages Repository - Handles Messages API calls
+/// Messages Repository - Handles Messages API calls and Firestore real-time streams
 class MessagesRepository {
   final ApiService _apiService = ApiService();
 
@@ -321,6 +323,20 @@ class MessagesRepository {
         error: e.toString(),
       );
     }
+  }
+
+  /// Real-time stream of messages for a conversation from Firestore.
+  /// Use this instead of polling; Laravel remains the source for creating messages.
+  Stream<List<Message>> listenToMessages(String conversationId) {
+    return FirebaseFirestore.instance
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .orderBy('created_at')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => Message.fromFirestore(doc))
+            .toList());
   }
 }
 

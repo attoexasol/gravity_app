@@ -71,13 +71,9 @@ class MessagesController extends GetxController {
   // Map to store user profile images
   final Map<int, String> _userProfileImages = {};
 
-  // Timer for periodic message polling
-  Timer? _messagePollingTimer;
-  static const Duration _pollingInterval = Duration(seconds: 3); // Poll every 3 seconds
-  
-  // Prevent overlapping polling calls
-  bool _isPollingInProgress = false;
-  
+  // Firestore real-time message stream subscription
+  StreamSubscription<List<Message>>? _messageSubscription;
+
   // Typing indicator debounce timer
   Timer? _typingDebounceTimer;
   static const Duration _typingDebounceDelay = Duration(milliseconds: 500);
@@ -93,7 +89,6 @@ class MessagesController extends GetxController {
     _loadConversations();
     _setupLifecycleObserver();
     _setupScrollListener();
-    _startMessagePolling();
   }
   
   /// Setup scroll listener to track if user is near bottom
@@ -139,16 +134,14 @@ class MessagesController extends GetxController {
     }
   }
   
-  /// Setup app lifecycle observer to handle background/foreground
+  /// Setup app lifecycle observer (Firestore stream continues in background; no polling)
   void _setupLifecycleObserver() {
     _lifecycleObserver = AppLifecycleObserver(
       onPaused: () {
-        debugPrint('📱 Messages: App paused - stopping polling');
-        _stopMessagePolling();
+        debugPrint('📱 Messages: App paused');
       },
       onResumed: () {
-        debugPrint('📱 Messages: App resumed - restarting polling');
-        _startMessagePolling();
+        debugPrint('📱 Messages: App resumed');
       },
     );
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
@@ -157,7 +150,7 @@ class MessagesController extends GetxController {
   @override
   void onClose() {
     WidgetsBinding.instance.removeObserver(_lifecycleObserver);
-    _stopMessagePolling();
+    _messageSubscription?.cancel();
     _stopTypingDebounce();
     messagesScrollController.removeListener(_onScroll);
     messageController.dispose();
@@ -945,28 +938,53 @@ class MessagesController extends GetxController {
     return conversations.fold(0, (sum, conv) => sum + conv.unreadCount);
   }
 
-  // Select conversation
+  // Select conversation — uses Firestore real-time stream for messages
   void selectConversation(String conversationId) {
     selectedConversationId.value = conversationId;
-    
+
     // Reset scroll state when opening new conversation
     hasNewIncomingMessage.value = false;
-    isNearBottom.value = true; // Assume at bottom when opening conversation
-    
-    // Clear any previous highlight animation
+    isNearBottom.value = true;
     lastReceivedMessageId.value = '';
-    
-    // Reload messages for this conversation using getSingleMessage API
-    // This API will mark messages as read on the server
-    final otherUserId = _conversationUserIds[conversationId];
-    if (otherUserId != null) {
-      _loadConversationForUserWithSingleMessage(otherUserId);
-    }
-    
-    // Restart polling to ensure fresh messages
-    _startMessagePolling();
-    
-    // Scroll to bottom after conversation loads (with delay to ensure ListView is built)
+
+    _messageSubscription?.cancel();
+
+    _messageSubscription = _messagesRepository
+        .listenToMessages(conversationId)
+        .listen((messages) {
+      final convIndex =
+          conversations.indexWhere((c) => c.id == conversationId);
+      if (convIndex != -1) {
+        final existingConv = conversations[convIndex];
+        final existingIds = existingConv.messages.map((m) => m.id).toSet();
+        final newMessages = messages.where((m) => !existingIds.contains(m.id)).toList();
+        final newIncoming = newMessages.where((m) => !m.isSent).toList();
+
+        conversations[convIndex] =
+            existingConv.copyWith(messages: messages);
+        conversations.refresh();
+
+        // Preserve WhatsApp-like scroll and highlight for new incoming messages
+        if (newIncoming.isNotEmpty) {
+          final mostRecentIncoming = newIncoming.last;
+          lastReceivedMessageId.value = mostRecentIncoming.id;
+          Future.delayed(const Duration(milliseconds: 800), () {
+            if (lastReceivedMessageId.value == mostRecentIncoming.id) {
+              lastReceivedMessageId.value = '';
+            }
+          });
+          if (!isNearBottom.value) {
+            hasNewIncomingMessage.value = true;
+          } else {
+            scrollToBottom(smooth: true);
+          }
+        } else if (newMessages.isNotEmpty) {
+          scrollToBottom(smooth: true);
+        }
+      }
+    });
+
+    // Scroll to bottom after conversation loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 100), () {
         scrollToBottom(smooth: false, force: true);
@@ -1141,339 +1159,8 @@ class MessagesController extends GetxController {
     selectedConversationId.value = '';
     messageInput.value = '';
     messageController.clear();
-    stopTyping(); // Stop typing indicator when closing conversation
-    // Restart polling for conversation list view (refresh all conversations)
-    _startMessagePolling();
-  }
-
-  /// Start periodic polling for new messages
-  /// Ensures only ONE timer exists and prevents overlapping calls
-  void _startMessagePolling() {
-    _stopMessagePolling(); // Stop any existing timer
-    
-    _messagePollingTimer = Timer.periodic(_pollingInterval, (timer) async {
-      // Prevent overlapping polling calls
-      if (_isPollingInProgress) {
-        debugPrint('⏭️ Messages: Skipping polling - previous call still in progress');
-        return;
-      }
-      
-      try {
-        _isPollingInProgress = true;
-        
-        // If a conversation is selected, refresh messages for that conversation
-        if (selectedConversationId.value.isNotEmpty) {
-          final conversationId = selectedConversationId.value;
-          final otherUserId = _conversationUserIds[conversationId];
-          
-          if (otherUserId != null) {
-            // Silently refresh messages (don't show loading indicator)
-            await _refreshMessagesForConversation(otherUserId);
-          }
-        } else {
-          // If no conversation is selected, refresh all conversations to update last messages
-          await _refreshAllConversations();
-        }
-      } catch (e) {
-        // Log error but continue polling
-        debugPrint('⚠️ Error in polling callback (continuing): $e');
-      } finally {
-        _isPollingInProgress = false;
-      }
-    });
-    
-    debugPrint('🔄 Started message polling (every ${_pollingInterval.inSeconds}s)');
-  }
-
-  /// Refresh all conversations to update last messages and unread counts (for conversation list view)
-  Future<void> _refreshAllConversations() async {
-    try {
-      bool anyUpdated = false;
-      // Refresh each conversation's last message and unread count
-      for (int i = 0; i < conversations.length; i++) {
-        final conversation = conversations[i];
-        final otherUserId = _conversationUserIds[conversation.id];
-        if (otherUserId != null) {
-          // Add small delay between requests to avoid overwhelming the server
-          if (i > 0) {
-            await Future.delayed(const Duration(milliseconds: 100));
-          }
-          
-          final wasUpdated = await _refreshConversationLastMessage(otherUserId, conversation.id);
-          if (wasUpdated) {
-            anyUpdated = true;
-          }
-        }
-      }
-      // Sort once after all updates (more efficient than sorting after each update)
-      // Note: Individual conversations also sort immediately when last message changes
-      if (anyUpdated) {
-        _sortConversationsByTimestamp();
-        debugPrint('🔄 Refreshed all conversations: ${conversations.length} conversations updated');
-      }
-    } catch (e) {
-      debugPrint('⚠️ Error refreshing conversations (silent): $e');
-    }
-  }
-
-  /// Refresh only the last message and unread count for a conversation (lighter operation)
-  /// Uses getAllMessages API for regular polling (doesn't mark messages as read)
-  /// Only getSingleMessage is used when conversation is actually opened
-  /// Returns true if the conversation was updated, false otherwise
-  Future<bool> _refreshConversationLastMessage(int otherUserId, String conversationId) async {
-    try {
-      // Skip if conversation is currently open (already being refreshed by polling)
-      if (selectedConversationId.value == conversationId) {
-        return false;
-      }
-      
-      // Use getAllMessages for regular polling (doesn't mark messages as read)
-      // This ensures badges don't disappear until conversation is actually opened
-      final messagesResponse = await _messagesRepository.getAllMessages(otherUserId: otherUserId);
-      
-      if (messagesResponse.isSuccess && messagesResponse.data != null) {
-        final allMessages = messagesResponse.data!;
-        
-        // Safety guard
-        if (_currentUserId == null) {
-          debugPrint('⚠️ Messages: Current user ID is null, cannot refresh conversation');
-          return false;
-        }
-        
-        // Filter messages using MessageUtils
-        final filteredMessages = MessageUtils.filterConversationMessages(
-          allMessages,
-          _currentUserId!,
-          otherUserId,
-        );
-        
-        if (filteredMessages.isNotEmpty) {
-          // Map and sort messages using MessageUtils
-          final mappedMessages = filteredMessages
-              .map((msg) => MessageUtils.mapApiMessage(msg, _currentUserId))
-              .toList();
-          final uniqueMessages = MessageUtils.removeDuplicateMessages(mappedMessages);
-          final sortedMessages = MessageUtils.sortMessagesByTimestamp(uniqueMessages);
-          
-          final lastMsg = sortedMessages.last;
-          final convIndex = conversations.indexWhere((c) => c.id == conversationId);
-          
-          if (convIndex != -1) {
-            final existingConv = conversations[convIndex];
-            
-            // Check for new messages from the other user (not sent by current user)
-            // This is the ONLY reliable way to detect new unread messages during polling
-            final existingMessageIds = existingConv.messages.map((m) => m.id).toSet();
-            final newMessages = sortedMessages.where((m) => !existingMessageIds.contains(m.id)).toList();
-            final newUnreadMessages = newMessages.where((m) => !m.isSent).toList();
-            
-            // Calculate unread count:
-            // - Always increment for new messages from other user (regardless of is_read from getAllMessages)
-            // - Never decrease during polling (preserve badges until conversation is opened)
-            // - Only decrease when conversation is actually opened (handled by getSingleMessage)
-            final newUnreadCount = newUnreadMessages.isNotEmpty
-                ? existingConv.unreadCount + newUnreadMessages.length
-                : existingConv.unreadCount; // Preserve existing count if no new messages
-            
-            // Determine if we need to update (last message changed OR unread count increased)
-            final lastMessageChanged = lastMsg.text != existingConv.lastMessage || 
-                                     lastMsg.timestamp != existingConv.timestamp;
-            final unreadCountIncreased = newUnreadCount > existingConv.unreadCount;
-            final shouldUpdate = lastMessageChanged || unreadCountIncreased;
-            
-            if (shouldUpdate) {
-              conversations[convIndex] = existingConv.copyWith(
-                lastMessage: lastMsg.text,
-                timestamp: lastMsg.timestamp,
-                unreadCount: newUnreadCount,
-              );
-              
-              // Only refresh if conversation actually changed
-              conversations.refresh();
-              
-              // Sort immediately if last message changed (Messenger behavior: move to top)
-              if (lastMessageChanged) {
-                _sortConversationsByTimestamp();
-              }
-              
-              debugPrint('✅ Updated conversation $conversationId: unreadCount=$newUnreadCount (was ${existingConv.unreadCount}, newUnread=${newUnreadMessages.length}), lastMessage="${lastMsg.text}"');
-              
-              return true;
-            }
-          }
-        }
-      }
-      return false;
-    } catch (e) {
-      // Silently fail
-      debugPrint('⚠️ Error refreshing conversation last message (silent): $e');
-      return false;
-    }
-  }
-
-  /// Stop periodic polling
-  void _stopMessagePolling() {
-    _messagePollingTimer?.cancel();
-    _messagePollingTimer = null;
-    debugPrint('⏹️ Stopped message polling');
-  }
-
-  /// Refresh messages for a conversation without showing loading state
-  /// IMPORTANT: This method is called from polling and should ONLY use getAllMessages
-  /// getSingleMessage is ONLY used when conversation is explicitly opened (selectConversation)
-  Future<void> _refreshMessagesForConversation(int otherUserId) async {
-    try {
-      // Safety guard
-      if (_currentUserId == null) {
-        debugPrint('⚠️ Messages: Current user ID is null, cannot refresh messages');
-        return;
-      }
-      
-      if (otherUserId == _currentUserId) {
-        debugPrint('⏭️ Messages: Skipping refresh for self (ID: $otherUserId)');
-        return;
-      }
-      
-      // ALWAYS use getAllMessages during polling (never use getSingleMessage here)
-      // getSingleMessage is only used when conversation is explicitly opened
-      final messagesResponse = await _messagesRepository.getAllMessages(otherUserId: otherUserId);
-      
-      if (messagesResponse.isSuccess && messagesResponse.data != null) {
-        final allMessages = messagesResponse.data!;
-        
-        // Filter messages using MessageUtils
-        final filteredMessages = MessageUtils.filterConversationMessages(
-          allMessages,
-          _currentUserId!,
-          otherUserId,
-        );
-        
-        // Map, remove duplicates, and sort messages using MessageUtils
-        final mappedMessages = filteredMessages
-            .map((msg) => MessageUtils.mapApiMessage(msg, _currentUserId))
-            .toList();
-        final uniqueMessages = MessageUtils.removeDuplicateMessages(mappedMessages);
-        final sortedMessages = MessageUtils.sortMessagesByTimestamp(uniqueMessages);
-        
-        // Get conversation ID
-        final conversationId = 'conv_$otherUserId';
-        final convIndex = conversations.indexWhere((c) => c.id == conversationId);
-        
-        if (convIndex != -1) {
-          final existingConv = conversations[convIndex];
-          
-          // Check for new messages (by ID) - prevent duplicates
-          final existingMessageIds = existingConv.messages.map((m) => m.id).toSet();
-          final newMessages = sortedMessages.where((m) => !existingMessageIds.contains(m.id)).toList();
-          
-          // Check for updated messages (same ID but different content or timestamp)
-          final updatedMessages = <Message>[];
-          final existingMessagesMap = <String, Message>{};
-          for (final msg in existingConv.messages) {
-            existingMessagesMap[msg.id] = msg;
-          }
-          
-          for (final newMsg in sortedMessages) {
-            if (existingMessagesMap.containsKey(newMsg.id)) {
-              final existingMsg = existingMessagesMap[newMsg.id]!;
-              // Check if message content or timestamp changed (indicates edit)
-              if (existingMsg.text != newMsg.text || 
-                  existingMsg.timestamp != newMsg.timestamp) {
-                updatedMessages.add(newMsg);
-              }
-            }
-          }
-          
-          // Update if we have new messages, updated messages, or count changed
-          if (newMessages.isNotEmpty || 
-              updatedMessages.isNotEmpty || 
-              sortedMessages.length != existingConv.messages.length) {
-            // Update conversation with refreshed messages
-            final lastMsg = sortedMessages.isNotEmpty ? sortedMessages.last : null;
-            
-            // If conversation is currently open, mark new received messages as read immediately
-            final isConversationOpen = selectedConversationId.value == conversationId;
-            final finalMessages = isConversationOpen
-                ? sortedMessages.map((m) {
-                    // Mark new received messages as read when conversation is open
-                    if (!m.isSent && newMessages.any((nm) => nm.id == m.id)) {
-                      return m.copyWith(isRead: true);
-                    }
-                    return m;
-                  }).toList()
-                : sortedMessages;
-            
-            // Calculate unread count using MessageUtils
-            final unreadCount = MessageUtils.calculateUnreadCount(finalMessages);
-            
-            // Determine if last message changed (for sorting)
-            final lastMessageChanged = lastMsg != null && 
-                                     (lastMsg.text != existingConv.lastMessage || 
-                                      lastMsg.timestamp != existingConv.timestamp);
-            
-            // Update conversation
-            conversations[convIndex] = existingConv.copyWith(
-              messages: finalMessages,
-              lastMessage: lastMsg?.text ?? existingConv.lastMessage,
-              timestamp: lastMsg?.timestamp ?? existingConv.timestamp,
-              unreadCount: unreadCount,
-              // Preserve name and avatar
-            );
-            
-            // Only refresh if conversation actually changed
-            conversations.refresh();
-            
-            // Sort immediately if last message changed (Messenger behavior: move to top)
-            if (lastMessageChanged) {
-              _sortConversationsByTimestamp();
-            }
-            
-            // Handle new incoming messages (WhatsApp-like behavior)
-            if (newMessages.isNotEmpty) {
-              final incomingMessages = newMessages.where((m) => !m.isSent).toList();
-              
-              if (isConversationOpen) {
-                debugPrint('✅ Messages: Marked ${incomingMessages.length} new received messages as read (conversation is open)');
-              }
-              
-              // If there are incoming messages, check if we should auto-scroll or show flag
-              if (incomingMessages.isNotEmpty) {
-                // Track last received message ID for highlight animation
-                // Use the most recent incoming message
-                final mostRecentIncoming = incomingMessages.last;
-                lastReceivedMessageId.value = mostRecentIncoming.id;
-                
-                // Clear highlight after animation duration (800ms)
-                Future.delayed(const Duration(milliseconds: 800), () {
-                  if (lastReceivedMessageId.value == mostRecentIncoming.id) {
-                    lastReceivedMessageId.value = '';
-                  }
-                });
-                
-                // Check if user is near bottom - if not, set flag instead of scrolling
-                if (!isNearBottom.value) {
-                  hasNewIncomingMessage.value = true;
-                  debugPrint('📱 Messages: New incoming message(s) arrived, user is scrolled up - showing scroll indicator');
-                } else {
-                  // User is near bottom, auto-scroll
-                  scrollToBottom(smooth: true);
-                }
-              } else {
-                // Only sent messages (user's own), always scroll
-                scrollToBottom(smooth: true);
-              }
-              
-              debugPrint('🔄 Refreshed messages: Found ${newMessages.length} new message(s), ${updatedMessages.length} updated message(s)');
-            } else if (updatedMessages.isNotEmpty) {
-              debugPrint('🔄 Refreshed messages: Found ${newMessages.length} new message(s), ${updatedMessages.length} updated message(s)');
-            }
-          }
-        }
-      }
-    } catch (e) {
-      // Silently fail - don't spam logs with polling errors
-      debugPrint('⚠️ Error refreshing messages (silent): $e');
-    }
+    stopTyping();
+    _messageSubscription?.cancel();
   }
 
   // Send message
