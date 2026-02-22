@@ -8,6 +8,7 @@ import 'auth_error_handler.dart';
 import 'session_manager.dart';
 import '../../app/routes/app_routes.dart';
 import 'preferences_service.dart';
+import '../../data/services/auth_service.dart';
 
 /// API Service - Handles all HTTP requests with automatic token management
 class ApiService {
@@ -152,15 +153,18 @@ class ApiService {
     );
   }
 
-  /// GET request with automatic token management
+  /// GET request with automatic token management.
+  /// If [body] is provided, sends GET with JSON body (e.g. Laravel GET /api/users with body).
   Future<Map<String, dynamic>> get(
       String endpoint, {
+        Map<String, dynamic>? body,
         Map<String, String>? headers,
         bool requireAuth = true,
       }) async {
     return _executeWithRetry(
       () => _getInternal(
         endpoint: endpoint,
+        body: body,
         headers: headers,
         requireAuth: requireAuth,
       ),
@@ -170,6 +174,7 @@ class ApiService {
   /// Internal GET request implementation
   Future<Map<String, dynamic>> _getInternal({
     required String endpoint,
+    Map<String, dynamic>? body,
     Map<String, String>? headers,
     bool requireAuth = true,
   }) async {
@@ -181,11 +186,13 @@ class ApiService {
       );
 
       debugPrint('🌐 GET Request: $url');
+      if (body != null && body.isNotEmpty) {
+        debugPrint('📤 GET Body: $body');
+      }
 
-      final response = await _client.get(
-        url,
-        headers: requestHeaders,
-      );
+      final response = body != null && body.isNotEmpty
+          ? await _sendGetWithBody(url: url, headers: requestHeaders, body: body)
+          : await _client.get(url, headers: requestHeaders);
 
       debugPrint('📡 Response Status: ${response.statusCode}');
       debugPrint('📄 Response Body: ${response.body}');
@@ -195,6 +202,19 @@ class ApiService {
       debugPrint('❌ API Error: $e');
       rethrow;
     }
+  }
+
+  /// Sends GET request with JSON body (for APIs that expect GET + body).
+  Future<http.Response> _sendGetWithBody({
+    required Uri url,
+    required Map<String, String> headers,
+    required Map<String, dynamic> body,
+  }) async {
+    final request = http.Request('GET', url);
+    request.headers.addAll(headers);
+    request.body = jsonEncode(body);
+    final streamed = await _client.send(request);
+    return await http.Response.fromStream(streamed);
   }
 
   /// Check if response body is JSON
@@ -393,6 +413,10 @@ class ApiService {
   /// Note: This is a fallback - AuthErrorHandler should handle most cases
   Future<void> _forceLogout() async {
     try {
+      // Firebase: set user offline and sign out (for real-time chat)
+      try {
+        await AuthService().signOutAndSetOffline();
+      } catch (_) {}
       // Clear tokens
       await _tokenManager.clearTokens();
       

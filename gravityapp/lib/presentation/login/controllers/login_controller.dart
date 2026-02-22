@@ -8,6 +8,7 @@ import '../../../app/routes/app_routes.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/consent_repository.dart';
 import '../../../data/repositories/goals_repository.dart';
+import '../../../data/services/auth_service.dart';
 import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../core/services/token_manager.dart';
@@ -274,12 +275,37 @@ class LoginController extends GetxController {
           debugPrint('⚠️ Could not determine user ID');
         }
 
-        // Save user type based on selected role
-        final userTypeString = selectedRole.value == UserType.coach
-            ? 'coach'
-            : 'customer';
-        await PreferencesService.saveUserType(userTypeString);
-        debugPrint('✅ User type saved: $userTypeString');
+        // Save user type: prefer Laravel response.user.role, fallback to selected role
+        final apiRole = response.data?.role?.toString().trim().toLowerCase();
+        final fallbackRole = selectedRole.value == UserType.coach ? 'coach' : 'customer';
+        final roleToSave = (apiRole != null && apiRole.isNotEmpty && (apiRole == 'coach' || apiRole == 'customer'))
+            ? apiRole
+            : fallbackRole;
+        await PreferencesService.saveUserType(roleToSave);
+        debugPrint('✅ User type saved from ${apiRole != null ? 'API' : 'selected role'}: $roleToSave');
+
+        // Firebase: sign in with custom token and sync user to Firestore (for real-time chat)
+        final firebaseCustomToken = result['firebase_custom_token'] as String?;
+        if (firebaseCustomToken != null && firebaseCustomToken.isNotEmpty) {
+          try {
+            final authService = AuthService();
+            final name = response.data?.name ?? userName ?? '';
+            final role = response.data?.role ?? roleToSave;
+            final profileImageUrl = response.data?.profileImage;
+            await authService.signInWithCustomTokenAndSyncUser(
+              firebaseCustomToken: firebaseCustomToken,
+              name: name,
+              role: role,
+              profileImageUrl: profileImageUrl,
+            );
+            debugPrint('✅ Firebase sign-in and Firestore user sync completed');
+          } catch (e) {
+            debugPrint('⚠️ Firebase custom token sign-in failed (chat may not work): $e');
+            // Don't block login; user is still logged in via Laravel
+          }
+        } else {
+          debugPrint('⚠️ No firebase_custom_token in login response (real-time chat disabled)');
+        }
 
         // Clear any previous user's profile image first to prevent image leakage
         await PreferencesService.clearProfileImage();

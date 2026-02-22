@@ -8,6 +8,7 @@ import '../../core/services/preferences_service.dart';
 import '../../core/services/token_manager.dart';
 import '../../core/services/device_manager.dart';
 import '../../core/services/session_manager.dart';
+import '../services/auth_service.dart';
 import '../model/api_response.dart';
 import '../model/user_model.dart';
 
@@ -120,6 +121,10 @@ class AuthRepository {
         data: userData != null ? UserModel.fromJson(userData) : null,
       );
 
+      // Firebase custom token for signInWithCustomToken (prefer firebase_custom_token; fallback fcm_token)
+      final userMap = userData ?? {};
+      final firebaseCustomToken = userMap['firebase_custom_token'] as String? ?? userMap['fcm_token'] as String?;
+
       return {
         'response': apiResponse,
         'access_token': accessToken,
@@ -128,6 +133,7 @@ class AuthRepository {
         'user_id': userId,
         'user_name': userName,
         'email': userEmail,
+        'firebase_custom_token': firebaseCustomToken,
       };
     } on ApiException catch (e) {
       debugPrint('❌ Login API Error: ${e.message}');
@@ -279,6 +285,13 @@ class AuthRepository {
           debugPrint('⚠️ Logout API Unknown Error: $e');
           // Continue with local logout even if API call fails
         }
+      }
+
+      // Firebase: set user offline in Firestore and sign out (for real-time chat)
+      try {
+        await AuthService().signOutAndSetOffline();
+      } catch (e) {
+        debugPrint('⚠️ Firebase sign-out/setOffline failed: $e');
       }
 
       // Clear tokens locally (TokenManager + legacy auth_token)

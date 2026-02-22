@@ -1,16 +1,19 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gravityapp/data/model/conversation.dart';
 import 'package:gravityapp/data/model/message.dart';
 import '../../../data/repositories/messages_repository.dart';
+import '../../../data/services/firestore_chat_service.dart';
 import '../../../core/services/preferences_service.dart';
 import '../utils/message_utils.dart';
 
 class MessagesController extends GetxController {
   // Repository
   final MessagesRepository _messagesRepository = MessagesRepository();
+  final FirestoreChatService _firestoreChat = FirestoreChatService();
 
   // Current view state
   final RxString selectedConversationId = ''.obs;
@@ -62,17 +65,26 @@ class MessagesController extends GetxController {
   // Getter for current user ID (for UI access)
   int? get currentUserId => _currentUserId;
   
-  // Map to store conversation partner user IDs
+  // Map to store conversation partner user IDs (Laravel ID, for legacy/API)
   final Map<String, int> _conversationUserIds = {};
+  // Map to store other participant's Firebase UID per conversationId (for Firestore)
+  final Map<String, String> _conversationOtherFirebaseUid = {};
   
   // Map to store user names
   final Map<int, String> _userNames = {};
+  // Map to store user names by Firebase UID (for Firestore conversations)
+  final Map<String, String> _userNamesByUid = {};
   
   // Map to store user profile images
   final Map<int, String> _userProfileImages = {};
+  final Map<String, String> _userProfileImagesByUid = {};
 
   // Firestore real-time message stream subscription
   StreamSubscription<List<Message>>? _messageSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _conversationsSubscription;
+
+  /// Current Firebase UID (null if not signed in with custom token).
+  String? get currentFirebaseUid => _firestoreChat.currentUid;
 
   // Typing indicator debounce timer
   Timer? _typingDebounceTimer;
@@ -151,6 +163,7 @@ class MessagesController extends GetxController {
   void onClose() {
     WidgetsBinding.instance.removeObserver(_lifecycleObserver);
     _messageSubscription?.cancel();
+    _conversationsSubscription?.cancel();
     _stopTypingDebounce();
     messagesScrollController.removeListener(_onScroll);
     messageController.dispose();
@@ -281,7 +294,81 @@ class MessagesController extends GetxController {
     debugPrint('📱 Messages: Current user ID: $_currentUserId');
   }
 
+  /// Subscribe to Firestore conversations stream (when Firebase UID is available).
+  void _subscribeToFirestoreConversations() {
+    final uid = currentFirebaseUid;
+    if (uid == null || uid.isEmpty) return;
+
+    _conversationsSubscription?.cancel();
+    isLoadingConversations.value = true;
+
+    _conversationsSubscription = _firestoreChat.streamConversations().listen(
+      (list) async {
+        final built = <Conversation>[];
+        for (final doc in list) {
+          final id = doc['id'] as String? ?? '';
+          final members = List<String>.from(doc['members'] ?? []);
+          final otherUid = members.where((m) => m != uid).firstOrNull;
+          if (otherUid == null) continue;
+
+          _conversationOtherFirebaseUid[id] = otherUid;
+          String name = _userNamesByUid[otherUid] ?? 'Loading...';
+          String? avatar = _userProfileImagesByUid[otherUid];
+          final userData = await _firestoreChat.getUser(otherUid);
+          if (userData != null) {
+            name = userData['name'] as String? ?? 'Unknown';
+            avatar = userData['profileImage'] as String?;
+            _userNamesByUid[otherUid] = name;
+            if (avatar != null) _userProfileImagesByUid[otherUid] = avatar;
+          }
+
+          final lastMessage = doc['lastMessage'] as String? ?? '';
+          final lastMessageTime = doc['lastMessageTime'];
+          DateTime timestamp = DateTime.now();
+          if (lastMessageTime != null) {
+            if (lastMessageTime is Timestamp) {
+              timestamp = lastMessageTime.toDate();
+            }
+          }
+
+          built.add(Conversation(
+            id: id,
+            name: name,
+            avatar: _getAvatarForFirebaseUid(otherUid, avatar),
+            lastMessage: lastMessage.isEmpty ? 'No messages yet' : lastMessage,
+            timestamp: timestamp,
+            unreadCount: 0,
+            role: userType.value == 'customer' ? ConversationRole.coach : ConversationRole.customer,
+            messages: [],
+          ));
+        }
+        conversations.value = built;
+        conversations.refresh();
+        isLoadingConversations.value = false;
+      },
+      onError: (e) {
+        debugPrint('❌ Firestore conversations stream error: $e');
+        isLoadingConversations.value = false;
+      },
+    );
+    debugPrint('✅ Subscribed to Firestore conversations stream');
+  }
+
+  String _getAvatarForFirebaseUid(String uid, String? profileImage) {
+    if (profileImage != null && profileImage.isNotEmpty) {
+      if (profileImage.startsWith('http')) return profileImage;
+      return 'https://gravity.attoexasolutions.com/storage/$profileImage';
+    }
+    return '👤';
+  }
+
   Future<void> _loadConversations() async {
+    final firebaseUid = currentFirebaseUid;
+    if (firebaseUid != null && firebaseUid.isNotEmpty) {
+      _subscribeToFirestoreConversations();
+      return;
+    }
+
     if (_currentUserId == null) {
       debugPrint('❌ Messages: No user ID found');
       return;
@@ -299,7 +386,7 @@ class MessagesController extends GetxController {
       // Determine which role to fetch (opposite of current user)
       final targetRole = userType.value == 'customer' ? 'coach' : 'customer';
       
-      debugPrint('📱 Messages: Loading $targetRole users for ${userType.value}');
+      debugPrint('📱 Messages: Loading $targetRole users for ${userType.value} (Laravel fallback)');
 
       // Try to get list of users (coaches or customers)
       final usersResponse = await _messagesRepository.getAllUsers(role: targetRole);
@@ -938,7 +1025,7 @@ class MessagesController extends GetxController {
     return conversations.fold(0, (sum, conv) => sum + conv.unreadCount);
   }
 
-  // Select conversation — uses Firestore real-time stream for messages
+  // Select conversation — uses Firestore real-time stream for messages when Firebase UID is set
   void selectConversation(String conversationId) {
     selectedConversationId.value = conversationId;
 
@@ -949,22 +1036,37 @@ class MessagesController extends GetxController {
 
     _messageSubscription?.cancel();
 
-    _messageSubscription = _messagesRepository
-        .listenToMessages(conversationId)
-        .listen((messages) {
+    final uid = currentFirebaseUid;
+    final stream = (uid != null && uid.isNotEmpty)
+        ? _firestoreChat.streamMessages(conversationId)
+        : _messagesRepository.listenToMessages(conversationId);
+
+    _messageSubscription = stream.listen((messages) {
+      final currentUid = this.currentFirebaseUid ?? _currentUserId?.toString();
+      final messagesWithSent = messages.map((m) {
+        final isSent = currentUid != null && m.senderId == currentUid;
+        return Message(
+          id: m.id,
+          senderId: m.senderId,
+          text: m.text,
+          timestamp: m.timestamp,
+          isRead: m.isRead,
+          isSent: isSent,
+        );
+      }).toList();
+
       final convIndex =
           conversations.indexWhere((c) => c.id == conversationId);
       if (convIndex != -1) {
         final existingConv = conversations[convIndex];
         final existingIds = existingConv.messages.map((m) => m.id).toSet();
-        final newMessages = messages.where((m) => !existingIds.contains(m.id)).toList();
+        final newMessages = messagesWithSent.where((m) => !existingIds.contains(m.id)).toList();
         final newIncoming = newMessages.where((m) => !m.isSent).toList();
 
         conversations[convIndex] =
-            existingConv.copyWith(messages: messages);
+            existingConv.copyWith(messages: messagesWithSent);
         conversations.refresh();
 
-        // Preserve WhatsApp-like scroll and highlight for new incoming messages
         if (newIncoming.isNotEmpty) {
           final mostRecentIncoming = newIncoming.last;
           lastReceivedMessageId.value = mostRecentIncoming.id;
@@ -983,6 +1085,10 @@ class MessagesController extends GetxController {
         }
       }
     });
+
+    if (uid != null && uid.isNotEmpty) {
+      _firestoreChat.markMessagesAsRead(conversationId);
+    }
 
     // Scroll to bottom after conversation loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1163,77 +1269,113 @@ class MessagesController extends GetxController {
     _messageSubscription?.cancel();
   }
 
+  /// Open or create a conversation with another user by Firebase UID (e.g. from "New chat" with API user that has firebase_uid).
+  Future<void> openConversationWithUser({
+    required String otherFirebaseUid,
+    required String otherName,
+    String? otherAvatar,
+  }) async {
+    if (currentFirebaseUid == null || currentFirebaseUid!.isEmpty) {
+      debugPrint('❌ openConversationWithUser: Firebase UID not available');
+      return;
+    }
+    try {
+      final conversationId = await _firestoreChat.getOrCreateConversation(
+        myUid: currentFirebaseUid!,
+        otherUid: otherFirebaseUid,
+        otherUserPreview: {'name': otherName, 'avatar': otherAvatar},
+      );
+      _conversationOtherFirebaseUid[conversationId] = otherFirebaseUid;
+      _userNamesByUid[otherFirebaseUid] = otherName;
+      if (otherAvatar != null) _userProfileImagesByUid[otherFirebaseUid] = otherAvatar;
+
+      final existing = conversations.any((c) => c.id == conversationId);
+      if (!existing) {
+        conversations.insert(
+          0,
+          Conversation(
+            id: conversationId,
+            name: otherName,
+            avatar: _getAvatarForFirebaseUid(otherFirebaseUid, otherAvatar),
+            lastMessage: 'No messages yet',
+            timestamp: DateTime.now(),
+            unreadCount: 0,
+            role: userType.value == 'customer' ? ConversationRole.coach : ConversationRole.customer,
+            messages: [],
+          ),
+        );
+        conversations.refresh();
+      }
+      selectConversation(conversationId);
+    } catch (e) {
+      debugPrint('❌ openConversationWithUser: $e');
+      Get.snackbar(
+        'Error',
+        'Could not start conversation.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Get.theme.colorScheme.error,
+        colorText: Get.theme.colorScheme.onError,
+      );
+    }
+  }
+
   // Send message
   Future<void> sendMessage() async {
-    // Safety guards
     if (messageInput.value.trim().isEmpty || selectedConversationId.value.isEmpty) {
-      return;
-    }
-    
-    if (_currentUserId == null) {
-      debugPrint('❌ Messages: Current user ID is null, cannot send message');
-      Get.snackbar(
-        'Error',
-        'User session invalid. Please login again.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-        duration: const Duration(seconds: 2),
-      );
-      return;
-    }
-
-    final apiToken = PreferencesService.getAuthToken();
-    if (apiToken == null || apiToken.isEmpty) {
-      Get.snackbar(
-        'Error',
-        'Session expired. Please login again.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-        duration: const Duration(seconds: 2),
-      );
-      return;
-    }
-
-    final otherUserId = _conversationUserIds[selectedConversationId.value];
-    if (otherUserId == null) {
-      Get.snackbar(
-        'Error',
-        'Invalid conversation. Please try again.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-        duration: const Duration(seconds: 2),
-      );
-      return;
-    }
-    
-    // Prevent sending message to self
-    if (otherUserId == _currentUserId) {
-      debugPrint('❌ Messages: Cannot send message to self (User ID: $otherUserId)');
-      Get.snackbar(
-        'Error',
-        'Cannot send message to yourself.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-        duration: const Duration(seconds: 2),
-      );
       return;
     }
 
     final convIndex = conversations.indexWhere((c) => c.id == selectedConversationId.value);
     if (convIndex == -1) return;
 
+    final useFirestore = currentFirebaseUid != null && currentFirebaseUid!.isNotEmpty;
+    String? apiToken;
+    int? otherUserId;
+    if (!useFirestore) {
+      if (_currentUserId == null) {
+        Get.snackbar('Error', 'User session invalid. Please login again.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Get.theme.colorScheme.error,
+            colorText: Get.theme.colorScheme.onError,
+            duration: const Duration(seconds: 2));
+        return;
+      }
+      apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        Get.snackbar('Error', 'Session expired. Please login again.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Get.theme.colorScheme.error,
+            colorText: Get.theme.colorScheme.onError,
+            duration: const Duration(seconds: 2));
+        return;
+      }
+      otherUserId = _conversationUserIds[selectedConversationId.value];
+      if (otherUserId == null) {
+        Get.snackbar('Error', 'Invalid conversation. Please try again.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Get.theme.colorScheme.error,
+            colorText: Get.theme.colorScheme.onError,
+            duration: const Duration(seconds: 2));
+        return;
+      }
+      if (otherUserId == _currentUserId) {
+        Get.snackbar('Error', 'Cannot send message to yourself.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Get.theme.colorScheme.error,
+            colorText: Get.theme.colorScheme.onError,
+            duration: const Duration(seconds: 2));
+        return;
+      }
+    }
+
     final messageText = messageInput.value.trim();
     final messageContent = messageText; // Use same text for both fields
 
-    // Create optimistic message
+    final currentUidStr = currentFirebaseUid ?? _currentUserId?.toString() ?? 'me';
     final tempMessageId = 'temp-${DateTime.now().millisecondsSinceEpoch}';
     final optimisticMessage = Message(
       id: tempMessageId,
-      senderId: _currentUserId?.toString() ?? 'me',
+      senderId: currentUidStr,
       text: messageText,
       timestamp: DateTime.now(),
       isRead: true,
@@ -1277,67 +1419,80 @@ class MessagesController extends GetxController {
     messageController.clear();
     stopTyping();
 
+    if (currentFirebaseUid != null && currentFirebaseUid!.isNotEmpty) {
+      var otherUid = _conversationOtherFirebaseUid[selectedConversationId.value];
+      if ((otherUid == null || otherUid.isEmpty) && selectedConversationId.value.contains('_')) {
+        final parts = selectedConversationId.value.split('_');
+        otherUid = parts.firstWhere((p) => p != currentFirebaseUid, orElse: () => parts.first);
+      }
+      if (otherUid != null && otherUid.isNotEmpty) {
+        try {
+          await _firestoreChat.sendMessage(
+            conversationId: selectedConversationId.value,
+            myUid: currentFirebaseUid!,
+            otherUid: otherUid,
+            text: messageText,
+          );
+          debugPrint('✅ Message sent via Firestore');
+        } catch (e) {
+          debugPrint('❌ Firestore sendMessage error: $e');
+          final currentConv = conversations[convIndex];
+          final updatedMessages = currentConv.messages.where((m) => m.id != tempMessageId).toList();
+          conversations[convIndex] = currentConv.copyWith(messages: updatedMessages);
+          conversations.refresh();
+          Get.snackbar(
+            'Error',
+            'Failed to send message. Please try again.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Get.theme.colorScheme.error,
+            colorText: Get.theme.colorScheme.onError,
+            duration: const Duration(seconds: 2),
+          );
+        }
+      }
+      return;
+    }
+
     try {
-      // Send to API
+      // Send to API (Laravel fallback when Firebase not available)
       final response = await _messagesRepository.createMessage(
-        apiToken: apiToken,
-        toUserId: otherUserId,
+        apiToken: apiToken!,
+        toUserId: otherUserId!,
         message: messageText,
         messageContent: messageContent,
       );
 
       if (response.isSuccess && response.data != null) {
-        // Replace optimistic message with real message from API
         final apiMessage = MessageUtils.mapApiMessage(response.data!, _currentUserId);
         final currentConv = conversations[convIndex];
-        
-        // Check for duplicate message ID (shouldn't happen, but safety guard)
         final existingMessageIds = currentConv.messages.map((m) => m.id).toSet();
         if (existingMessageIds.contains(apiMessage.id) && apiMessage.id != tempMessageId) {
-          debugPrint('⚠️ Messages: Duplicate message ID from API, removing optimistic message only');
           final updatedMessages = currentConv.messages.where((m) => m.id != tempMessageId).toList();
           conversations[convIndex] = currentConv.copyWith(messages: updatedMessages);
           conversations.refresh();
           return;
         }
-        
         final updatedMessages = currentConv.messages.map((m) {
           return m.id == tempMessageId ? apiMessage : m;
         }).toList();
-        
-        // Remove duplicates (safety guard)
         final uniqueMessages = MessageUtils.removeDuplicateMessages(updatedMessages);
-
-        // Recalculate unread count using MessageUtils (sent messages don't count as unread)
         final unreadCount = MessageUtils.calculateUnreadCount(uniqueMessages);
-        
-        // Preserve conversation name and avatar when updating
         final finalConv = currentConv.copyWith(
           messages: uniqueMessages,
           lastMessage: apiMessage.text,
           timestamp: apiMessage.timestamp,
           unreadCount: unreadCount,
-          // Keep existing name and avatar - don't overwrite
         );
-        // Update conversation and force immediate UI refresh
         conversations[convIndex] = finalConv;
-        conversations.refresh(); // Force GetX to detect the change immediately
-        
-        // Sort conversations by most recent message (Messenger-like behavior) - real-time
+        conversations.refresh();
         _sortConversationsByTimestamp();
-        
-        // Always scroll for sent messages (user's own messages) - force scroll
         scrollToBottom(smooth: false, force: true);
-
-        debugPrint('✅ Message sent successfully. Total messages: ${finalConv.messages.length}');
-        debugPrint('   - Conversation name preserved: ${finalConv.name}');
+        debugPrint('✅ Message sent via Laravel API');
       } else {
-        // Remove optimistic message on failure
         final currentConv = conversations[convIndex];
         final updatedMessages = currentConv.messages.where((m) => m.id != tempMessageId).toList();
         conversations[convIndex] = currentConv.copyWith(messages: updatedMessages);
-        debugPrint('❌ Message send failed. Removed optimistic message.');
-
+        conversations.refresh();
         Get.snackbar(
           'Error',
           response.message.isNotEmpty ? response.message : 'Failed to send message',
@@ -1349,13 +1504,10 @@ class MessagesController extends GetxController {
       }
     } catch (e) {
       debugPrint('❌ Error sending message: $e');
-      
-      // Remove optimistic message on error
       final currentConv = conversations[convIndex];
       final updatedMessages = currentConv.messages.where((m) => m.id != tempMessageId).toList();
       conversations[convIndex] = currentConv.copyWith(messages: updatedMessages);
-      debugPrint('❌ Removed optimistic message due to error.');
-
+      conversations.refresh();
       Get.snackbar(
         'Error',
         'Failed to send message. Please try again.',

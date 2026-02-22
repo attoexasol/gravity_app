@@ -10,6 +10,11 @@ class UserModel {
   final String lastActive;
   final String updatedAt;
   final String createdAt;
+  /// Firebase custom token for signInWithCustomToken (from Laravel login).
+  /// Prefer API field name firebase_custom_token; fallback fcm_token for backward compat.
+  final String? firebaseCustomToken;
+  /// Firebase UID for other users (e.g. from all_users). Used to build conversationId.
+  final String? firebaseUid;
 
   UserModel({
     required this.id,
@@ -22,10 +27,13 @@ class UserModel {
     required this.lastActive,
     required this.updatedAt,
     required this.createdAt,
+    this.firebaseCustomToken,
+    this.firebaseUid,
   });
 
   /// Create UserModel from JSON
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    final token = json['firebase_custom_token'] as String? ?? json['fcm_token'] as String?;
     return UserModel(
       id: json['id'] ?? json['user_id'] ?? 0, // Support both 'id' and 'user_id'
       name: json['name'] ?? json['user_name'] ?? '', // Support both 'name' and 'user_name'
@@ -37,6 +45,8 @@ class UserModel {
       lastActive: json['last_active'] ?? '',
       updatedAt: json['updated_at'] ?? '',
       createdAt: json['created_at'] ?? '',
+      firebaseCustomToken: token,
+      firebaseUid: json['firebase_uid'] as String?,
     );
   }
 
@@ -53,6 +63,8 @@ class UserModel {
       'last_active': lastActive,
       'updated_at': updatedAt,
       'created_at': createdAt,
+      if (firebaseCustomToken != null) 'firebase_custom_token': firebaseCustomToken,
+      if (firebaseUid != null) 'firebase_uid': firebaseUid,
     };
   }
 
@@ -68,6 +80,8 @@ class UserModel {
     String? lastActive,
     String? updatedAt,
     String? createdAt,
+    String? firebaseCustomToken,
+    String? firebaseUid,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -80,6 +94,8 @@ class UserModel {
       lastActive: lastActive ?? this.lastActive,
       updatedAt: updatedAt ?? this.updatedAt,
       createdAt: createdAt ?? this.createdAt,
+      firebaseCustomToken: firebaseCustomToken ?? this.firebaseCustomToken,
+      firebaseUid: firebaseUid ?? this.firebaseUid,
     );
   }
 }

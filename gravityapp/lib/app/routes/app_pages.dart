@@ -21,6 +21,8 @@ import '../../presentation/daily_details/screens/daily_details_screen.dart';
 import '../../presentation/daily_details/controllers/daily_details_controller.dart';
 import '../../presentation/weight_history/screens/weight_history_screen.dart';
 import '../../presentation/weight_history/controllers/weight_history_controller.dart';
+import '../../presentation/messages/screens/chat_screen.dart';
+import '../../presentation/messages/controllers/chat_controller.dart';
 import 'app_routes.dart';
 import '../../presentation/onboarding/screens/onboarding_screen.dart';
 
@@ -110,6 +112,22 @@ class AppPages {
     GetPage(
       name: AppRoutes.aiCoach,
       page: () => const AiCoachScreen(),
+      transition: Transition.rightToLeft,
+      transitionDuration: const Duration(milliseconds: 300),
+    ),
+
+    // Chat (from inbox)
+    GetPage(
+      name: AppRoutes.chat,
+      page: () => const ChatScreen(),
+      binding: BindingsBuilder(() {
+        final args = Get.arguments as Map<String, dynamic>? ?? {};
+        Get.lazyPut<ChatController>(() => ChatController(
+          otherFirebaseUid: (args['otherUserId']?.toString() ?? ''),
+          otherUserName: (args['otherUserName'] as String?) ?? '',
+          otherUserAvatar: args['otherUserAvatar'] as String?,
+        ));
+      }),
       transition: Transition.rightToLeft,
       transitionDuration: const Duration(milliseconds: 300),
     ),

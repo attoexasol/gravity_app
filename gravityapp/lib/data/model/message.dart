@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Message doc: conversations/{conversationId}/messages/{messageId}
+/// Fields: senderId, text, type, createdAt, isRead, readAt (optional).
 class Message {
   final String id;
   final String senderId;
@@ -7,6 +9,7 @@ class Message {
   final DateTime timestamp;
   final bool isRead;
   final bool isSent;
+  final DateTime? readAt;
 
   Message({
     required this.id,
@@ -15,23 +18,23 @@ class Message {
     required this.timestamp,
     required this.isRead,
     required this.isSent,
+    this.readAt,
   });
 
   /// Create a [Message] from a Firestore document snapshot.
-  /// Handles Timestamp and common field names (snake_case / camelCase).
+  /// Handles null createdAt safely; do not filter out or crash on null timestamp.
   factory Message.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
-    final createdAt = data['created_at'] ?? data['createdAt'];
-    DateTime timestamp = DateTime.now();
-    if (createdAt != null) {
-      if (createdAt is Timestamp) {
-        timestamp = createdAt.toDate();
-      } else if (createdAt is DateTime) {
-        timestamp = createdAt;
-      } else if (createdAt is String) {
-        timestamp = DateTime.tryParse(createdAt) ?? timestamp;
-      }
-    }
+    final createdAt = (data['createdAt'] as Timestamp?)?.toDate() ??
+        (data['created_at'] as Timestamp?)?.toDate();
+    final DateTime timestamp = createdAt ?? DateTime.now();
+    final readAtRaw = data['readAt'] ?? data['read_at'];
+    final DateTime? readAt = readAtRaw is Timestamp
+        ? readAtRaw.toDate()
+        : (readAtRaw is DateTime)
+            ? readAtRaw
+            : null;
+
     return Message(
       id: doc.id,
       senderId: (data['sender_id'] ?? data['senderId'] ?? '').toString(),
@@ -39,6 +42,7 @@ class Message {
       timestamp: timestamp,
       isRead: (data['is_read'] ?? data['isRead'] ?? false) as bool,
       isSent: (data['is_sent'] ?? data['isSent'] ?? false) as bool,
+      readAt: readAt,
     );
   }
 
@@ -49,6 +53,7 @@ class Message {
     DateTime? timestamp,
     bool? isRead,
     bool? isSent,
+    DateTime? readAt,
   }) {
     return Message(
       id: id ?? this.id,
@@ -57,6 +62,7 @@ class Message {
       timestamp: timestamp ?? this.timestamp,
       isRead: isRead ?? this.isRead,
       isSent: isSent ?? this.isSent,
+      readAt: readAt ?? this.readAt,
     );
   }
 }

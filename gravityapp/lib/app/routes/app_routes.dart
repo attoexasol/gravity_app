@@ -28,6 +28,7 @@ class AppRoutes {
   static const String settings = '/settings';
 
   static const String aiCoach = '/ai-coach';
+  static const String chat = '/chat';
   static const String mealUpload = '/meal-upload';
   static const String dailySummary = '/daily-summary';
   static const String weeklyReview = '/weekly-review';

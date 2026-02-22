@@ -9,7 +9,9 @@ import 'app/routes/app_routes.dart';
 import 'app/routes/app_pages.dart';
 import 'core/services/preferences_service.dart';
 import 'core/services/app_lifecycle_service.dart';
+import 'data/services/auth_service.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 
 void main() async {
@@ -24,6 +26,10 @@ void main() async {
     }
     await Firebase.initializeApp();
     debugPrint('✅ Firebase initialized successfully');
+    // Firestore offline cache: messages load instantly when re-entering chat
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+    );
   } catch (e, stackTrace) {
     debugPrint('⚠️ Firebase initialization failed: $e');
     debugPrint('Stack trace: $stackTrace');
@@ -88,6 +94,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     AppLifecycleService().updateState(state);
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      AuthService().updateLastSeenIfNeeded();
+    }
     if (kDebugMode) {
       debugPrint('📱 App lifecycle state changed: $state');
     }

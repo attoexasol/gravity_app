@@ -326,17 +326,20 @@ class MessagesRepository {
   }
 
   /// Real-time stream of messages for a conversation from Firestore.
-  /// Use this instead of polling; Laravel remains the source for creating messages.
+  /// conversations/{conversationId}/messages, orderBy createdAt (camelCase).
   Stream<List<Message>> listenToMessages(String conversationId) {
     return FirebaseFirestore.instance
         .collection('conversations')
         .doc(conversationId)
         .collection('messages')
-        .orderBy('created_at')
+        .orderBy('createdAt', descending: false)
+        .limit(50)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => Message.fromFirestore(doc))
-            .toList());
+        .map((snapshot) {
+          final list = snapshot.docs.map((doc) => Message.fromFirestore(doc)).toList();
+          list.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+          return list;
+        });
   }
 }
 
