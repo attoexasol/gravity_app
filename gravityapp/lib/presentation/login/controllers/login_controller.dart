@@ -379,38 +379,29 @@ class LoginController extends GetxController {
     }
   }
 
-  /// Handle Google login
+  /// Handle Google login: requires role (Coach/Customer). Calls Laravel /api/auth/google, saves api_token + user, then Firebase custom token so UID = Laravel user_id.
   Future<void> handleGoogleLogin() async {
     if (isClosed) return;
 
+    final roleString = selectedRole.value == UserType.coach ? 'Coach' : 'Customer';
+    if (roleString.isEmpty) {
+      AppSnackbar.show(
+        title: 'Select role',
+        message: 'Please select Customer or Coach before signing in.',
+        isSuccess: false,
+      );
+      return;
+    }
+
     try {
       isLoading.value = true;
-
-      final roleString = selectedRole.value == UserType.coach ? 'Coach' : 'Customer';
 
       final result = await _googleAuthService.signInWithGoogle(role: roleString);
 
       if (isClosed) return;
 
       if (result['success'] == true) {
-        // Mark onboarding as completed when user successfully logs in with Google
         await PreferencesService.setOnboardingCompleted(true);
-        
-        // IMPORTANT: Do NOT mark first-time setup as completed here
-        // First-time setup should only be marked when goals are saved in goal_settings_controller
-        // This ensures: Google Sign up → Google Login → Goal Settings (first time) → Dashboard (subsequent)
-        
-        // Verify role was saved correctly (google_auth_service saves it, but let's ensure it's correct)
-        final savedRole = PreferencesService.getUserType();
-        debugPrint('🔍 Google Login - Saved role: $savedRole');
-        debugPrint('🔍 Google Login - Selected role: ${selectedRole.value}');
-        
-        // If role wasn't saved or doesn't match, save it again
-        if (savedRole == null || savedRole.isEmpty) {
-          final roleString = selectedRole.value == UserType.coach ? 'coach' : 'customer';
-          await PreferencesService.saveUserType(roleString);
-          debugPrint('⚠️ Role was missing, saved selected role: $roleString');
-        }
 
         AppSnackbar.show(
           title: 'Login Successful',
@@ -418,23 +409,42 @@ class LoginController extends GetxController {
           isSuccess: true,
         );
 
-        final token = result['token'] as String;
-        await _checkUserDataAndNavigate(token);
+        final token = result['token'] as String?;
+        if (token != null && token.isNotEmpty) {
+          await _checkUserDataAndNavigate(token);
+        } else {
+          if (!isClosed) {
+            Get.offAllNamed(AppRoutes.home);
+          }
+        }
       } else {
-        final error = result['error'] as String;
-        throw Exception(error);
+        final error = result['error'] as String? ?? 'Google login failed';
+        if (!isClosed) {
+          Get.snackbar(
+            'Google Login Failed',
+            error,
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Get.theme.colorScheme.error,
+            colorText: Get.theme.colorScheme.onError,
+            duration: const Duration(seconds: 3),
+          );
+        }
       }
     } catch (e) {
       debugPrint('❌ Google Login Error: $e');
       if (!isClosed) {
-        AppSnackbar.show(
-          title: 'Google Login Failed',
-          message: e.toString().contains('Server error')
-              ? 'Server error. Please try again later.'
-              : e.toString().contains('cancelled')
-                  ? 'Sign-in was cancelled'
-                  : 'Please try again',
-          isSuccess: false,
+        final msg = e.toString().contains('Server error')
+            ? 'Server error. Please try again later.'
+            : e.toString().toLowerCase().contains('cancelled')
+                ? 'Sign-in was cancelled'
+                : 'Please try again';
+        Get.snackbar(
+          'Google Login Failed',
+          msg,
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Get.theme.colorScheme.error,
+          colorText: Get.theme.colorScheme.onError,
+          duration: const Duration(seconds: 3),
         );
       }
     } finally {

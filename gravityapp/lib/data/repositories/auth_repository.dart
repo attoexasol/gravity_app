@@ -355,6 +355,7 @@ class AuthRepository {
       final userId = userData?['user_id'] as int?;
       final userName = userData?['user_name'] as String?;
       final userEmail = userData?['email'] as String?;
+      final firebaseCustomToken = userData?['firebase_custom_token'] as String?;
 
       final apiResponse = ApiResponse<UserModel>(
         status: response['status'] ?? false,
@@ -370,6 +371,7 @@ class AuthRepository {
         'user_id': userId,
         'user_name': userName,
         'email': userEmail,
+        'firebase_custom_token': firebaseCustomToken,
       };
     } on ApiException catch (e) {
       return {
@@ -384,6 +386,23 @@ class AuthRepository {
         'user_id': null,
         'user_name': null,
         'email': null,
+        'firebase_custom_token': null,
+      };
+    } catch (e) {
+      debugPrint('❌ Google Sign-In Unknown Error: $e');
+      return {
+        'response': ApiResponse<UserModel>(
+          status: false,
+          message: 'An unexpected error occurred. Please try again.',
+          error: e.toString(),
+        ),
+        'access_token': null,
+        'refresh_token': null,
+        'token': null,
+        'user_id': null,
+        'user_name': null,
+        'email': null,
+        'firebase_custom_token': null,
       };
     }
   }
