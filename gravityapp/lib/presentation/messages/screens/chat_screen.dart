@@ -9,6 +9,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
+import '../../../app/theme/app_shadows.dart';
 import '../../../data/model/message.dart';
 import '../controllers/chat_controller.dart';
 
@@ -156,40 +157,79 @@ class ChatScreen extends GetView<ChatController> {
 
     showModalBottomSheet<void>(
       context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (canEditDelete) ...[
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  controller.startEdit(message);
-                },
+        bottom: true,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(24),
+            ),
+            boxShadow: AppShadows.shadowXl,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 12, bottom: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.muted,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
               ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: const Text('Delete'),
+              if (canEditDelete) ...[
+                _MessageActionTile(
+                  icon: Icons.edit_outlined,
+                  label: 'Edit',
+                  iconColor: AppColors.primary,
+                  textColor: AppColors.foreground,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    controller.startEdit(message);
+                  },
+                ),
+                const Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: AppColors.accent,
+                ),
+                _MessageActionTile(
+                  icon: Icons.delete_outline,
+                  label: 'Delete',
+                  iconColor: AppColors.destructive,
+                  textColor: AppColors.destructive,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _confirmDeleteMessage(context, message);
+                  },
+                ),
+                const Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: AppColors.accent,
+                ),
+              ],
+              _MessageActionTile(
+                icon: Icons.copy,
+                label: 'Copy',
+                iconColor: AppColors.foreground,
+                textColor: AppColors.foreground,
                 onTap: () {
                   Navigator.pop(ctx);
-                  _confirmDeleteMessage(context, message);
+                  if (message.type != 'deleted' && message.text.isNotEmpty) {
+                    Clipboard.setData(ClipboardData(text: message.text));
+                    Get.snackbar('', 'Copied to clipboard', snackPosition: SnackPosition.BOTTOM);
+                  }
                 },
               ),
             ],
-            ListTile(
-              leading: const Icon(Icons.copy),
-              title: const Text('Copy'),
-              onTap: () {
-                Navigator.pop(ctx);
-                if (message.type != 'deleted' && message.text.isNotEmpty) {
-                  Clipboard.setData(ClipboardData(text: message.text));
-                  Get.snackbar('', 'Copied to clipboard', snackPosition: SnackPosition.BOTTOM);
-                }
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -436,6 +476,48 @@ class ChatScreen extends GetView<ChatController> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MessageActionTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color iconColor;
+  final Color textColor;
+  final VoidCallback onTap;
+
+  const _MessageActionTile({
+    required this.icon,
+    required this.label,
+    required this.iconColor,
+    required this.textColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, size: 22, color: iconColor),
+              const SizedBox(width: 16),
+              Text(
+                label,
+                style: AppTextStyles.textSm.copyWith(
+                  color: textColor,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
