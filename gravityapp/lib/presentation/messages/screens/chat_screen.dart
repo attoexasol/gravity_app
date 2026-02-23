@@ -2,13 +2,14 @@
 // WhatsApp-style UI. ListView.builder reverse; send button visible; no extra scroll wrappers.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
-import '../../../../data/model/message.dart';
+import '../../../data/model/message.dart';
 import '../controllers/chat_controller.dart';
 
 class ChatScreen extends GetView<ChatController> {
@@ -85,11 +86,15 @@ class ChatScreen extends GetView<ChatController> {
             if (item is _DaySeparator) {
               return _DaySeparatorWidget(label: item.label);
             }
-            return _MessageBubble(
-              key: ValueKey((item as _MessageItem).message.id),
-              message: item.message,
-              isMe: item.isMe,
-              isRead: item.message.isRead,
+            final messageItem = item as _MessageItem;
+            return GestureDetector(
+              onLongPress: () => _showMessageActions(context, messageItem.message),
+              child: _MessageBubble(
+                key: ValueKey(messageItem.message.id),
+                message: messageItem.message,
+                isMe: messageItem.isMe,
+                isRead: messageItem.message.isRead,
+              ),
             );
           },
         ),
@@ -143,6 +148,73 @@ class ChatScreen extends GetView<ChatController> {
     if (d == today) return 'Today';
     if (d == today.subtract(const Duration(days: 1))) return 'Yesterday';
     return DateFormat.yMMMd().format(t);
+  }
+
+  void _showMessageActions(BuildContext context, Message message) {
+    final isMyMessage = controller.currentUid == message.senderId;
+    final canEditDelete = isMyMessage && message.type == 'text';
+
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (canEditDelete) ...[
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  controller.startEdit(message);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Delete'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmDeleteMessage(context, message);
+                },
+              ),
+            ],
+            ListTile(
+              leading: const Icon(Icons.copy),
+              title: const Text('Copy'),
+              onTap: () {
+                Navigator.pop(ctx);
+                if (message.type != 'deleted' && message.text.isNotEmpty) {
+                  Clipboard.setData(ClipboardData(text: message.text));
+                  Get.snackbar('', 'Copied to clipboard', snackPosition: SnackPosition.BOTTOM);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteMessage(BuildContext context, Message message) {
+    Get.dialog(
+      AlertDialog(
+        title: const Text('Delete message?'),
+        content: const Text('This message will be removed for everyone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Get.back();
+              await controller.deleteMessageSoft(messageId: message.id);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
   }
 
   static String _formatLastSeen(DateTime? lastSeen) {
@@ -272,69 +344,98 @@ class ChatScreen extends GetView<ChatController> {
   }
 
   Widget _buildInputBar(BuildContext context) {
-    return Container(
-      margin: EdgeInsets.all(12.w),
-      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
-      decoration: BoxDecoration(
-        color: _bubbleOtherBg,
-        borderRadius: BorderRadius.circular(30.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller.textController,
-              onChanged: controller.onTextChanged,
-              onSubmitted: (_) => controller.sendMessage(),
-              minLines: 1,
-              maxLines: 5,
-              decoration: InputDecoration(
-                hintText: 'Type a message',
-                hintStyle: TextStyle(
-                  color: AppColors.mutedForeground,
-                  fontSize: 15.sp,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Obx(() {
+          if (!controller.isEditing.value) return const SizedBox.shrink();
+          return Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+            color: AppColors.muted.withOpacity(0.5),
+            child: Row(
+              children: [
+                Text(
+                  'Editing message',
+                  style: ResponsiveTextStyles.textSm.copyWith(
+                    color: AppColors.mutedForeground,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                filled: false,
-              ),
+                const Spacer(),
+                TextButton(
+                  onPressed: controller.cancelEdit,
+                  child: const Text('Cancel'),
+                ),
+              ],
             ),
+          );
+        }),
+        Container(
+          margin: EdgeInsets.all(12.w),
+          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+          decoration: BoxDecoration(
+            color: _bubbleOtherBg,
+            borderRadius: BorderRadius.circular(30.r),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          SizedBox(width: 8.w),
-          Obx(() {
-            final canSend = controller.messageInput.value.trim().isNotEmpty;
-            return Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: canSend ? () => controller.sendMessage() : null,
-                borderRadius: BorderRadius.circular(24.r),
-                child: Container(
-                  width: 48.w,
-                  height: 48.w,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: canSend ? _teal : AppColors.muted,
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    Icons.send_rounded,
-                    color: canSend ? Colors.white : AppColors.mutedForeground,
-                    size: 24.sp,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller.textController,
+                  onChanged: controller.onTextChanged,
+                  onSubmitted: (_) => controller.submit(),
+                  minLines: 1,
+                  maxLines: 5,
+                  decoration: InputDecoration(
+                    hintText: 'Type a message',
+                    hintStyle: TextStyle(
+                      color: AppColors.mutedForeground,
+                      fontSize: 15.sp,
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                    filled: false,
                   ),
                 ),
               ),
-            );
-          }),
-        ],
-      ),
+              SizedBox(width: 8.w),
+              Obx(() {
+                final canSend = controller.messageInput.value.trim().isNotEmpty;
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: canSend ? () => controller.submit() : null,
+                    borderRadius: BorderRadius.circular(24.r),
+                    child: Container(
+                      width: 48.w,
+                      height: 48.w,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: canSend ? _teal : AppColors.muted,
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.send_rounded,
+                        color: canSend ? Colors.white : AppColors.mutedForeground,
+                        size: 24.sp,
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -393,6 +494,9 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDeleted = message.type == 'deleted';
+    final showEdited = message.editedAt != null;
+
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 200),
@@ -412,9 +516,11 @@ class _MessageBubble extends StatelessWidget {
               Container(
                 padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
                 decoration: BoxDecoration(
-                  color: isMe ? ChatScreen._teal : ChatScreen._bubbleOtherBg,
+                  color: isDeleted
+                      ? AppColors.muted.withOpacity(0.6)
+                      : (isMe ? ChatScreen._teal : ChatScreen._bubbleOtherBg),
                   borderRadius: BorderRadius.circular(18.r),
-                  boxShadow: isMe
+                  boxShadow: isMe && !isDeleted
                       ? null
                       : [
                           BoxShadow(
@@ -425,10 +531,13 @@ class _MessageBubble extends StatelessWidget {
                         ],
                 ),
                 child: Text(
-                  message.text,
+                  isDeleted ? 'This message was deleted' : message.text,
                   style: ResponsiveTextStyles.textSm.copyWith(
-                    color: isMe ? Colors.white : const Color(0xFF1F2937),
+                    color: isDeleted
+                        ? AppColors.mutedForeground
+                        : (isMe ? Colors.white : const Color(0xFF1F2937)),
                     height: 1.35,
+                    fontStyle: isDeleted ? FontStyle.italic : null,
                   ),
                   softWrap: true,
                 ),
@@ -447,9 +556,19 @@ class _MessageBubble extends StatelessWidget {
                         color: AppColors.mutedForeground,
                       ),
                     ),
-                    if (isMe) ...[
+                    if (showEdited) ...[
                       SizedBox(width: 4.w),
-                      // Single tick = sent; double blue tick = seen
+                      Text(
+                        'Edited',
+                        style: TextStyle(
+                          fontSize: 10.sp,
+                          color: AppColors.mutedForeground,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                    if (isMe && !isDeleted) ...[
+                      SizedBox(width: 4.w),
                       Icon(
                         isRead ? Icons.done_all : Icons.done,
                         size: 14.sp,

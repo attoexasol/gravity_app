@@ -1,5 +1,5 @@
 // lib/presentation/messages/controllers/chat_controller.dart
-// Realtime stream bound immediately; auto-scroll; no .get(); Firestore cache-friendly.
+// Realtime stream bound immediately; auto-scroll; mark-read debounced; Firestore cache-friendly.
 
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,8 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../data/model/message.dart';
 import '../../../data/services/firestore_chat_service.dart';
+import 'messages_controller.dart';
 
 /// Chat screen controller: conversationId built immediately; stream attached before getOrCreateConversation.
+/// Mark-read updates lastReadAt on conversation doc so inbox badge (hasUnread) disappears in realtime.
 class ChatController extends GetxController {
   final FirestoreChatService _firestoreChat = FirestoreChatService();
 
@@ -44,6 +46,10 @@ class ChatController extends GetxController {
   final TextEditingController textController = TextEditingController();
   final ScrollController scrollController = ScrollController();
 
+  /// Edit mode: message being edited (if any).
+  final Rxn<Message> editingMessage = Rxn<Message>();
+  final RxBool isEditing = false.obs;
+
   static const int _pageSize = 30;
   DocumentSnapshot<Map<String, dynamic>>? _oldestMessageDoc;
   StreamSubscription<({List<Message> messages, DocumentSnapshot<Map<String, dynamic>>? oldestDoc})>? _messagesSub;
@@ -52,14 +58,15 @@ class ChatController extends GetxController {
   Timer? _typingDebounce;
   static const Duration _typingDebounceDuration = Duration(milliseconds: 400);
 
+  /// Debounce for mark-conversation-read writes (lastReadAt) so we don't spam Firestore.
+  Timer? _readDebounce;
+  static const Duration _readDebounceDuration = Duration(milliseconds: 350);
+
   /// When true, new messages trigger scroll to bottom. False when user has scrolled up (offset > 200).
   bool _shouldAutoScroll = true;
 
   /// Last message count from stream; used to scroll only when count increases (new message from other).
   int _lastStreamMessageCount = 0;
-
-  DateTime? _lastMarkReadAt;
-  static const Duration _markReadThrottle = Duration(seconds: 2);
 
   String? get currentUid => _firestoreChat.currentUid;
 
@@ -85,10 +92,13 @@ class ChatController extends GetxController {
     // 4) Create conversation if missing + mark read (non-blocking)
     _ensureConversationAndMarkRead();
 
-    // 5) Typing indicator
+    // 5) Schedule mark-read so inbox lastReadAt updates and badge disappears
+    _scheduleMarkRead();
+
+    // 6) Typing indicator
     _listenTyping(cid);
 
-    // 6) Other user presence (isOnline, lastSeen) from Firestore users/{uid}
+    // 7) Other user presence (isOnline, lastSeen) from Firestore users/{uid}
     _presenceSub?.cancel();
     _presenceSub = _firestoreChat.userPresenceStream(otherFirebaseUid).listen((p) {
       isOtherOnline.value = p.isOnline;
@@ -106,6 +116,23 @@ class ChatController extends GetxController {
     }
   }
 
+  /// Schedule a single mark-read write after debounce. Call when chat is open and on new message snapshots.
+  void _scheduleMarkRead() {
+    _readDebounce?.cancel();
+    _readDebounce = Timer(_readDebounceDuration, () {
+      _doMarkRead();
+      _readDebounce = null;
+    });
+  }
+
+  /// Perform the Firestore update: lastReadAt.<myUid> = serverTimestamp (and unreadCount in service).
+  void _doMarkRead() {
+    final uid = currentUid;
+    final cid = conversationId.value;
+    if (uid == null || cid == null || cid.isEmpty) return;
+    _firestoreChat.markConversationRead(conversationId: cid, myUid: uid);
+  }
+
   /// Bind Firestore snapshots to streamMessagesList. Replaces only the "current page" with server state;
   /// olderMessages is preserved. Scroll to bottom only when message count increases (new message sent or received).
   void _bindMessageStream() {
@@ -117,7 +144,8 @@ class ChatController extends GetxController {
         final newCount = data.messages.length;
         streamMessagesList.assignAll(data.messages);
         _oldestMessageDoc = data.oldestDoc;
-        _markReadIfNeeded();
+        // Chat is open: schedule mark-read so lastReadAt updates and inbox badge clears
+        _scheduleMarkRead();
         // Scroll to bottom only when a NEW message from the other user arrives (not after our send - we already scroll for optimistic)
         if (_shouldAutoScroll && newCount > _lastStreamMessageCount) {
           _lastStreamMessageCount = newCount;
@@ -132,17 +160,6 @@ class ChatController extends GetxController {
       },
       onError: (e) => debugPrint('❌ ChatController stream: $e'),
     );
-  }
-
-  /// Mark conversation read (updates unreadCount + lastReadAt so other user sees "seen"). Throttled to avoid excessive writes.
-  void _markReadIfNeeded() {
-    final now = DateTime.now();
-    if (_lastMarkReadAt != null && now.difference(_lastMarkReadAt!) < _markReadThrottle) return;
-    _lastMarkReadAt = now;
-    final uid = currentUid;
-    final cid = conversationId.value;
-    if (uid == null || cid == null) return;
-    _firestoreChat.markConversationRead(conversationId: cid, myUid: uid);
   }
 
   Future<void> _ensureConversationAndMarkRead() async {
@@ -174,6 +191,10 @@ class ChatController extends GetxController {
 
   @override
   void onClose() {
+    _readDebounce?.cancel();
+    _readDebounce = null;
+    // Mark conversation read when leaving so inbox stream gets lastReadAt and badge disappears
+    _doMarkRead();
     scrollController.removeListener(_onScroll);
     _typingDebounce?.cancel();
     _messagesSub?.cancel();
@@ -213,6 +234,75 @@ class ChatController extends GetxController {
     );
   }
 
+  /// Start editing a message: prefill input and show editing banner.
+  void startEdit(Message m) {
+    editingMessage.value = m;
+    textController.text = m.text;
+    messageInput.value = m.text;
+    isEditing.value = true;
+  }
+
+  /// Cancel edit mode and clear input.
+  void cancelEdit() {
+    editingMessage.value = null;
+    textController.clear();
+    messageInput.value = '';
+    isEditing.value = false;
+  }
+
+  /// Submit: if in edit mode update the message, otherwise send new message.
+  Future<void> submit() async {
+    final text = messageInput.value.trim();
+    if (text.isEmpty) return;
+    if (isEditing.value && editingMessage.value != null) {
+      await updateMessage(messageId: editingMessage.value!.id, newText: text);
+      cancelEdit();
+      return;
+    }
+    await sendMessage();
+  }
+
+  /// Update existing message in Firestore (text + editedAt). Realtime stream will reflect change.
+  Future<void> updateMessage({required String messageId, required String newText}) async {
+    final cid = conversationId.value;
+    if (cid == null || cid.isEmpty) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(cid)
+          .collection('messages')
+          .doc(messageId)
+          .update({
+        'text': newText,
+        'editedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('❌ ChatController updateMessage: $e');
+      Get.snackbar('Error', 'Failed to update message.', snackPosition: SnackPosition.BOTTOM);
+    }
+  }
+
+  /// Soft delete: set type to "deleted", clear text, set deletedAt. Do not delete doc.
+  Future<void> deleteMessageSoft({required String messageId}) async {
+    final cid = conversationId.value;
+    if (cid == null || cid.isEmpty) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(cid)
+          .collection('messages')
+          .doc(messageId)
+          .update({
+        'type': 'deleted',
+        'text': '',
+        'deletedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('❌ ChatController deleteMessageSoft: $e');
+      Get.snackbar('Error', 'Failed to delete message.', snackPosition: SnackPosition.BOTTOM);
+    }
+  }
+
   Future<void> sendMessage() async {
     final text = messageInput.value.trim();
     if (text.isEmpty) return;
@@ -239,6 +329,7 @@ class ChatController extends GetxController {
       id: optimisticId,
       senderId: uid,
       text: text,
+      type: 'text',
       timestamp: DateTime.now(),
       isRead: false,
       isSent: false,

@@ -1,3 +1,6 @@
+// lib/presentation/messages/controllers/messages_controller.dart
+// Inbox: conversation stream per user; hasUnread from lastReadAt/lastMessageTime/lastMessageSenderId.
+
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -9,7 +12,7 @@ import '../../../data/services/firestore_chat_service.dart';
 import '../../../data/services/user_api_service.dart';
 
 /// Inbox controller: owns conversation stream subscriptions. UI is READ-ONLY.
-/// Sort ONLY in onNewMessageReceived(). No state updates from build/postFrameCallback.
+/// Unread badge is driven by hasUnread computed from conversation doc (lastReadAt, lastMessageTime, lastMessageSenderId).
 class InboxController extends GetxController {
   final UserApiService _userApi = UserApiService();
   final FirestoreChatService _firestoreChat = FirestoreChatService();
@@ -17,7 +20,9 @@ class InboxController extends GetxController {
   final RxList<MessageUserModel> users = <MessageUserModel>[].obs;
   final RxMap<int, ({String? lastMessage, DateTime? lastMessageTime})> conversationPreviews = <int, ({String? lastMessage, DateTime? lastMessageTime})>{}.obs;
 
-  /// Per-user state for UI (read-only from view). Updated only from stream callbacks.
+  /// Per-user unread: true if last message is from other and lastMessageTime is after my lastReadAt. From realtime stream only.
+  final RxMap<int, bool> hasUnreadByUser = <int, bool>{}.obs;
+  /// Legacy count for display when hasUnread is true (e.g. show "1"). Kept in sync from stream.
   final RxMap<int, int> unreadCountByUser = <int, int>{}.obs;
   final RxMap<int, bool> typingByUser = <int, bool>{}.obs;
 
@@ -175,11 +180,34 @@ class InboxController extends GetxController {
     }
   }
 
-  /// Called only from stream listener (connectionState is active when we receive data). READ-ONLY for UI.
+  /// Compute hasUnread from conversation doc: last message from other and lastMessageTime after my lastReadAt.
+  static bool _computeHasUnread(Map<String, dynamic>? data, String myUid) {
+    if (data == null) return false;
+    final lastSender = (data['lastMessageSenderId'] ?? '').toString();
+    final lastMsgTimeRaw = data['lastMessageTime'];
+    final DateTime? lastMsgTime = lastMsgTimeRaw is Timestamp
+        ? lastMsgTimeRaw.toDate()
+        : (lastMsgTimeRaw is DateTime)
+            ? lastMsgTimeRaw
+            : null;
+    final lastReadAtMap = (data['lastReadAt'] is Map) ? (data['lastReadAt'] as Map) : <dynamic, dynamic>{};
+    final myLastReadRaw = lastReadAtMap[myUid];
+    final DateTime? myLastRead = myLastReadRaw is Timestamp
+        ? myLastReadRaw.toDate()
+        : (myLastReadRaw is DateTime)
+            ? myLastReadRaw
+            : null;
+    return lastSender.isNotEmpty &&
+        lastSender != myUid &&
+        lastMsgTime != null &&
+        (myLastRead == null || lastMsgTime.isAfter(myLastRead));
+  }
+
+  /// Called only from stream listener. Updates preview + hasUnread from conversation doc (realtime).
   void _onConversationSnapshot(int userId, String otherUid, DocumentSnapshot<Map<String, dynamic>>? snap, String myUid) {
     String? lastMessage;
     DateTime? lastMessageTime;
-    int unread = 0;
+    bool hasUnread = false;
     bool typing = false;
     if (snap != null && snap.exists) {
       final data = snap.data();
@@ -188,29 +216,39 @@ class InboxController extends GetxController {
         if (lastMessage != null && lastMessage.isEmpty) lastMessage = null;
         final t = data['lastMessageTime'];
         if (t is Timestamp) lastMessageTime = t.toDate();
-        final uc = data['unreadCount'];
-        if (uc is Map) {
-          final v = uc[myUid];
-          if (v != null) unread = (v is int) ? v : int.tryParse(v.toString()) ?? 0;
-        }
+        hasUnread = _computeHasUnread(data, myUid);
         final typ = data['typing'];
         if (typ is Map) typing = typ[otherUid] == true;
       }
     }
-    _applyConversationUpdate(userId, lastMessage: lastMessage, lastMessageTime: lastMessageTime, unreadCount: unread, isTyping: typing);
+    _applyConversationUpdate(
+      userId,
+      lastMessage: lastMessage,
+      lastMessageTime: lastMessageTime,
+      hasUnread: hasUnread,
+      isTyping: typing,
+    );
   }
 
   /// State mutation ONLY here (from stream callback). Guards prevent duplicate events and unnecessary sort/scroll.
-  void _applyConversationUpdate(int userId, {String? lastMessage, DateTime? lastMessageTime, int unreadCount = 0, bool isTyping = false}) {
+  void _applyConversationUpdate(
+    int userId, {
+    String? lastMessage,
+    DateTime? lastMessageTime,
+    bool hasUnread = false,
+    bool isTyping = false,
+  }) {
     final incomingMillis = lastMessageTime?.millisecondsSinceEpoch;
     if (incomingMillis != null && _lastProcessedTimestamp[userId] == incomingMillis) {
-      unreadCountByUser[userId] = unreadCount;
+      hasUnreadByUser[userId] = hasUnread;
+      unreadCountByUser[userId] = hasUnread ? 1 : 0;
       typingByUser[userId] = isTyping;
       return;
     }
     final prev = conversationPreviews[userId];
     if (prev != null && prev.lastMessage == lastMessage && _sameDateTime(prev.lastMessageTime, lastMessageTime)) {
-      unreadCountByUser[userId] = unreadCount;
+      hasUnreadByUser[userId] = hasUnread;
+      unreadCountByUser[userId] = hasUnread ? 1 : 0;
       typingByUser[userId] = isTyping;
       return;
     }
@@ -220,7 +258,8 @@ class InboxController extends GetxController {
         lastMessageTime.millisecondsSinceEpoch > prev.lastMessageTime!.millisecondsSinceEpoch;
     conversationPreviews[userId] = (lastMessage: lastMessage, lastMessageTime: lastMessageTime);
     if (incomingMillis != null) _lastProcessedTimestamp[userId] = incomingMillis;
-    unreadCountByUser[userId] = unreadCount;
+    hasUnreadByUser[userId] = hasUnread;
+    unreadCountByUser[userId] = hasUnread ? 1 : 0;
     typingByUser[userId] = isTyping;
     _computeAndAssignSortedList();
     if (isNewMessage) onNewMessageReceived();
@@ -304,16 +343,27 @@ class InboxController extends GetxController {
   }
 
   /// Stream of user presence (isOnline) for list row. READ-ONLY in UI — does not mutate controller state.
-  /// uid can be Firebase UID or Laravel id string (same as used for openChat).
   Stream<bool> userPresenceStream(String uid) {
     if (uid.isEmpty) return Stream.value(false);
     return _firestoreChat.userPresenceStream(uid).map((p) => p.isOnline);
   }
 
-  /// Navigate to chat with this user. Do NOT create conversation until first message.
-  /// Chat does NOT depend on Firestore user doc existence; conversation is created on first send.
+  /// Clear unread for this conversation (e.g. when returning from chat). Stream will also set hasUnread false when lastReadAt updates.
+  void clearUnreadForConversation(String otherFirebaseUid) {
+    if (otherFirebaseUid.isEmpty) return;
+    for (final u in users) {
+      final match = (u.firebaseUid != null && u.firebaseUid == otherFirebaseUid) ||
+          u.id.toString() == otherFirebaseUid;
+      if (match) {
+        hasUnreadByUser[u.id] = false;
+        unreadCountByUser[u.id] = 0;
+        return;
+      }
+    }
+  }
+
+  /// Navigate to chat with this user.
   void openChat(MessageUserModel user) {
-    // Always use string UID: prefer Firebase UID from API, fallback to Laravel id for routing
     final otherUid = (user.firebaseUid != null && user.firebaseUid!.isNotEmpty)
         ? user.firebaseUid!
         : user.id.toString();

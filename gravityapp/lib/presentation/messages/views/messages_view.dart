@@ -1,3 +1,6 @@
+// lib/presentation/messages/views/messages_view.dart
+// Inbox: badge driven only by hasUnread from realtime conversation stream (lastReadAt / lastMessageTime).
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
@@ -6,9 +9,10 @@ import 'package:intl/intl.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
 import '../controllers/messages_controller.dart';
-import '../../../../data/model/message_user_model.dart';
+import '../../../data/model/message_user_model.dart';
 
 /// Inbox: user list with search, infinite scroll, real-time conversation preview per row.
+/// Unread badge is shown only when hasUnread == true (from stream; not cached counts).
 class MessagesView extends GetView<InboxController> {
   const MessagesView({super.key});
 
@@ -163,8 +167,7 @@ class MessagesView extends GetView<InboxController> {
   }
 }
 
-/// Single user row. READ-ONLY: no controller state updates, no sort/scroll from here.
-/// Preview from controller (sortedUsersList + unreadCountByUser, typingByUser); presence from stream only for UI.
+/// Single user row. Badge visibility driven only by hasUnread from stream (no cached unread counts).
 class _UserRow extends StatelessWidget {
   final MessageUserModel user;
   final InboxController controller;
@@ -179,8 +182,9 @@ class _UserRow extends StatelessWidget {
     final displayMessage = user.lastMessage;
     final displayTime = user.lastMessageTime;
     return Obx(() {
-      final unreadCount = controller.unreadCountByUser[user.id] ?? 0;
+      final hasUnread = controller.hasUnreadByUser[user.id] ?? false;
       final isOtherTyping = controller.typingByUser[user.id] ?? false;
+      final unreadCount = hasUnread ? (controller.unreadCountByUser[user.id] ?? 1) : 0;
       return StreamBuilder<bool>(
         stream: controller.userPresenceStream(otherUid),
         initialData: false,
@@ -190,6 +194,7 @@ class _UserRow extends StatelessWidget {
             context,
             displayMessage,
             displayTime,
+            hasUnread: hasUnread,
             unreadCount: unreadCount,
             isOtherTyping: isOtherTyping,
             isOnline: isOnline,
@@ -199,7 +204,15 @@ class _UserRow extends StatelessWidget {
     });
   }
 
-  Widget _buildTile(BuildContext context, String? subtitle, DateTime? time, {int unreadCount = 0, bool isOtherTyping = false, bool isOnline = false}) {
+  Widget _buildTile(
+    BuildContext context,
+    String? subtitle,
+    DateTime? time, {
+    required bool hasUnread,
+    int unreadCount = 0,
+    bool isOtherTyping = false,
+    bool isOnline = false,
+  }) {
     final displaySubtitle = isOtherTyping ? 'Typing...' : (subtitle != null && subtitle.isNotEmpty ? subtitle : 'Start conversation');
     return Material(
       color: Colors.transparent,
@@ -243,7 +256,7 @@ class _UserRow extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (unreadCount > 0)
+                  if (hasUnread)
                     Positioned(
                       right: -4.w,
                       top: -4.h,
