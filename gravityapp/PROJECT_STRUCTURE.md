@@ -142,10 +142,8 @@ Features follow a pattern: **controllers/**, **screens/**, **views/**, **section
 | `controllers/messages_controller.dart` | **InboxController** — user list, conversation previews, unread, typing (Firestore streams) |
 | `controllers/chat_controller.dart` | **ChatController** — single chat, send/edit/delete, mark read |
 | `controllers/messages_controllers.dart` | **MessagesController** — optional REST-based inbox logic |
-| `screens/messages_page.dart` | Messages tab (wraps MessagesView, opens ChatScreen) |
+| `screens/messages_page.dart` | Messages tab — inbox UI (search, user tiles, unread badge), opens ChatScreen |
 | `screens/chat_screen.dart` | Single conversation screen |
-| `views/messages_view.dart` | Inbox list UI (search, user tiles, unread badge) |
-| `models/conversation_tile_vm.dart` | Inbox row view model |
 | `utils/message_utils.dart` | Helpers, unread count, mapping |
 
 ---
