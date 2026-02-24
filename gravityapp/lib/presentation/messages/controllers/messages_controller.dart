@@ -203,11 +203,21 @@ class InboxController extends GetxController {
         (myLastRead == null || lastMsgTime.isAfter(myLastRead));
   }
 
-  /// Called only from stream listener. Updates preview + hasUnread from conversation doc (realtime).
+  /// Parse unreadCount[uid] from conversation doc for badge display.
+  static int _getUnreadCountForUid(Map<String, dynamic>? data, String uid) {
+    if (data == null) return 0;
+    final raw = data['unreadCount'];
+    if (raw is! Map) return 0;
+    final map = raw.map((k, v) => MapEntry(k.toString(), (v is int) ? v : int.tryParse(v.toString()) ?? 0));
+    return map[uid] ?? 0;
+  }
+
+  /// Called only from stream listener. Updates preview + hasUnread + unread count from conversation doc (realtime).
   void _onConversationSnapshot(int userId, String otherUid, DocumentSnapshot<Map<String, dynamic>>? snap, String myUid) {
     String? lastMessage;
     DateTime? lastMessageTime;
     bool hasUnread = false;
+    int unreadCount = 0;
     bool typing = false;
     if (snap != null && snap.exists) {
       final data = snap.data();
@@ -217,6 +227,8 @@ class InboxController extends GetxController {
         final t = data['lastMessageTime'];
         if (t is Timestamp) lastMessageTime = t.toDate();
         hasUnread = _computeHasUnread(data, myUid);
+        unreadCount = _getUnreadCountForUid(data, myUid);
+        if (hasUnread && unreadCount < 1) unreadCount = 1;
         final typ = data['typing'];
         if (typ is Map) typing = typ[otherUid] == true;
       }
@@ -226,29 +238,32 @@ class InboxController extends GetxController {
       lastMessage: lastMessage,
       lastMessageTime: lastMessageTime,
       hasUnread: hasUnread,
+      unreadCount: unreadCount,
       isTyping: typing,
     );
   }
 
-  /// State mutation ONLY here (from stream callback). Guards prevent duplicate events and unnecessary sort/scroll.
+  /// State mutation ONLY here (from stream callback). Badge count from Firestore unreadCount[myUid].
   void _applyConversationUpdate(
     int userId, {
     String? lastMessage,
     DateTime? lastMessageTime,
     bool hasUnread = false,
+    int unreadCount = 0,
     bool isTyping = false,
   }) {
+    final displayCount = hasUnread ? (unreadCount > 0 ? unreadCount : 1) : 0;
     final incomingMillis = lastMessageTime?.millisecondsSinceEpoch;
     if (incomingMillis != null && _lastProcessedTimestamp[userId] == incomingMillis) {
       hasUnreadByUser[userId] = hasUnread;
-      unreadCountByUser[userId] = hasUnread ? 1 : 0;
+      unreadCountByUser[userId] = displayCount;
       typingByUser[userId] = isTyping;
       return;
     }
     final prev = conversationPreviews[userId];
     if (prev != null && prev.lastMessage == lastMessage && _sameDateTime(prev.lastMessageTime, lastMessageTime)) {
       hasUnreadByUser[userId] = hasUnread;
-      unreadCountByUser[userId] = hasUnread ? 1 : 0;
+      unreadCountByUser[userId] = displayCount;
       typingByUser[userId] = isTyping;
       return;
     }
@@ -259,7 +274,7 @@ class InboxController extends GetxController {
     conversationPreviews[userId] = (lastMessage: lastMessage, lastMessageTime: lastMessageTime);
     if (incomingMillis != null) _lastProcessedTimestamp[userId] = incomingMillis;
     hasUnreadByUser[userId] = hasUnread;
-    unreadCountByUser[userId] = hasUnread ? 1 : 0;
+    unreadCountByUser[userId] = displayCount;
     typingByUser[userId] = isTyping;
     _computeAndAssignSortedList();
     if (isNewMessage) onNewMessageReceived();
