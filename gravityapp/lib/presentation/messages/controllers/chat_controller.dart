@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../data/model/message.dart';
-import '../../../data/services/firestore_chat_service.dart';
+import '../../../core/services/firestore_chat_service.dart';
 import 'messages_controller.dart';
 
 /// Chat screen controller: conversationId built immediately; stream attached before getOrCreateConversation.

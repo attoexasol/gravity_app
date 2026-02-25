@@ -1,4 +1,4 @@
-// lib/data/services/firestore_chat_service.dart
+// lib/core/services/firestore_chat_service.dart
 // Production real-time chat: deterministic conversationId, unread map, typing, message pagination.
 //
 // Required Firestore composite index (create in Firebase Console when prompted):
@@ -8,8 +8,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import '../model/message.dart';
-import '../model/conversation_firestore_model.dart';
+import 'package:gravityapp/data/model/message.dart';
+import 'package:gravityapp/data/model/conversation_firestore_model.dart';
 
 /// Firestore: users/{uid}, conversations/{conversationId}, conversations/{id}/messages/{messageId}.
 /// conversationId = smallerUid + "_" + largerUid (deterministic for 1:1).

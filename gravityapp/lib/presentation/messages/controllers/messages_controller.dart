@@ -8,8 +8,8 @@ import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../data/model/message_user_model.dart';
-import '../../../data/services/firestore_chat_service.dart';
-import '../../../data/services/user_api_service.dart';
+import '../../../core/services/firestore_chat_service.dart';
+import '../../../core/services/user_api_service.dart';
 
 /// Inbox controller: owns conversation stream subscriptions. UI is READ-ONLY.
 /// Unread badge is driven by hasUnread computed from conversation doc (lastReadAt, lastMessageTime, lastMessageSenderId).

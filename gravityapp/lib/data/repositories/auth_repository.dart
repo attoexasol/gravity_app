@@ -8,7 +8,7 @@ import '../../core/services/preferences_service.dart';
 import '../../core/services/token_manager.dart';
 import '../../core/services/device_manager.dart';
 import '../../core/services/session_manager.dart';
-import '../services/auth_service.dart';
+import '../../core/services/auth_service.dart';
 import '../model/api_response.dart';
 import '../model/user_model.dart';
 

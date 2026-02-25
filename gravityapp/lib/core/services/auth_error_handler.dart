@@ -5,7 +5,7 @@ import 'session_manager.dart';
 import 'preferences_service.dart';
 import 'image_cache_service.dart';
 import '../../app/routes/app_routes.dart';
-import '../../data/services/auth_service.dart';
+import 'auth_service.dart';
 
 /// Authentication Error Handler - Handles 401 errors and session management
 class AuthErrorHandler {

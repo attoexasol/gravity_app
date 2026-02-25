@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
-import '../../core/services/api_service.dart';
-import '../model/message_user_model.dart';
+import 'package:gravityapp/core/services/api_service.dart';
+import 'package:gravityapp/data/model/message_user_model.dart';
 
 /// Paginated result from users API.
 class UsersPageResult {
@@ -28,7 +28,6 @@ class UserApiService {
 
   /// Fetch users with pagination and optional search.
   /// GET with body: role, search, page, per_page (Laravel expects GET + body).
-  /// [role]: opposite of current user (e.g. "Customer" for coaches, "Coach" for customers).
   Future<UsersPageResult> fetchUsers({
     required String role,
     String search = '',

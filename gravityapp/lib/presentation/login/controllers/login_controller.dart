@@ -8,7 +8,7 @@ import '../../../app/routes/app_routes.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/consent_repository.dart';
 import '../../../data/repositories/goals_repository.dart';
-import '../../../data/services/auth_service.dart';
+import '../../../core/services/auth_service.dart';
 import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../core/services/token_manager.dart';

@@ -8,7 +8,7 @@ import 'auth_error_handler.dart';
 import 'session_manager.dart';
 import '../../app/routes/app_routes.dart';
 import 'preferences_service.dart';
-import '../../data/services/auth_service.dart';
+import 'auth_service.dart';
 
 /// API Service - Handles all HTTP requests with automatic token management
 class ApiService {

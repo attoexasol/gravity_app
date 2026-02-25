@@ -9,7 +9,7 @@ import 'app/routes/app_routes.dart';
 import 'app/routes/app_pages.dart';
 import 'core/services/preferences_service.dart';
 import 'core/services/app_lifecycle_service.dart';
-import 'data/services/auth_service.dart';
+import 'core/services/auth_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;

@@ -7,7 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/model/api_response.dart';
 import '../../data/model/user_model.dart';
-import '../../data/services/auth_service.dart';
+import 'auth_service.dart';
 import 'preferences_service.dart';
 import 'token_manager.dart';
 import 'session_manager.dart';
