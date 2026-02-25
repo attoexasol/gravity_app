@@ -8,7 +8,7 @@ import 'package:gravityapp/data/model/message.dart';
 import '../../../data/repositories/messages_repository.dart';
 import '../../../core/services/firestore_chat_service.dart';
 import '../../../core/services/preferences_service.dart';
-import '../utils/message_utils.dart';
+import '../../../core/utils/message_utils.dart';
 
 class MessagesController extends GetxController {
   // Repository

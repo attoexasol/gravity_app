@@ -65,6 +65,7 @@ gravityapp/
 | **utils/** | Helpers |
 | `utils/safe_logger.dart` | Safe logging |
 | `utils/app_snackbar.dart` | Snackbar helpers |
+| `utils/message_utils.dart` | Message helpers (API parsing, unread count; used by messages) |
 
 ---
 
@@ -144,7 +145,7 @@ Features follow a pattern: **controllers/**, **screens/**, **views/**, **section
 | `controllers/messages_controllers.dart` | **MessagesController** — optional REST-based inbox logic |
 | `screens/messages_page.dart` | Messages tab — inbox UI (search, user tiles, unread badge), opens ChatScreen |
 | `screens/chat_screen.dart` | Single conversation screen |
-| `utils/message_utils.dart` | Helpers, unread count, mapping |
+| *(message_utils in core/utils)* | Helpers, unread count, mapping (used by MessagesController) |
 
 ---
 

@@ -147,4 +147,3 @@ class MessageUtils {
     return sorted;
   }
 }
-
