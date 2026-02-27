@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../data/model/comment.dart';
@@ -66,10 +67,49 @@ class _CommunityPageState extends State<CommunityPage> {
       Get.put(CommunityController());
     }
 
-    return Stack(
+    return Column(
       children: [
-        // Main feed with pull-to-refresh - Match React: px-6 py-6 space-y-4
-        RefreshIndicator(
+        _buildCommunityHeader(),
+        Obx(() {
+          final pinnedPosts =
+              controller.posts.where((p) => p.isPinned).toList();
+
+          return AnimatedSwitcher(
+            duration: const Duration(milliseconds: 350),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              final slideAnimation = Tween<Offset>(
+                begin: const Offset(0, -0.3),
+                end: Offset.zero,
+              ).animate(animation);
+
+              return SlideTransition(
+                position: slideAnimation,
+                child: FadeTransition(
+                  opacity: animation,
+                  child: child,
+                ),
+              );
+            },
+            child: pinnedPosts.isEmpty
+                ? const SizedBox.shrink(key: ValueKey('empty'))
+                : PinnedPostsBar(
+                    key: ValueKey(pinnedPosts.first.id),
+                    pinnedPost: pinnedPosts.first,
+                    onScrollToPost: () =>
+                        _scrollToPost(pinnedPosts.first.id),
+                    onUnpin: (postId, communityId) {
+                      controller.pinPost(postId, communityId);
+                    },
+                  ),
+          );
+        }),
+        Expanded(
+          child: Stack(
+            children: [
+              // Main feed with pull-to-refresh - Match React: px-6 py-6 space-y-4
+              RefreshIndicator(
           onRefresh: controller.refreshPosts,
           color: const Color(0xFF00B8A9),
           backgroundColor: Colors.white,
@@ -199,7 +239,7 @@ class _CommunityPageState extends State<CommunityPage> {
               padding: EdgeInsets.only(
                 left: 24.w, // px-6 = 24px
                 right: 24.w, // px-6 = 24px
-                top: 80.h, // Extra top padding for pinned bar
+                top: 16.h,
                 bottom: 100.h, // Prevent overflow with bottom nav
               ),
               itemCount: controller.posts.length,
@@ -216,29 +256,6 @@ class _CommunityPageState extends State<CommunityPage> {
             );
           }),
         ),
-
-        // Pinned Posts Bar - Sticky at top
-        Obx(() {
-          final pinnedPosts = controller.posts
-              .where((p) => p.isPinned)
-              .toList();
-          if (pinnedPosts.isEmpty) return const SizedBox.shrink();
-
-          // Show only the first pinned post in the bar
-          final pinnedPost = pinnedPosts.first;
-          return Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: PinnedPostsBar(
-              pinnedPost: pinnedPost,
-              onScrollToPost: () => _scrollToPost(pinnedPost.id),
-              onUnpin: (postId, communityId) {
-                controller.pinPost(postId, communityId);
-              },
-            ),
-          );
-        }),
 
         // Floating Action Button - Create Post
         Positioned(
@@ -261,9 +278,85 @@ class _CommunityPageState extends State<CommunityPage> {
               : const SizedBox.shrink(),
         ),
       ],
+    ),
+  ),
+      ],
     );
   }
 
+  Widget _buildCommunityHeader() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(24.w, 60.h, 24.w, 32.h),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF0A2342),
+            Color(0xFF00B8A9),
+          ],
+        ),
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(40.r),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Community",
+                style: ResponsiveTextStyles.textXl.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 8.h),
+              Text(
+                "Share your wellness journey",
+                style: ResponsiveTextStyles.textSm.copyWith(
+                  color: Colors.white.withOpacity(0.8),
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => Get.toNamed(AppRoutes.notifications),
+                child: _buildHeaderIcon(Icons.notifications_none),
+              ),
+              SizedBox(width: 12.w),
+              GestureDetector(
+                onTap: () => Get.toNamed(AppRoutes.settings),
+                child: _buildHeaderIcon(Icons.settings_outlined),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderIcon(IconData icon) {
+    return Container(
+      width: 44.w,
+      height: 44.h,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(16.r),
+      ),
+      child: Icon(
+        icon,
+        color: Colors.white,
+        size: 22.sp,
+      ),
+    );
+  }
 
   // Show Create Post Modal - Full screen mode
   // Root cause: State must be reset BEFORE opening dialog to ensure fresh state every time

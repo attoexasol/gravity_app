@@ -20,8 +20,10 @@ class MainLayoutScreen extends GetView<MainLayoutController> {
       () => Scaffold(
         backgroundColor: const Color(0xFFF6F7FA),
 
-        // App Bar - Hide for Messages (3) and Coach Dashboard (4); they use their own headers
-        appBar: (controller.currentIndex.value == 3 || controller.currentIndex.value == 4)
+        // App Bar - Hide for Community (1), Messages (3), and Coach (4); they use their own headers
+        appBar: (controller.currentIndex.value == 1 ||
+                controller.currentIndex.value == 3 ||
+                controller.currentIndex.value == 4)
             ? null
             : MainAppBar(
                 userName: controller.userName.value,
@@ -39,8 +41,10 @@ class MainLayoutScreen extends GetView<MainLayoutController> {
           onLogout: controller.handleLogout,
         ),
 
-        // Body - Messages (3) and Coach (4) use full screen for their headers; others use SafeArea
-        body: (controller.currentIndex.value == 3 || controller.currentIndex.value == 4)
+        // Body - Community (1), Messages (3), Coach (4) use full screen for their headers; others use SafeArea
+        body: (controller.currentIndex.value == 1 ||
+                controller.currentIndex.value == 3 ||
+                controller.currentIndex.value == 4)
             ? Stack(
                 children: [
                   _buildBody(),
