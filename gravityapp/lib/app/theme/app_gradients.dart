@@ -18,6 +18,16 @@ class AppGradients {
     ],
   );
 
+  /// Notifications header - diagonal navy to teal
+  static const LinearGradient notificationsHeaderGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      AppColors.primary,
+      AppColors.chart2,
+    ],
+  );
+
   /// Secondary Gradient - Subtle background
   static const LinearGradient secondaryGradient = LinearGradient(
     begin: Alignment.topCenter,

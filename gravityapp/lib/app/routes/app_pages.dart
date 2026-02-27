@@ -21,6 +21,8 @@ import '../../presentation/daily_details/screens/daily_details_screen.dart';
 import '../../presentation/daily_details/controllers/daily_details_controller.dart';
 import '../../presentation/weight_history/screens/weight_history_screen.dart';
 import '../../presentation/weight_history/controllers/weight_history_controller.dart';
+import '../../presentation/notifications/screens/notifications_screen.dart';
+import '../bindings/notifications_binding.dart';
 import '../../presentation/messages/screens/chat_screen.dart';
 import '../../presentation/messages/controllers/chat_controller.dart';
 import 'app_routes.dart';
@@ -193,12 +195,13 @@ class AppPages {
       transitionDuration: const Duration(milliseconds: 300),
     ),
 
-    // TODO: Add additional routes as needed
-    // Example - Notifications
-    // GetPage(
-    //   name: AppRoutes.notifications,
-    //   page: () => const NotificationsScreen(),
-    //   transition: Transition.rightToLeft,
-    // ),
+    // Notifications
+    GetPage(
+      name: AppRoutes.notifications,
+      page: () => const NotificationsScreen(),
+      binding: NotificationsBinding(),
+      transition: Transition.rightToLeft,
+      transitionDuration: const Duration(milliseconds: 300),
+    ),
   ];
 }

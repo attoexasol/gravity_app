@@ -34,10 +34,5 @@ class AppRoutes {
   static const String weeklyReview = '/weekly-review';
   static const String dailyDetails = '/daily-details';
   static const String weightHistory = '/weight-history';
-
-  // Add your other routes here as needed
-  // Example:
-  // static const String dashboard = '/dashboard';
-  // static const String notifications = '/notifications';
-  // static const String search = '/search';
+  static const String notifications = '/notifications';
 }
