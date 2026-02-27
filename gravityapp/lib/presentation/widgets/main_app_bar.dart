@@ -50,36 +50,51 @@ class MainAppBar extends StatelessWidget implements PreferredSizeWidget {
             mainAxisSize:
                 MainAxisSize.min, // Important: Use minimum space needed
             children: [
-              // Top row with actions (menu icon removed)
+              // Top row with actions (notification + settings in rounded containers)
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  // Actions
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Notification button
-                      Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              Icons.notifications_outlined,
-                              color: Colors.white,
-                              size: 22.sp,
-                            ),
-                            onPressed: onNotificationTap,
-                            tooltip: 'Notifications',
-                            padding: EdgeInsets.zero,
-                            constraints: BoxConstraints(
-                              minWidth: 40.w,
-                              minHeight: 40.h,
+                      // Notification button in rounded container
+                      Tooltip(
+                        message: 'Notifications',
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: onNotificationTap,
+                              borderRadius: BorderRadius.circular(16.r),
+                              child: Container(
+                                width: 44.w,
+                                height: 44.h,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.25),
+                                  borderRadius: BorderRadius.circular(16.r),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.08),
+                                      blurRadius: 8.r,
+                                      offset: Offset(0, 2.h),
+                                    ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  Icons.notifications_outlined,
+                                  color: Colors.white,
+                                  size: 22.sp,
+                                ),
+                              ),
                             ),
                           ),
                           if (notificationCount > 0)
                             Positioned(
-                              right: 4.w,
-                              top: 4.h,
+                              right: 2.w,
+                              top: 2.h,
                               child: Container(
                                 padding: EdgeInsets.symmetric(
                                   horizontal: 5.w,
@@ -106,26 +121,43 @@ class MainAppBar extends StatelessWidget implements PreferredSizeWidget {
                                     textAlign: TextAlign.center,
                                   ),
                                 ),
+                            ),
+                          ),
+                        ],
+                        ),
+                      ),
+                      if (onSettingsTap != null) ...[
+                        SizedBox(width: 12.w),
+                        Tooltip(
+                          message: 'Settings',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: onSettingsTap,
+                            borderRadius: BorderRadius.circular(16.r),
+                            child: Container(
+                              width: 44.w,
+                              height: 44.h,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.25),
+                                borderRadius: BorderRadius.circular(16.r),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.08),
+                                    blurRadius: 8.r,
+                                    offset: Offset(0, 2.h),
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                Icons.settings_outlined,
+                                color: Colors.white,
+                                size: 22.sp,
                               ),
                             ),
-                        ],
-                      ),
-                      // Settings button
-                      if (onSettingsTap != null) ...[
-                        SizedBox(width: 8.w),
-                        IconButton(
-                          icon: Icon(
-                            Icons.settings_outlined,
-                            color: Colors.white,
-                            size: 22.sp,
                           ),
-                          onPressed: onSettingsTap,
-                          tooltip: 'Settings',
-                          padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(
-                            minWidth: 40.w,
-                            minHeight: 40.h,
-                          ),
+                        ),
                         ),
                       ],
                     ],

@@ -79,12 +79,50 @@ class MessagesPage extends GetView<InboxController> {
                 ),
               ),
               const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.settings_outlined, color: Colors.white),
-                onPressed: () => Get.toNamed('/settings'),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildHeaderIcon(
+                    icon: Icons.notifications_outlined,
+                    onTap: () => Get.toNamed('/notifications'),
+                  ),
+                  SizedBox(width: 12.w),
+                  _buildHeaderIcon(
+                    icon: Icons.settings_outlined,
+                    onTap: () => Get.toNamed('/settings'),
+                  ),
+                ],
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Same icon container style as dashboard header: rounded, light background, shadow.
+  Widget _buildHeaderIcon({required IconData icon, required VoidCallback onTap}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16.r),
+        child: Container(
+          width: 44.w,
+          height: 44.h,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.25),
+            borderRadius: BorderRadius.circular(16.r),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 8.r,
+                offset: Offset(0, 2.h),
+              ),
+            ],
+          ),
+          child: Icon(icon, color: Colors.white, size: 22.sp),
         ),
       ),
     );
