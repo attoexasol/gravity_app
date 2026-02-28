@@ -16,6 +16,7 @@ class DailyDetailsScreen extends GetView<DailyDetailsController> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       body: SafeArea(
+        top: false,
         child: Column(
           children: [
             // Header with navigation

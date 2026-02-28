@@ -14,9 +14,15 @@ class WeeklyReviewHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
       color: Colors.white,
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 48.h),
+      padding: EdgeInsets.only(
+        left: 16.w,
+        right: 16.w,
+        top: topPadding + 16.h,
+        bottom: 16.h,
+      ),
       child: Column(
         children: [
           // Top row with buttons and title

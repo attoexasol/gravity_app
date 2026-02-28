@@ -18,6 +18,7 @@ class WeeklyReviewScreen extends GetView<WeeklyReviewController> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       body: SafeArea(
+        top: false,
         child: Stack(
           children: [
             Obx(() {

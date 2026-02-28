@@ -13,6 +13,7 @@ class TodayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -26,7 +27,7 @@ class TodayHeader extends StatelessWidget {
       padding: EdgeInsets.only(
         left: 16.w,
         right: 16.w,
-        top: 48.h,
+        top: topPadding + 16.h,
         bottom: 16.h,
       ),
       child: Column(
