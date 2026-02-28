@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_text_styles.dart';
 import '../../../../data/model/post.dart';
 import '../../controllers/community_controller.dart';
@@ -41,25 +42,29 @@ class PostCard extends StatelessWidget {
           );
         }
       },
-      child: Container(
-        key: postKey,
-        margin: EdgeInsets.only(
-          bottom: 16.h,
-        ), // space-y-4 = 16px spacing between posts
-        decoration: BoxDecoration(
-          color: Colors.white, // bg-white
-          borderRadius: BorderRadius.circular(28.r), // rounded-[28px]
-          // Removed green border for pinned posts
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1), // shadow-md
-              blurRadius: 10.r,
-              offset: Offset(0, 2.h),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.hardEdge, // overflow-hidden
-        child: Column(
+      child: Obx(() {
+        final isFocused = controller.focusPostId.value == post.id.toString();
+        final content = Container(
+          key: postKey,
+          margin: EdgeInsets.only(
+            bottom: 16.h,
+          ), // space-y-4 = 16px spacing between posts
+          decoration: BoxDecoration(
+            color: Colors.white, // bg-white
+            borderRadius: BorderRadius.circular(28.r), // rounded-[28px]
+            border: isFocused
+                ? Border.all(color: AppColors.primary, width: 2)
+                : null,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1), // shadow-md
+                blurRadius: 10.r,
+                offset: Offset(0, 2.h),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.hardEdge, // overflow-hidden
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // User Header - Match React: p-5 flex items-center gap-3
@@ -313,18 +318,20 @@ class PostCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    )
-        // Match React AnimatePresence animation: initial={{ opacity: 0, y: 20 }}, animate={{ opacity: 1, y: 0 }}, delay: index * 0.1
-        .animate()
-        .fadeIn(duration: 300.ms, delay: (index * 100).ms)
-        .moveY(
-          begin: 20.h, // y: 20 (20 pixels)
-          end: 0,
-          duration: 300.ms,
-          delay: (index * 100).ms,
-          curve: Curves.easeOut,
-        );
+    );
+    return content
+            // Match React AnimatePresence animation: initial={{ opacity: 0, y: 20 }}, animate={{ opacity: 1, y: 0 }}, delay: index * 0.1
+            .animate()
+            .fadeIn(duration: 300.ms, delay: (index * 100).ms)
+            .moveY(
+              begin: 20.h, // y: 20 (20 pixels)
+              end: 0,
+              duration: 300.ms,
+              delay: (index * 100).ms,
+              curve: Curves.easeOut,
+            );
+      }),
+    );
   }
 
   Widget _buildReactionButton(

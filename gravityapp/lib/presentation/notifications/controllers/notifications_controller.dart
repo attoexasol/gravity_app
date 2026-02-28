@@ -1,4 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
+import '../../../core/services/api_service.dart';
+import '../../../core/services/preferences_service.dart';
+import '../../../data/model/notification_preferences.dart';
+import '../../../data/remote/notifications_api.dart';
 
 enum NotificationType {
   message,
@@ -20,6 +25,7 @@ class NotificationItem {
     required this.isUnread,
     required this.isHighPriority,
     this.actionText,
+    this.notificationId,
   });
 
   final String id;
@@ -30,6 +36,8 @@ class NotificationItem {
   bool isUnread;
   final bool isHighPriority;
   final String? actionText;
+  /// Backend notification id for mark-read API
+  final int? notificationId;
 
   NotificationItem copyWith({
     String? id,
@@ -40,6 +48,7 @@ class NotificationItem {
     bool? isUnread,
     bool? isHighPriority,
     String? actionText,
+    int? notificationId,
   }) {
     return NotificationItem(
       id: id ?? this.id,
@@ -50,131 +59,228 @@ class NotificationItem {
       isUnread: isUnread ?? this.isUnread,
       isHighPriority: isHighPriority ?? this.isHighPriority,
       actionText: actionText ?? this.actionText,
+      notificationId: notificationId ?? this.notificationId,
     );
   }
 }
 
 class NotificationsController extends GetxController {
+  final NotificationsApi _api = NotificationsApi();
+
   final RxList<NotificationItem> notifications = <NotificationItem>[].obs;
   final RxInt unreadCount = 0.obs;
+  final RxBool loading = false.obs;
+  final RxBool loadingMore = false.obs;
+  final Rx<String?> error = Rx<String?>(null);
+  final Rx<NotificationPreferences?> preferences = Rx<NotificationPreferences?>(null);
+
+  static const int _perPage = 20;
+  int _currentPage = 1;
+  bool _hasMore = true;
 
   @override
   void onInit() {
     super.onInit();
-    ever(notifications, (_) => _updateUnreadCount());
-    loadMockNotifications();
+    loadAll();
   }
 
-  void _updateUnreadCount() {
-    unreadCount.value =
-        notifications.where((n) => n.isUnread).length;
+  String? _getApiToken() {
+    return PreferencesService.getAuthToken();
   }
 
-  void loadMockNotifications() {
-    notifications.assignAll([
-      NotificationItem(
-        id: '1',
-        title: 'New Message from Coach Emily',
-        description:
-            'Great job on your water intake today! Keep up the excellent work.',
-        timeText: '15m ago',
-        type: NotificationType.message,
-        isUnread: true,
-        isHighPriority: true,
-        actionText: 'Reply →',
-      ),
-      NotificationItem(
-        id: '2',
-        title: 'Payment Method Expiring',
-        description:
-            'Your credit card ending in .... 4242 will expire soon. Please update your payment method.',
-        timeText: '30m ago',
-        type: NotificationType.payment,
-        isUnread: true,
-        isHighPriority: true,
-        actionText: 'Update Payment Method →',
-      ),
-      NotificationItem(
-        id: '3',
-        title: 'Streak Achievement! 🎉',
-        description:
-            "Congratulations! You've logged meals for 7 days straight. Keep up the great work!",
-        timeText: '2h ago',
-        type: NotificationType.streak,
-        isUnread: true,
-        isHighPriority: false,
-        actionText: null,
-      ),
-      NotificationItem(
-        id: '4',
-        title: 'Special Offer: Premium Upgrade',
-        description:
-            'Get 20% off Premium membership this month! Unlock personalized meal plans and advanced analytics.',
-        timeText: '3h ago',
-        type: NotificationType.offer,
-        isUnread: false,
-        isHighPriority: false,
-        actionText: null,
-      ),
-      NotificationItem(
-        id: '5',
-        title: 'New Post from Sarah',
-        description: 'Sarah shared a healthy recipe in the community',
-        timeText: '4h ago',
-        type: NotificationType.social,
-        isUnread: false,
-        isHighPriority: false,
-        actionText: null,
-      ),
-      NotificationItem(
-        id: '6',
-        title: 'Hydration Reminder',
-        description:
-            "You're below your daily water goal. Try to drink more water before bedtime!",
-        timeText: '5h ago',
-        type: NotificationType.reminder,
-        isUnread: false,
-        isHighPriority: false,
-        actionText: null,
-      ),
-      NotificationItem(
-        id: '7',
-        title: '5 Likes on Your Post',
-        description: 'Your healthy lunch photo got 5 likes!',
-        timeText: '8h ago',
-        type: NotificationType.social,
-        isUnread: false,
-        isHighPriority: false,
-        actionText: null,
-      ),
-      NotificationItem(
-        id: '8',
-        title: 'App Update Available',
-        description:
-            'A new version of Gravity is available with improved AI meal analysis and bug fixes.',
-        timeText: 'Yesterday',
-        type: NotificationType.update,
-        isUnread: false,
-        isHighPriority: false,
-        actionText: null,
-      ),
-    ]);
-  }
-
-  void markAsRead(String id) {
-    final index = notifications.indexWhere((n) => n.id == id);
-    if (index >= 0 && notifications[index].isUnread) {
-      final updated = notifications.toList();
-      updated[index] = updated[index].copyWith(isUnread: false);
-      notifications.assignAll(updated);
+  Future<void> loadAll() async {
+    final token = _getApiToken();
+    if (token == null || token.isEmpty) {
+      if (kDebugMode) debugPrint('Notifications: no api token, skipping load');
+      error.value = 'Please sign in to load notifications.';
+      return;
+    }
+    error.value = null;
+    loading.value = true;
+    try {
+      final count = await _api.unreadCount(apiToken: token);
+      unreadCount.value = count;
+      _currentPage = 1;
+      _hasMore = true;
+      final page = await _api.listNotifications(apiToken: token, page: 1, perPage: _perPage);
+      notifications.assignAll(_mapApiItems(page.items));
+      _hasMore = page.hasMore;
+    } on ApiException catch (e) {
+      if (kDebugMode) debugPrint('Notifications API Error: ${e.message}');
+      error.value = e.message;
+      notifications.clear();
+    } catch (e) {
+      if (kDebugMode) debugPrint('Notifications load error: $e');
+      error.value = 'Failed to load notifications.';
+      notifications.clear();
+    } finally {
+      loading.value = false;
     }
   }
 
-  void markAllAsRead() {
-    notifications.assignAll(
-      notifications.map((n) => n.copyWith(isUnread: false)).toList(),
-    );
+  Future<void> refreshList() async {
+    final token = _getApiToken();
+    if (token == null || token.isEmpty) return;
+    error.value = null;
+    loading.value = true;
+    try {
+      final count = await _api.unreadCount(apiToken: token);
+      unreadCount.value = count;
+      _currentPage = 1;
+      _hasMore = true;
+      final page = await _api.listNotifications(apiToken: token, page: 1, perPage: _perPage);
+      notifications.assignAll(_mapApiItems(page.items));
+      _hasMore = page.hasMore;
+    } on ApiException catch (e) {
+      error.value = e.message;
+    } catch (e) {
+      error.value = 'Failed to refresh.';
+    } finally {
+      loading.value = false;
+    }
   }
+
+  Future<void> loadMore() async {
+    final token = _getApiToken();
+    if (token == null || token.isEmpty || !_hasMore || loadingMore.value) return;
+    loadingMore.value = true;
+    try {
+      _currentPage += 1;
+      final page = await _api.listNotifications(apiToken: token, page: _currentPage, perPage: _perPage);
+      notifications.addAll(_mapApiItems(page.items));
+      _hasMore = page.hasMore;
+    } catch (e) {
+      _currentPage -= 1;
+      if (kDebugMode) debugPrint('Notifications loadMore error: $e');
+    } finally {
+      loadingMore.value = false;
+    }
+  }
+
+  List<NotificationItem> _mapApiItems(List<NotificationApiItem> items) {
+    return items.map((e) {
+      return NotificationItem(
+        id: e.id.toString(),
+        title: e.title,
+        description: e.body ?? '',
+        timeText: _timeAgo(e.createdAt),
+        type: _parseType(e.type),
+        isUnread: e.isRead == 0,
+        isHighPriority: false,
+        notificationId: e.id,
+      );
+    }).toList();
+  }
+
+  static String _timeAgo(String? createdAt) {
+    if (createdAt == null || createdAt.isEmpty) return '';
+    try {
+      final dt = DateTime.tryParse(createdAt);
+      if (dt == null) return createdAt;
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      if (diff.inDays == 1) return 'Yesterday';
+      if (diff.inDays < 7) return '${diff.inDays}d ago';
+      return createdAt;
+    } catch (_) {
+      return createdAt;
+    }
+  }
+
+  static NotificationType _parseType(String? type) {
+    if (type == null) return NotificationType.message;
+    final t = type.toLowerCase();
+    if (t.contains('payment')) return NotificationType.payment;
+    if (t.contains('streak')) return NotificationType.streak;
+    if (t.contains('offer')) return NotificationType.offer;
+    if (t.contains('social')) return NotificationType.social;
+    if (t.contains('reminder')) return NotificationType.reminder;
+    if (t.contains('update')) return NotificationType.update;
+    return NotificationType.message;
+  }
+
+  Future<void> onMarkAllRead() async {
+    final token = _getApiToken();
+    if (token == null || token.isEmpty) return;
+    try {
+      await _api.markAllRead(apiToken: token);
+      unreadCount.value = 0;
+      for (int i = 0; i < notifications.length; i++) {
+        if (notifications[i].isUnread) {
+          notifications[i] = notifications[i].copyWith(isUnread: false);
+        }
+      }
+      notifications.refresh();
+    } catch (e) {
+      if (kDebugMode) debugPrint('Mark all read error: $e');
+    }
+  }
+
+  Future<void> onOpenNotification(NotificationItem item) async {
+    final token = _getApiToken();
+    final id = item.notificationId ?? int.tryParse(item.id);
+    if (id != null && token != null && token.isNotEmpty) {
+      try {
+        await _api.markRead(apiToken: token, notificationId: id);
+        if (unreadCount.value > 0) unreadCount.value -= 1;
+        final index = notifications.indexWhere((n) => n.id == item.id);
+        if (index >= 0 && notifications[index].isUnread) {
+          notifications[index] = notifications[index].copyWith(isUnread: false);
+          notifications.refresh();
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('Mark read error: $e');
+      }
+    }
+    // Navigate to detail if needed; for now just mark read (existing design)
+  }
+
+  void markAsRead(String id) {
+    try {
+      final item = notifications.firstWhere((n) => n.id == id);
+      onOpenNotification(item);
+    } catch (_) {}
+  }
+
+  Future<void> updatePreferenceToggle(String key, bool value) async {
+    final token = _getApiToken();
+    if (token == null || token.isEmpty) return;
+    try {
+      final prefs = await _api.updatePreferences(
+        apiToken: token,
+        is_notification_allowed: key == 'enabled' ? value : null,
+        is_hydration_notify: key == 'hydration' ? value : null,
+        is_meal_notify: key == 'meals' ? value : null,
+        is_sleep_notify: key == 'sleep' ? value : null,
+        is_excercise_notify: key == 'exercise' ? value : null,
+        is_ai_daily_sumery_notify: key == 'dailySummary' ? value : null,
+        is_ai_weekly_sumery_notify: key == 'weeklySummary' ? value : null,
+        is_quite_hours_notify: key == 'quietHoursEnabled' ? value : null,
+      );
+      preferences.value = prefs;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Update preference error: $e');
+    }
+  }
+
+  /// Debug: send FCM token to server and print result.
+  Future<void> debugSyncFcmToken(String fcmToken) async {
+    final token = _getApiToken();
+    if (token == null || token.isEmpty) {
+      if (kDebugMode) debugPrint('debugSyncFcmToken: no api token');
+      return;
+    }
+    try {
+      await _api.storeDeviceToken(apiToken: token, fcmToken: fcmToken);
+      if (kDebugMode) debugPrint('debugSyncFcmToken: success');
+    } catch (e) {
+      if (kDebugMode) debugPrint('debugSyncFcmToken: failure $e');
+    }
+  }
+
+  void markAllAsRead() => onMarkAllRead();
 
   void onBack() {
     Get.back();

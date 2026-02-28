@@ -20,18 +20,61 @@ class NotificationsScreen extends GetView<NotificationsController> {
             child: SafeArea(
               top: false,
               child: Obx(() {
+                if (controller.loading.value && controller.notifications.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (controller.error.value != null && controller.notifications.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24.w),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            controller.error.value ?? 'Something went wrong',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.textSm,
+                          ),
+                          SizedBox(height: 16.h),
+                          TextButton(
+                            onPressed: () => controller.refreshList(),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
                 final list = controller.notifications;
-                return ListView.builder(
-                  padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 24.h),
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: list.length,
-                  itemBuilder: (context, index) {
-                    final item = list[index];
-                    return NotificationCard(
-                      item: item,
-                      onTap: () => controller.markAsRead(item.id),
-                    );
-                  },
+                return RefreshIndicator(
+                  onRefresh: () => controller.refreshList(),
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      if (notification is ScrollEndNotification) {
+                        final m = notification.metrics;
+                        if (m.pixels >= m.maxScrollExtent - 200) controller.loadMore();
+                      }
+                      return false;
+                    },
+                    child: ListView.builder(
+                      padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 24.h),
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      itemCount: list.length + (controller.loadingMore.value ? 1 : 0),
+                      itemBuilder: (context, index) {
+                      if (index >= list.length) {
+                        return Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16.h),
+                          child: const Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      final item = list[index];
+                      return NotificationCard(
+                        item: item,
+                        onTap: () => controller.onOpenNotification(item),
+                      );
+                    },
+                    ),
+                  ),
                 );
               }),
             ),
@@ -99,7 +142,7 @@ class NotificationsScreen extends GetView<NotificationsController> {
                 ),
               ),
               GestureDetector(
-                onTap: controller.markAllAsRead,
+                onTap: () => controller.onMarkAllRead(),
                 child: Text(
                   'Mark all read',
                   style: AppTextStyles.textSm.copyWith(

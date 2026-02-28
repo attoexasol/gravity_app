@@ -11,8 +11,16 @@ import 'core/services/preferences_service.dart';
 import 'core/services/app_lifecycle_service.dart';
 import 'core/services/auth_service.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
+import 'core/services/push_token_sync_service.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  // Optional: handle data when app was terminated
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,6 +58,9 @@ void main() async {
     // Continue app initialization even if Firebase fails
   }
 
+  // Register FCM background handler (must be top-level)
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   // 2. Initialize storage (GetStorage) after Firebase
   await PreferencesService.init();
 
@@ -79,8 +90,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    // Add lifecycle observer to detect when app goes to background
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PushTokenSyncService().init();
+    });
   }
 
   @override

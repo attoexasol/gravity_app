@@ -14,6 +14,7 @@ import '../../../core/services/preferences_service.dart';
 import '../../../core/services/token_manager.dart';
 import '../../../core/services/session_manager.dart';
 import '../../../core/services/device_manager.dart';
+import '../../../core/services/push_token_sync_service.dart';
 import '../../../core/utils/app_snackbar.dart';
 
 enum UserType { customer, coach }
@@ -307,6 +308,13 @@ class LoginController extends GetxController {
           debugPrint('⚠️ No firebase_custom_token in login response (real-time chat disabled)');
         }
 
+        // Upload FCM token to Laravel for push notifications
+        try {
+          await PushTokenSyncService().syncTokenAfterLogin();
+        } catch (e) {
+          debugPrint('⚠️ FCM token sync failed: $e');
+        }
+
         // Clear any previous user's profile image first to prevent image leakage
         await PreferencesService.clearProfileImage();
         
@@ -402,6 +410,12 @@ class LoginController extends GetxController {
 
       if (result['success'] == true) {
         await PreferencesService.setOnboardingCompleted(true);
+
+        try {
+          await PushTokenSyncService().syncTokenAfterLogin();
+        } catch (e) {
+          debugPrint('⚠️ FCM token sync after Google login failed: $e');
+        }
 
         AppSnackbar.show(
           title: 'Login Successful',

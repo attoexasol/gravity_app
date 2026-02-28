@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../../data/repositories/community_repository.dart';
@@ -136,6 +138,11 @@ class CommunityController extends GetxController {
 
   // Scroll controller for Community page
   ItemScrollController? _itemScrollController;
+
+  /// Post to focus/highlight when opened from push (e.g. post_reaction). Cleared after ~3s.
+  final Rx<String?> focusPostId = Rx<String?>(null);
+
+  static const String _kFocusPostIdStorage = 'focus_post_id';
 
   /// Load user profile data from storage
   void _loadUserProfile() {
@@ -1021,6 +1028,7 @@ class CommunityController extends GetxController {
           await _fetchCommentCountsForPosts(fetchedPosts);
           // Don't sort - keep posts in original order from API
           posts.value = fetchedPosts;
+          _applyPendingFocusPost();
           // Load user pinned posts to mark which posts are pinned by the user
           // This will update the posts list with correct pinned status
           await loadUserPinnedPosts();
@@ -3418,6 +3426,29 @@ class CommunityController extends GetxController {
   /// Set the scroll controller for the Community page
   void setScrollController(ItemScrollController controller) {
     _itemScrollController = controller;
+    _applyPendingFocusPost();
+  }
+
+  /// Apply pending focus_post_id from push (e.g. post_reaction). Scroll to post and highlight for ~3s.
+  void _applyPendingFocusPost() {
+    final storage = GetStorage();
+    final postIdStr = storage.read(_kFocusPostIdStorage) as String?;
+    if (postIdStr == null || postIdStr.isEmpty) return;
+    final postIdInt = int.tryParse(postIdStr);
+    if (postIdInt == null || posts.isEmpty || _itemScrollController == null) return;
+    final index = posts.indexWhere((p) => p.id == postIdInt);
+    if (index < 0) return;
+    storage.remove(_kFocusPostIdStorage);
+    focusPostId.value = postIdStr;
+    _itemScrollController!.scrollTo(
+      index: index,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+      alignment: 0.1,
+    );
+    Future.delayed(const Duration(seconds: 3), () {
+      if (focusPostId.value == postIdStr) focusPostId.value = null;
+    });
   }
 
   /// Scroll to the top of the Community page
