@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/services/meal_analysis_service.dart';
 import '../../../data/model/meal_analysis.dart';
+import '../../community/controllers/community_controller.dart';
 
 class MealUploadController extends GetxController {
   final MealAnalysisService _mealService = MealAnalysisService();
@@ -117,6 +118,16 @@ class MealUploadController extends GetxController {
 
       if (result.cached) {
         debugPrint('Using cached analysis');
+      }
+
+      // Refresh community posts so the post created by analyze-post API appears immediately
+      if (Get.isRegistered<CommunityController>()) {
+        try {
+          await Get.find<CommunityController>().refreshPosts();
+          debugPrint('✅ Community posts refreshed after meal analysis');
+        } catch (e) {
+          debugPrint('⚠️ Could not refresh community posts: $e');
+        }
       }
     } catch (e) {
       error.value = e.toString();

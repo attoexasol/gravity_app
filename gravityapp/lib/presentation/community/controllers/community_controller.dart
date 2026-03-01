@@ -1402,9 +1402,6 @@ class CommunityController extends GetxController {
         userAvatarUrl =
             'https://gravity.attoexasolutions.com/storage/$userProfileImage';
       }
-    } else {
-      // Default avatar if no profile image
-      userAvatarUrl = 'https://i.pravatar.cc/150?img=${postId % 10}';
     }
 
     // Extract pin status for single post
@@ -1512,9 +1509,6 @@ class CommunityController extends GetxController {
             userAvatarUrl =
                 'https://gravity.attoexasolutions.com/storage/$userProfileImage';
           }
-        } else {
-          // Default avatar if no profile image
-          userAvatarUrl = 'https://i.pravatar.cc/150?img=${postId % 10}';
         }
 
         return Post(
@@ -1897,9 +1891,7 @@ class CommunityController extends GetxController {
 
         // Get user info for the new comment
         final commentUserName = currentUserName;
-        final commentUserAvatar = currentUserProfileImage.isNotEmpty
-            ? currentUserProfileImage
-            : 'https://i.pravatar.cc/150?img=1';
+        final commentUserAvatar = currentUserProfileImage;
 
         // Get comment ID from response or generate a temporary one
         int commentId = 0;
@@ -2036,9 +2028,7 @@ class CommunityController extends GetxController {
 
         // Get user info for the new reply
         final replyUserName = currentUserName;
-        final replyUserAvatar = currentUserProfileImage.isNotEmpty
-            ? currentUserProfileImage
-            : 'https://i.pravatar.cc/150?img=1';
+        final replyUserAvatar = currentUserProfileImage;
 
         // Get reply ID from response or generate a temporary one
         int replyId = 0;
@@ -2238,9 +2228,6 @@ class CommunityController extends GetxController {
             userAvatarUrl =
                 'https://gravity.attoexasolutions.com/storage/$userProfileImage';
           }
-        } else {
-          final commentId = commentData['id'] is int ? commentData['id'] : 0;
-          userAvatarUrl = 'https://i.pravatar.cc/150?img=${commentId % 10}';
         }
 
         // Extract comment information
@@ -2303,9 +2290,6 @@ class CommunityController extends GetxController {
         userAvatarUrl =
             'https://gravity.attoexasolutions.com/storage/$userProfileImage';
       }
-    } else {
-      final replyId = data['id'] is int ? data['id'] : 0;
-      userAvatarUrl = 'https://i.pravatar.cc/150?img=${replyId % 10}';
     }
 
     final replyId = data['id'] is int
@@ -2762,9 +2746,7 @@ class CommunityController extends GetxController {
 
         // Get user info for the new post
         final postUserName = currentUserName;
-        final postUserAvatar = currentUserProfileImage.isNotEmpty
-            ? currentUserProfileImage
-            : 'https://i.pravatar.cc/150?img=1';
+        final postUserAvatar = currentUserProfileImage;
 
         // Map the response to a Post object
         final createdPostData = response.data;
@@ -3160,8 +3142,7 @@ class CommunityController extends GetxController {
         final updatedPostData = response.data!;
         final userName =
             currentPost?.user.name ?? PreferencesService.getUserName() ?? 'You';
-        final userAvatar =
-            currentPost?.user.avatar ?? 'https://i.pravatar.cc/150?img=1';
+        final userAvatar = currentPost?.user.avatar ?? '';
 
         // Construct full image URL if post_image exists
         String postImageUrl = '';
