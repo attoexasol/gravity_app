@@ -408,10 +408,6 @@
         builder: (BuildContext bottomSheetContext) {
           return Obx(() {
             final postId = controller.selectedPostId.value;
-            final comments = controller.postComments;
-            final isLoading = controller.isLoadingComments.value;
-            final error = controller.commentsError.value;
-
             if (postId == 0) return const SizedBox.shrink();
 
             return Container(
@@ -430,7 +426,7 @@
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Header with gradient
+                  // Header with gradient — only title/count reactive
                   Container(
                     padding: EdgeInsets.all(24.r),
                     decoration: BoxDecoration(
@@ -446,19 +442,25 @@
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          isLoading
-                              ? 'Loading...'
-                              : 'Comments (${comments.length})',
-                          style: ResponsiveTextStyles.textXl.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        Obx(() {
+                          final isLoading =
+                              controller.isLoadingComments.value;
+                          final totalCount =
+                              controller.currentPostCommentsCount ??
+                                  controller.postComments.length;
+                          return Text(
+                            isLoading
+                                ? 'Loading...'
+                                : 'Comments ($totalCount)',
+                            style: ResponsiveTextStyles.textXl.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        }),
                         _AnimatedTapWidget(
                           onTap: () {
                             controller.closeComments();
-                            // Use Navigator.pop() with bottom sheet context to avoid snackbar LateInitializationError
                             Navigator.of(bottomSheetContext).pop();
                           },
                           child: Container(
@@ -479,66 +481,79 @@
                     ),
                   ),
 
-                  // Comments list with loading state
+                  // Comments list with loading state — scoped Obx
                   Flexible(
-                    child: isLoading
-                        ? Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(40.r),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const CircularProgressIndicator(
-                                    color: Color(0xFF00B8A9),
-                                  ),
-                                  SizedBox(height: 16.h),
-                                  Text(
-                                    'Loading comments...',
-                                    style: ResponsiveTextStyles.textSm.copyWith(
-                                      color: const Color(
-                                        0xFF0A2342,
-                                      ).withOpacity(0.6),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                    child: Obx(() {
+                      final comments = controller.postComments;
+                      final isLoading =
+                          controller.isLoadingComments.value;
+                      final error = controller.commentsError.value;
+                      if (isLoading) {
+                        return Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(40.r),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const CircularProgressIndicator(
+                                  color: Color(0xFF00B8A9),
+                                ),
+                                SizedBox(height: 16.h),
+                                Text(
+                                  'Loading comments...',
+                                  style: ResponsiveTextStyles.textSm
+                                      .copyWith(
+                                        color: const Color(0xFF0A2342)
+                                            .withOpacity(0.6),
+                                      ),
+                                ),
+                              ],
                             ),
-                          )
-                        : error.isNotEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(40.r),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.error_outline,
-                                    size: 48.sp,
-                                    color: Colors.red.withOpacity(0.6),
-                                  ),
-                                  SizedBox(height: 16.h),
-                                  Text(
-                                    error,
-                                    style: ResponsiveTextStyles.textSm.copyWith(
-                                      color: const Color(
-                                        0xFF0A2342,
-                                      ).withOpacity(0.6),
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                        : comments.isEmpty
-                        ? _buildEmptyComments()
-                        : ListView.builder(
-                            padding: EdgeInsets.all(20.r),
-                            itemCount: comments.length,
-                            itemBuilder: (context, index) {
-                              return _buildCommentItem(postId, comments[index]);
-                            },
                           ),
+                        );
+                      }
+                      if (error.isNotEmpty) {
+                        return Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(40.r),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  size: 48.sp,
+                                  color: Colors.red.withOpacity(0.6),
+                                ),
+                                SizedBox(height: 16.h),
+                                Text(
+                                  error,
+                                  style: ResponsiveTextStyles.textSm
+                                      .copyWith(
+                                        color: const Color(0xFF0A2342)
+                                            .withOpacity(0.6),
+                                      ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                      if (comments.isEmpty) {
+                        return _buildEmptyComments();
+                      }
+                      return ListView.builder(
+                        padding: EdgeInsets.all(20.r),
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        itemCount: comments.length,
+                        itemBuilder: (context, index) {
+                          return _buildCommentItem(
+                              controller.selectedPostId.value,
+                              comments[index]);
+                        },
+                      );
+                    }),
                   ),
 
                   // Add comment input
@@ -795,38 +810,25 @@
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // Text Input
-                            Obx(
-                              () => TextField(
-                                controller:
-                                    TextEditingController(
-                                        text: controller.editPostText.value,
-                                      )
-                                      ..selection = TextSelection.fromPosition(
-                                        TextPosition(
-                                          offset: controller
-                                              .editPostText
-                                              .value
-                                              .length,
-                                        ),
-                                      ),
-                                onChanged: (value) =>
-                                    controller.editPostText.value = value,
-                                maxLines: 5,
-                                autofocus: true,
-                                style: ResponsiveTextStyles.textBase.copyWith(
-                                  color: const Color(0xFF0A2342), // Dark text color
-                                ),
-                                cursorColor: const Color(0xFF0A2342), // Dark cursor
-                                decoration: InputDecoration(
-                                  hintText: 'Edit your post...',
-                                  hintStyle: ResponsiveTextStyles.textBase
-                                      .copyWith(
-                                        color: const Color(
-                                          0xFF0A2342,
-                                        ).withOpacity(0.4),
-                                      ),
-                                  border: InputBorder.none,
-                                ),
+                            TextField(
+                              controller: controller.editPostTextController,
+                              onChanged: (value) =>
+                                  controller.editPostText.value = value,
+                              maxLines: 5,
+                              autofocus: true,
+                              style: ResponsiveTextStyles.textBase.copyWith(
+                                color: const Color(0xFF0A2342), // Dark text color
+                              ),
+                              cursorColor: const Color(0xFF0A2342), // Dark cursor
+                              decoration: InputDecoration(
+                                hintText: 'Edit your post...',
+                                hintStyle: ResponsiveTextStyles.textBase
+                                    .copyWith(
+                                      color: const Color(
+                                        0xFF0A2342,
+                                      ).withOpacity(0.4),
+                                    ),
+                                border: InputBorder.none,
                               ),
                             ),
 
@@ -1139,10 +1141,6 @@
       // Match React: AnimatePresence with spring animations
       return Obx(() {
         final postId = controller.selectedPostId.value;
-        final comments = controller.postComments;
-        final isLoading = controller.isLoadingComments.value;
-        final error = controller.commentsError.value;
-
         if (postId == 0) return const SizedBox.shrink();
 
         return Material(
@@ -1151,7 +1149,7 @@
               SafeArea(
                     child: Column(
                       children: [
-                        // Header with gradient - Match React: bg-gradient-to-br from-[#0A2342] to-[#00B8A9]
+                        // Header with gradient - only title/count reactive
                         Container(
                           padding: EdgeInsets.all(24.r), // p-6 = 24px
                           decoration: const BoxDecoration(
@@ -1164,15 +1162,22 @@
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                isLoading
-                                    ? 'Loading...'
-                                    : 'Comments (${comments.length})',
-                                style: ResponsiveTextStyles.textXl.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                              Obx(() {
+                                final isLoading =
+                                    controller.isLoadingComments.value;
+                                final totalCount =
+                                    controller.currentPostCommentsCount ??
+                                        controller.postComments.length;
+                                return Text(
+                                  isLoading
+                                      ? 'Loading...'
+                                      : 'Comments ($totalCount)',
+                                  style: ResponsiveTextStyles.textXl.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                );
+                              }),
                               _AnimatedTapWidget(
                                 onTap: controller.closeComments,
                                 child: Container(
@@ -1195,71 +1200,80 @@
                           ),
                         ),
 
-                        // Comments list with loading state
+                        // Comments list with loading state — scoped Obx
                         Expanded(
-                          child: isLoading
-                              ? Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(40.r),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const CircularProgressIndicator(
-                                          color: Color(0xFF00B8A9),
-                                        ),
-                                        SizedBox(height: 16.h),
-                                        Text(
-                                          'Loading comments...',
-                                          style: ResponsiveTextStyles.textSm
-                                              .copyWith(
-                                                color: const Color(
-                                                  0xFF0A2342,
-                                                ).withOpacity(0.6),
-                                              ),
-                                        ),
-                                      ],
-                                    ),
+                          child: Obx(() {
+                            final comments = controller.postComments;
+                            final isLoading =
+                                controller.isLoadingComments.value;
+                            final error = controller.commentsError.value;
+                            if (isLoading) {
+                              return Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(40.r),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const CircularProgressIndicator(
+                                        color: Color(0xFF00B8A9),
+                                      ),
+                                      SizedBox(height: 16.h),
+                                      Text(
+                                        'Loading comments...',
+                                        style: ResponsiveTextStyles.textSm
+                                            .copyWith(
+                                              color: const Color(0xFF0A2342)
+                                                  .withOpacity(0.6),
+                                            ),
+                                      ),
+                                    ],
                                   ),
-                                )
-                              : error.isNotEmpty
-                              ? Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(40.r),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.error_outline,
-                                          size: 48.sp,
-                                          color: Colors.red.withOpacity(0.6),
-                                        ),
-                                        SizedBox(height: 16.h),
-                                        Text(
-                                          error,
-                                          style: ResponsiveTextStyles.textSm
-                                              .copyWith(
-                                                color: const Color(
-                                                  0xFF0A2342,
-                                                ).withOpacity(0.6),
-                                              ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                              : comments.isEmpty
-                              ? _buildEmptyComments()
-                              : ListView.builder(
-                                  padding: EdgeInsets.all(20.r),
-                                  itemCount: comments.length,
-                                  itemBuilder: (context, index) {
-                                    return _buildCommentItem(
-                                      postId,
-                                      comments[index],
-                                    );
-                                  },
                                 ),
+                              );
+                            }
+                            if (error.isNotEmpty) {
+                              return Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(40.r),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.error_outline,
+                                        size: 48.sp,
+                                        color: Colors.red.withOpacity(0.6),
+                                      ),
+                                      SizedBox(height: 16.h),
+                                      Text(
+                                        error,
+                                        style: ResponsiveTextStyles.textSm
+                                            .copyWith(
+                                              color: const Color(0xFF0A2342)
+                                                  .withOpacity(0.6),
+                                            ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
+                            if (comments.isEmpty) {
+                              return _buildEmptyComments();
+                            }
+                            return ListView.builder(
+                              padding: EdgeInsets.all(20.r),
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              itemCount: comments.length,
+                              itemBuilder: (context, index) {
+                                return _buildCommentItem(
+                                  controller.selectedPostId.value,
+                                  comments[index],
+                                );
+                              },
+                            );
+                          }),
                         ),
 
                         // Add comment input - Match React: p-6 border-t border-[#0A2342]/10 bg-white
@@ -1490,6 +1504,11 @@
     }
 
     Widget _buildCommentItem(int postId, Comment comment) {
+      final userName = comment.user?.name?.isNotEmpty == true
+          ? comment.user!.name
+          : 'Unknown User';
+      final avatarUrl = comment.user?.avatar ?? '';
+
       return Container(
         margin: EdgeInsets.only(bottom: 16.h),
         child: Column(
@@ -1521,8 +1540,8 @@
                       Row(
                         children: [
                           UserAvatar(
-                            avatarUrl: comment.user.avatar,
-                            name: comment.user.name,
+                            avatarUrl: avatarUrl,
+                            name: userName,
                             size: 32.r,
                           ),
                           SizedBox(width: 8.w),
@@ -1531,7 +1550,7 @@
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  comment.user.name,
+                                  userName,
                                   style: ResponsiveTextStyles.textSm.copyWith(
                                     color: const Color(0xFF0A2342),
                                     fontWeight: FontWeight.w600,
@@ -1742,7 +1761,7 @@
                           SizedBox(width: 8.w),
                           Flexible(
                             child: Text(
-                              'Replying to ${comment.user.name}',
+                              'Replying to $userName',
                               style: ResponsiveTextStyles.textXs.copyWith(
                                 color: const Color(0xFF0A2342).withOpacity(0.6),
                               ),
@@ -1758,7 +1777,7 @@
                         onChanged: (value) => controller.newReply.value = value,
                         maxLines: 3,
                         autofocus: true,
-                        enabled: !controller.isCreatingComment.value,
+                        enabled: !controller.isCreatingReply.value,
                         style: ResponsiveTextStyles.textSm.copyWith(
                           color: const Color(0xFF0A2342), // Dark text color
                         ),
@@ -1800,7 +1819,8 @@
                           ),
                           SizedBox(width: 8.w),
                           Obx(() {
-                            final isCreating = controller.isCreatingComment.value;
+                            final isCreating =
+                                controller.isCreatingReply.value;
                             final canSend = controller.newReply.value
                                 .trim()
                                 .isNotEmpty;

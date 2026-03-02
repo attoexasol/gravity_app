@@ -79,6 +79,7 @@ class CommunityController extends GetxController {
 
   // Create comment state
   final RxBool isCreatingComment = false.obs;
+  final RxBool isCreatingReply = false.obs;
   final RxString createCommentError = ''.obs;
 
   // Comments list from API
@@ -121,9 +122,10 @@ class CommunityController extends GetxController {
   // Image picker instance
   final ImagePicker _imagePicker = ImagePicker();
 
-  // Text editing controllers for comments
+  // Text editing controllers for comments and edit post
   final TextEditingController commentTextController = TextEditingController();
   final TextEditingController replyTextController = TextEditingController();
+  final TextEditingController editPostTextController = TextEditingController();
 
   // Reactions tracking
   final RxMap<int, Set<String>> activeReactions = <int, Set<String>>{}.obs;
@@ -819,6 +821,7 @@ class CommunityController extends GetxController {
     commentTextController.dispose();
     replyTextController.dispose();
     editCommentTextController.dispose();
+    editPostTextController.dispose();
     createPostTextController.dispose();
     super.onClose();
   }
@@ -1434,6 +1437,9 @@ class CommunityController extends GetxController {
       comments: [], // API response doesn't include comments
       isPinned: isPinned,
       communityId: communityId,
+      commentsCount: postData['comments_count'] is int
+          ? postData['comments_count'] as int
+          : (int.tryParse(postData['comments_count']?.toString() ?? '')),
     );
   }
 
@@ -1525,6 +1531,9 @@ class CommunityController extends GetxController {
           comments: [], // API response doesn't include comments
           isPinned: isPinned, // Map pin status from API
           communityId: communityId, // Map community ID from API
+          commentsCount: postData['comments_count'] is int
+              ? postData['comments_count'] as int
+              : int.tryParse(postData['comments_count']?.toString() ?? ''),
         );
       }).toList();
     } catch (e) {
@@ -1986,9 +1995,9 @@ class CommunityController extends GetxController {
   /// Uses comment_id parameter to specify the parent comment
   Future<void> addReply(int postId, int commentId) async {
     if (newReply.value.trim().isEmpty) return;
-    if (isCreatingComment.value) return; // Prevent duplicate calls
+    if (isCreatingReply.value) return; // Prevent duplicate calls
 
-    isCreatingComment.value = true;
+    isCreatingReply.value = true;
     createCommentError.value = '';
 
     try {
@@ -1998,7 +2007,7 @@ class CommunityController extends GetxController {
         createCommentError.value =
             'Authentication required. Please login again.';
         debugPrint('❌ AddReply Error: No auth token found');
-        isCreatingComment.value = false;
+        isCreatingReply.value = false;
 
         Get.snackbar(
           'Error',
@@ -2143,7 +2152,7 @@ class CommunityController extends GetxController {
         duration: const Duration(seconds: 2),
       );
     } finally {
-      isCreatingComment.value = false;
+      isCreatingReply.value = false;
     }
   }
 
@@ -2920,6 +2929,10 @@ class CommunityController extends GetxController {
   void openEditPost(Post post) {
     editingPostId.value = post.id;
     editPostText.value = post.text;
+    editPostTextController.text = post.text;
+    editPostTextController.selection = TextSelection.fromPosition(
+      TextPosition(offset: post.text.length),
+    );
     editPostImage.value = post.image;
     // Try to get the community ID from the post, default to selected community
     editPostCommunityId.value = selectedCommunityId.value;
@@ -2931,6 +2944,7 @@ class CommunityController extends GetxController {
     showEditPost.value = false;
     editingPostId.value = 0;
     editPostText.value = '';
+    editPostTextController.clear();
     editPostImage.value = '';
     editPostImagePath.value = '';
     updatePostError.value = '';
@@ -3087,7 +3101,7 @@ class CommunityController extends GetxController {
   /// Update an existing post using API
   /// API: POST https://gravity.attoexasolutions.com/api/update_post
   Future<bool> updatePost() async {
-    if (editPostText.value.trim().isEmpty) return false;
+    if (editPostTextController.text.trim().isEmpty) return false;
     if (editingPostId.value == 0) return false;
 
     isUpdatingPost.value = true;
@@ -3110,7 +3124,7 @@ class CommunityController extends GetxController {
 
       debugPrint('🔄 Updating post via API...');
       debugPrint('   - Post ID: ${editingPostId.value}');
-      debugPrint('   - Text: ${editPostText.value}');
+      debugPrint('   - Text: ${editPostTextController.text}');
       debugPrint('   - Community ID: ${editPostCommunityId.value}');
       debugPrint('   - Has Image: ${editPostImage.value.isNotEmpty}');
 
@@ -3127,7 +3141,7 @@ class CommunityController extends GetxController {
         apiToken: apiToken,
         postId: editingPostId.value,
         communityId: editPostCommunityId.value,
-        postText: editPostText.value,
+        postText: editPostTextController.text,
         postStatus: 'published',
         likeCount: currentPost?.reactions.heart ?? 0,
         thumbsUpCount: currentPost?.reactions.thumbsUp ?? 0,
@@ -3164,7 +3178,7 @@ class CommunityController extends GetxController {
                     editingPostId.value,
           user: PostUser(name: userName, avatar: userAvatar),
           image: postImageUrl,
-          text: updatedPostData['post_text']?.toString() ?? editPostText.value,
+          text: updatedPostData['post_text']?.toString() ?? editPostTextController.text,
           timestamp: currentPost?.timestamp ?? 'Just now',
           reactions: Reactions(
             heart:
@@ -3403,6 +3417,9 @@ class CommunityController extends GetxController {
     }
     return posts.firstWhereOrNull((p) => p.id == selectedPostId.value);
   }
+
+  /// Comment count for the current post: backend count if available, else null (UI uses postComments.length).
+  int? get currentPostCommentsCount => selectedPost?.commentsCount;
 
   /// Set the scroll controller for the Community page
   void setScrollController(ItemScrollController controller) {

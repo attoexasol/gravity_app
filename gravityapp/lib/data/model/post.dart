@@ -12,6 +12,8 @@ class Post {
   final List<Comment> comments;
   final bool isPinned; // WhatsApp-style pinning: true if post is pinned
   final int communityId; // Required for pinning API call
+  /// Backend-provided comment count when available (e.g. comments_count).
+  final int? commentsCount;
 
   Post({
     required this.id,
@@ -23,6 +25,7 @@ class Post {
     required this.comments,
     this.isPinned = false, // Default to false if not provided
     this.communityId = 0, // Default to 0 if not provided
+    this.commentsCount, // Optional; use comments.length when null
   });
 
   Post copyWith({
@@ -35,6 +38,7 @@ class Post {
     List<Comment>? comments,
     bool? isPinned,
     int? communityId,
+    int? commentsCount,
   }) {
     return Post(
       id: id ?? this.id,
@@ -46,6 +50,7 @@ class Post {
       comments: comments ?? this.comments,
       isPinned: isPinned ?? this.isPinned,
       communityId: communityId ?? this.communityId,
+      commentsCount: commentsCount ?? this.commentsCount,
     );
   }
 }
