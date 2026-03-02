@@ -248,16 +248,39 @@ class NotificationsController extends GetxController {
     final token = _getApiToken();
     if (token == null || token.isEmpty) return;
     try {
+      final current = preferences.value ?? NotificationPreferences();
+      NotificationPreferences updated;
+      switch (key) {
+        case 'enabled':
+          updated = current.copyWith(enabled: value);
+          break;
+        case 'hydration':
+          updated = current.copyWith(hydration: value);
+          break;
+        case 'meals':
+          updated = current.copyWith(meals: value);
+          break;
+        case 'sleep':
+          updated = current.copyWith(sleep: value);
+          break;
+        case 'exercise':
+          updated = current.copyWith(exercise: value);
+          break;
+        case 'dailySummary':
+          updated = current.copyWith(dailySummary: value);
+          break;
+        case 'weeklySummary':
+          updated = current.copyWith(weeklySummary: value);
+          break;
+        case 'quietHoursEnabled':
+          updated = current.copyWith(quietHoursEnabled: value);
+          break;
+        default:
+          updated = current;
+      }
       final prefs = await _api.updatePreferences(
         apiToken: token,
-        is_notification_allowed: key == 'enabled' ? value : null,
-        is_hydration_notify: key == 'hydration' ? value : null,
-        is_meal_notify: key == 'meals' ? value : null,
-        is_sleep_notify: key == 'sleep' ? value : null,
-        is_excercise_notify: key == 'exercise' ? value : null,
-        is_ai_daily_sumery_notify: key == 'dailySummary' ? value : null,
-        is_ai_weekly_sumery_notify: key == 'weeklySummary' ? value : null,
-        is_quite_hours_notify: key == 'quietHoursEnabled' ? value : null,
+        prefs: updated,
       );
       preferences.value = prefs;
     } catch (e) {

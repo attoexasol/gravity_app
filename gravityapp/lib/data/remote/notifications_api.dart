@@ -88,56 +88,34 @@ class NotificationsApi {
     await _api.post('/device-token/store', body: body, requireAuth: false);
   }
 
-  /// Get preferences – tries /notification-settings/get then /get_notification_preferences
+  /// Get notification preferences from /notification-settings/get
   Future<NotificationPreferences> getPreferences({required String apiToken}) async {
-    var body = <String, dynamic>{'token': apiToken};
+    final body = <String, dynamic>{'token': apiToken};
     try {
-      var res = await _api.post('/notification-settings/get', body: body, requireAuth: false);
-      var data = res['data'];
+      final res = await _api.post('/notification-settings/get', body: body, requireAuth: false);
+      final data = res['data'];
       if (data is Map<String, dynamic>) {
-        return _prefsFromData(data);
+        return NotificationPreferences.fromJson(Map<String, dynamic>.from(data));
       }
-    } catch (_) {}
-    try {
-      var res = await _api.post('/get_notification_preferences', body: body, requireAuth: false);
-      var data = res['data'];
-      if (data is Map<String, dynamic>) return _prefsFromData(data);
     } catch (_) {}
     return NotificationPreferences();
   }
 
-  static NotificationPreferences _prefsFromData(Map<String, dynamic> data) {
-    return NotificationPreferences.fromJson(Map<String, dynamic>.from(data));
-  }
-
-  /// Update preferences using (B) keys for /update_notification
+  /// Update all notification preferences via /notification-settings/update.
+  /// Sends the full current state so the backend stays in sync.
   Future<NotificationPreferences> updatePreferences({
     required String apiToken,
-    bool? is_notification_allowed,
-    bool? is_hydration_notify,
-    bool? is_meal_notify,
-    bool? is_sleep_notify,
-    bool? is_excercise_notify,
-    bool? is_ai_daily_sumery_notify,
-    bool? is_ai_weekly_sumery_notify,
-    bool? is_quite_hours_notify,
-    String? quiet_start,
-    String? quiet_end,
+    required NotificationPreferences prefs,
   }) async {
-    final body = <String, dynamic>{'token': apiToken};
-    if (is_notification_allowed != null) body['is_notification_allowed'] = is_notification_allowed;
-    if (is_hydration_notify != null) body['is_hydration_notify'] = is_hydration_notify;
-    if (is_meal_notify != null) body['is_meal_notify'] = is_meal_notify;
-    if (is_sleep_notify != null) body['is_sleep_notify'] = is_sleep_notify;
-    if (is_excercise_notify != null) body['is_excercise_notify'] = is_excercise_notify;
-    if (is_ai_daily_sumery_notify != null) body['is_ai_daily_sumery_notify'] = is_ai_daily_sumery_notify;
-    if (is_ai_weekly_sumery_notify != null) body['is_ai_weekly_sumery_notify'] = is_ai_weekly_sumery_notify;
-    if (is_quite_hours_notify != null) body['is_quite_hours_notify'] = is_quite_hours_notify;
-    if (quiet_start != null) body['quiet_start'] = quiet_start;
-    if (quiet_end != null) body['quiet_end'] = quiet_end;
-    final res = await _api.post('/update_notification', body: body, requireAuth: false);
+    final body = <String, dynamic>{
+      'token': apiToken,
+      ...prefs.toJson(),
+    };
+    final res = await _api.post('/notification-settings/update', body: body, requireAuth: false);
     final data = res['data'];
-    if (data is Map<String, dynamic>) return _prefsFromData(data);
+    if (data is Map<String, dynamic>) {
+      return NotificationPreferences.fromJson(Map<String, dynamic>.from(data));
+    }
     return NotificationPreferences();
   }
 

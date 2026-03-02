@@ -18,6 +18,7 @@ import '../../../core/services/health_sync_service.dart'
     show HealthSyncService, HealthPlatform, SyncActivity;
 import '../../../data/model/health_permissions.dart';
 import '../../../data/model/notification_preferences.dart';
+import '../../../data/remote/notifications_api.dart';
 import '../../../data/repositories/goals_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../core/services/api_service.dart';
@@ -33,6 +34,7 @@ class SettingsController extends GetxController {
   final AuthRepository _authRepository = AuthRepository();
   final ImagePicker _imagePicker = ImagePicker();
   final ApiService _apiService = ApiService();
+  final NotificationsApi _notificationsApi = NotificationsApi();
 
   // Notification preferences
   final Rx<NotificationPreferences> notificationPrefs =
@@ -85,8 +87,9 @@ class SettingsController extends GetxController {
   void onInit() {
     super.onInit();
     _loadUserData();
-    _fetchUserDataFromAPI(); // Fetch latest user data from API
+    _fetchUserDataFromAPI();
     _loadSettings();
+    _fetchNotificationSettingsFromAPI();
     _loadGoals();
     _fetchGoalsFromAPI();
     _initializeHealthPermissions();
@@ -1108,7 +1111,6 @@ Future<void> saveProfileImage() async {
 
   /// Load settings from storage
   void _loadSettings() {
-    // Load notification preferences from storage
     final savedNotifPrefs = PreferencesService.getStorage().read(
       'notification_preferences',
     );
@@ -1124,18 +1126,31 @@ Future<void> saveProfileImage() async {
           dailySummary: prefsMap['dailySummary'] ?? true,
           weeklySummary: prefsMap['weeklySummary'] ?? true,
           quietHoursEnabled: prefsMap['quietHoursEnabled'] ?? false,
-          quietHoursStart: prefsMap['quietHoursStart'] ?? '10:00 PM',
-          quietHoursEnd: prefsMap['quietHoursEnd'] ?? '8:00 AM',
+          quietHoursStart: prefsMap['quietHoursStart'] ?? '22:00',
+          quietHoursEnd: prefsMap['quietHoursEnd'] ?? '08:00',
         );
       } catch (e) {
         debugPrint('Error loading notification preferences: $e');
       }
     }
 
-    // Load AI features setting
     final aiFeaturesValue = PreferencesService.getStorage().read('ai_features');
     if (aiFeaturesValue != null) {
       aiFeatures.value = aiFeaturesValue as bool;
+    }
+  }
+
+  /// Fetch notification settings from the API and update local state
+  Future<void> _fetchNotificationSettingsFromAPI() async {
+    final token = PreferencesService.getAuthToken();
+    if (token == null || token.isEmpty) return;
+    try {
+      final prefs = await _notificationsApi.getPreferences(apiToken: token);
+      notificationPrefs.value = prefs;
+      _saveNotificationPreferences();
+      debugPrint('✅ Notification settings loaded from API');
+    } catch (e) {
+      debugPrint('⚠️ Failed to fetch notification settings from API: $e');
     }
   }
 
@@ -1253,7 +1268,16 @@ Future<void> saveProfileImage() async {
 
     switch (key) {
       case 'enabled':
-        updated = current.copyWith(enabled: value);
+        updated = current.copyWith(
+          enabled: value,
+          hydration: value,
+          meals: value,
+          sleep: value,
+          exercise: value,
+          dailySummary: value,
+          weeklySummary: value,
+          quietHoursEnabled: value,
+        );
         break;
       case 'hydration':
         updated = current.copyWith(hydration: value);
@@ -1314,20 +1338,16 @@ Future<void> saveProfileImage() async {
     }
   }
 
-  /// Update notification settings on backend
+  /// Update notification settings on backend via /notification-settings/update
   Future<void> updateNotificationSettings({
     bool? previousValue,
     String? revertedKey,
   }) async {
-    if (isUpdatingNotifications.value) {
-      // Prevent concurrent updates
-      return;
-    }
+    if (isUpdatingNotifications.value) return;
 
     try {
       isUpdatingNotifications.value = true;
 
-      // Get token from storage
       final token = PreferencesService.getAuthToken();
       if (token == null || token.isEmpty) {
         _safeSnackbar(
@@ -1338,87 +1358,39 @@ Future<void> saveProfileImage() async {
           colorText: Get.theme.colorScheme.onError,
           duration: const Duration(seconds: 4),
         );
-        
-        // Revert the toggle if we have previous value
         if (previousValue != null && revertedKey != null) {
           _revertNotificationPreference(revertedKey, previousValue);
         }
         return;
       }
 
-      // Get current notification preferences
-      final prefs = notificationPrefs.value;
-
-      // Map notification preferences to API format
-      final requestBody = {
-        'token': token,
-        'is_notification_allowed': prefs.enabled ? 1 : 0,
-        'is_hydration_notify': prefs.hydration ? 1 : 0,
-        'is_meal_notify': prefs.meals ? 1 : 0,
-        'is_sleep_notify': prefs.sleep ? 1 : 0,
-        'is_excercise_notify': prefs.exercise ? 1 : 0,
-        'is_ai_daily_sumery_notify': prefs.dailySummary ? 1 : 0,
-        'is_ai_weekly_sumery_notify': prefs.weeklySummary ? 1 : 0,
-      };
-
       debugPrint('🔄 Updating notification settings...');
-      debugPrint('📦 Request body: ${jsonEncode(requestBody)}');
 
-      // Make POST request to API
-      final response = await _apiService.post(
-        '/update_notification',
-        body: requestBody,
+      final updated = await _notificationsApi.updatePreferences(
+        apiToken: token,
+        prefs: notificationPrefs.value,
       );
 
-      // Check response
-      final status = response['status'] as bool? ?? false;
-      final message = response['message'] as String? ?? '';
+      notificationPrefs.value = updated;
+      _saveNotificationPreferences();
 
-      if (status) {
-        // Success - update notification preferences with response data if available
-        final data = response['data'] as Map<String, dynamic>?;
-        if (data != null) {
-          notificationPrefs.value = NotificationPreferences(
-            enabled: (data['is_notification_allowed'] as int? ?? 0) == 1,
-            hydration: (data['is_hydration_notify'] as int? ?? 0) == 1,
-            meals: (data['is_meal_notify'] as int? ?? 0) == 1,
-            sleep: (data['is_sleep_notify'] as int? ?? 0) == 1,
-            exercise: (data['is_excercise_notify'] as int? ?? 0) == 1,
-            dailySummary: (data['is_ai_daily_sumery_notify'] as int? ?? 0) == 1,
-            weeklySummary: (data['is_ai_weekly_sumery_notify'] as int? ?? 0) == 1,
-            quietHoursEnabled: notificationPrefs.value.quietHoursEnabled,
-            quietHoursStart: notificationPrefs.value.quietHoursStart,
-            quietHoursEnd: notificationPrefs.value.quietHoursEnd,
-          );
-          _saveNotificationPreferences();
-        }
+      _safeSnackbar(
+        title: 'Success',
+        message: 'Notification settings updated successfully.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFF00B8A9).withOpacity(0.8),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
 
-        // Show success snackbar
-        _safeSnackbar(
-          title: 'Success',
-          message: message.isNotEmpty
-              ? message
-              : 'Notification settings updated successfully.',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: const Color(0xFF00B8A9).withOpacity(0.8),
-          colorText: Colors.white,
-          duration: const Duration(seconds: 2),
-        );
-
-        debugPrint('✅ Notification settings updated successfully');
-      } else {
-        // API returned error
-        throw Exception(message.isNotEmpty ? message : 'Failed to update notification settings');
-      }
+      debugPrint('✅ Notification settings updated successfully');
     } catch (e) {
       debugPrint('❌ Error updating notification settings: $e');
 
-      // Revert the toggle state
       if (previousValue != null && revertedKey != null) {
         _revertNotificationPreference(revertedKey, previousValue);
       }
 
-      // Show error snackbar
       String errorMessage = 'Failed to update notification settings. Please try again.';
       if (e.toString().contains('token') || e.toString().contains('auth')) {
         errorMessage = 'Authentication error. Please login again.';

@@ -377,7 +377,7 @@ class PostCard extends StatelessWidget {
     add('carbs', _reCarbs, 'g');
     add('fat', _reFat, 'g');
     add('fiber', _reFiber, 'g');
-    add('sodium', _reSodium, 'mg');
+    add('sodium', _reSodium, ' mg');
     return map.isEmpty ? null : map;
   }
 

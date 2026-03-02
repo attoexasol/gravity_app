@@ -20,8 +20,8 @@ class NotificationPreferences {
     this.dailySummary = true,
     this.weeklySummary = true,
     this.quietHoursEnabled = false,
-    this.quietHoursStart = '10:00 PM',
-    this.quietHoursEnd = '8:00 AM',
+    this.quietHoursStart = '22:00',
+    this.quietHoursEnd = '08:00',
   });
 
   NotificationPreferences copyWith({
@@ -50,19 +50,18 @@ class NotificationPreferences {
     );
   }
 
-  /// From backend (B) keys: is_notification_allowed, is_hydration_notify, etc.
   factory NotificationPreferences.fromJson(Map<String, dynamic> json) {
     return NotificationPreferences(
-      enabled: _readBool(json, 'is_notification_allowed') ?? false,
-      hydration: _readBool(json, 'is_hydration_notify') ?? true,
-      meals: _readBool(json, 'is_meal_notify') ?? true,
-      sleep: _readBool(json, 'is_sleep_notify') ?? true,
-      exercise: _readBool(json, 'is_excercise_notify') ?? true,
-      dailySummary: _readBool(json, 'is_ai_daily_sumery_notify') ?? true,
-      weeklySummary: _readBool(json, 'is_ai_weekly_sumery_notify') ?? true,
-      quietHoursEnabled: _readBool(json, 'is_quite_hours_notify') ?? false,
-      quietHoursStart: json['quiet_start'] as String? ?? '10:00 PM',
-      quietHoursEnd: json['quiet_end'] as String? ?? '8:00 AM',
+      enabled: _readBool(json, 'all_enabled') ?? false,
+      hydration: _readBool(json, 'hydration_enabled') ?? true,
+      meals: _readBool(json, 'meal_enabled') ?? true,
+      sleep: _readBool(json, 'sleep_enabled') ?? true,
+      exercise: _readBool(json, 'exercise_enabled') ?? true,
+      dailySummary: _readBool(json, 'daily_summary_enabled') ?? true,
+      weeklySummary: _readBool(json, 'weekly_summary_enabled') ?? true,
+      quietHoursEnabled: _readBool(json, 'quiet_hours_enabled') ?? false,
+      quietHoursStart: json['quiet_start'] as String? ?? '22:00',
+      quietHoursEnd: json['quiet_end'] as String? ?? '08:00',
     );
   }
 
@@ -75,19 +74,23 @@ class NotificationPreferences {
     return null;
   }
 
-  /// To backend (B) keys for /update_notification
   Map<String, dynamic> toJson() {
     return {
-      'is_notification_allowed': enabled,
-      'is_hydration_notify': hydration,
-      'is_meal_notify': meals,
-      'is_sleep_notify': sleep,
-      'is_excercise_notify': exercise,
-      'is_ai_daily_sumery_notify': dailySummary,
-      'is_ai_weekly_sumery_notify': weeklySummary,
-      'is_quite_hours_notify': quietHoursEnabled,
-      if (quietHoursStart.isNotEmpty) 'quiet_start': quietHoursStart,
-      if (quietHoursEnd.isNotEmpty) 'quiet_end': quietHoursEnd,
+      'all_enabled': enabled ? 1 : 0,
+      'hydration_enabled': hydration ? 1 : 0,
+      'meal_enabled': meals ? 1 : 0,
+      'sleep_enabled': sleep ? 1 : 0,
+      'exercise_enabled': exercise ? 1 : 0,
+      'daily_summary_enabled': dailySummary ? 1 : 0,
+      'weekly_summary_enabled': weeklySummary ? 1 : 0,
+      'quiet_hours_enabled': quietHoursEnabled ? 1 : 0,
+      if (_isValidHi(quietHoursStart)) 'quiet_start': quietHoursStart,
+      if (_isValidHi(quietHoursEnd)) 'quiet_end': quietHoursEnd,
     };
+  }
+
+  /// Checks whether [time] matches the H:i format expected by the backend (e.g. "22:00", "8:00").
+  static bool _isValidHi(String time) {
+    return RegExp(r'^\d{1,2}:\d{2}$').hasMatch(time);
   }
 }
