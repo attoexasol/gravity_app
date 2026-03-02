@@ -399,7 +399,7 @@
         barrierColor: Colors.black.withOpacity(0.5),
         isDismissible: true,
         enableDrag: true,
-      );
+      ).whenComplete(() => controller.closeComments());
     }
 
     // Build Comments Bottom Sheet
@@ -554,48 +554,11 @@
                     ),
                     child: Row(
                       children: [
-                        Obx(() {
-                          final profileImage = controller.currentUserProfileImage;
-                          ImageProvider? imageProvider;
-
-                          if (profileImage.isNotEmpty) {
-                            // Check if it's a local file path
-                            if (profileImage.startsWith('/') ||
-                                profileImage.contains('\\') ||
-                                profileImage.startsWith('file://')) {
-                              try {
-                                final file = File(
-                                  profileImage.replaceFirst('file://', ''),
-                                );
-                                if (file.existsSync()) {
-                                  imageProvider = FileImage(file);
-                                }
-                              } catch (e) {
-                                // Ignore file errors, will show default icon
-                              }
-                            } else {
-                              // Network URL
-                              imageProvider = CachedNetworkImageProvider(
-                                profileImage,
-                              );
-                            }
-                          }
-
-                          return CircleAvatar(
-                            radius: 20.r,
-                            backgroundImage: imageProvider,
-                            backgroundColor: AppColors.muted,
-                            child: imageProvider == null
-                                ? Icon(
-                                    Icons.person,
-                                    size: 20.sp,
-                                    color: const Color(
-                                      0xFF0A2342,
-                                    ).withOpacity(0.5),
-                                  )
-                                : null,
-                          );
-                        }),
+                        Obx(() => UserAvatar(
+                          avatarUrl: controller.currentUserProfileImage,
+                          name: controller.currentUserName,
+                          size: 40.r,
+                        )),
                         SizedBox(width: 12.w),
                         Expanded(
                           child: TextField(
@@ -1771,49 +1734,11 @@
                     children: [
                       Row(
                         children: [
-                          Obx(() {
-                            final profileImage =
-                                controller.currentUserProfileImage;
-                            ImageProvider? imageProvider;
-
-                            if (profileImage.isNotEmpty) {
-                              // Check if it's a local file path
-                              if (profileImage.startsWith('/') ||
-                                  profileImage.contains('\\') ||
-                                  profileImage.startsWith('file://')) {
-                                try {
-                                  final file = File(
-                                    profileImage.replaceFirst('file://', ''),
-                                  );
-                                  if (file.existsSync()) {
-                                    imageProvider = FileImage(file);
-                                  }
-                                } catch (e) {
-                                  // Ignore file errors, will show default icon
-                                }
-                              } else {
-                                // Network URL
-                                imageProvider = CachedNetworkImageProvider(
-                                  profileImage,
-                                );
-                              }
-                            }
-
-                            return CircleAvatar(
-                              radius: 12.r,
-                              backgroundImage: imageProvider,
-                              backgroundColor: AppColors.muted,
-                              child: imageProvider == null
-                                  ? Icon(
-                                      Icons.person,
-                                      size: 12.sp,
-                                      color: const Color(
-                                        0xFF0A2342,
-                                      ).withOpacity(0.5),
-                                    )
-                                  : null,
-                            );
-                          }),
+                          UserAvatar(
+                            avatarUrl: controller.currentUserProfileImage,
+                            name: controller.currentUserName,
+                            size: 24.r,
+                          ),
                           SizedBox(width: 8.w),
                           Flexible(
                             child: Text(
@@ -1832,6 +1757,7 @@
                         controller: controller.replyTextController,
                         onChanged: (value) => controller.newReply.value = value,
                         maxLines: 3,
+                        autofocus: true,
                         enabled: !controller.isCreatingComment.value,
                         style: ResponsiveTextStyles.textSm.copyWith(
                           color: const Color(0xFF0A2342), // Dark text color
