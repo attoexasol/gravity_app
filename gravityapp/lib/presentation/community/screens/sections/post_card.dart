@@ -569,6 +569,15 @@ class _ExpandablePostContentState extends State<_ExpandablePostContent> {
     return painter.didExceedMaxLines;
   }
 
+  bool _textExceedsMaxLines(String text, double maxWidth, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      maxLines: _maxLines,
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: maxWidth);
+    return painter.didExceedMaxLines;
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasAnyContent = widget.title.isNotEmpty ||
@@ -591,7 +600,12 @@ class _ExpandablePostContentState extends State<_ExpandablePostContent> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
+        final hasTitle = widget.title.isNotEmpty;
         final hasAiInsight = widget.aiInsight != null && widget.aiInsight!.isNotEmpty;
+        final titleExceeds = hasTitle &&
+            !hasAiInsight &&
+            !_expanded &&
+            _textExceedsMaxLines(widget.title, maxWidth, widget.titleStyle);
         final aiExceedsThreeLines = hasAiInsight &&
             !_expanded &&
             _aiInsightExceedsMaxLines(widget.aiInsight!, maxWidth, widget.aiInsightStyle);
@@ -600,10 +614,29 @@ class _ExpandablePostContentState extends State<_ExpandablePostContent> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (widget.title.isNotEmpty)
+            if (hasTitle)
               Padding(
-                padding: EdgeInsets.only(bottom: 16.h),
-                child: Text(widget.title, style: widget.titleStyle),
+                padding: EdgeInsets.only(bottom: titleExceeds ? 8.h : 16.h),
+                child: Text(
+                  widget.title,
+                  style: widget.titleStyle,
+                  maxLines: titleExceeds ? _maxLines : null,
+                  overflow: titleExceeds ? TextOverflow.ellipsis : null,
+                ),
+              ),
+            if (titleExceeds)
+              GestureDetector(
+                onTap: () => setState(() => _expanded = true),
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 16.h),
+                  child: Text(
+                    'See More',
+                    style: ResponsiveTextStyles.textSm.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ),
             if (widget.healthScore != null && widget.healthScore!.isNotEmpty)
               Padding(
