@@ -100,9 +100,8 @@ class NotificationsScreen extends GetView<NotificationsController> {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 20.h),
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               GestureDetector(
@@ -121,9 +120,12 @@ class NotificationsScreen extends GetView<NotificationsController> {
                   ),
                 ),
               ),
+              SizedBox(width: 12.w),
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Notifications',
@@ -132,6 +134,7 @@ class NotificationsScreen extends GetView<NotificationsController> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    SizedBox(height: 4.h),
                     Obx(() => Text(
                           '${controller.unreadCount.value} unread',
                           style: AppTextStyles.textSm.copyWith(
@@ -141,6 +144,7 @@ class NotificationsScreen extends GetView<NotificationsController> {
                   ],
                 ),
               ),
+              SizedBox(width: 12.w),
               GestureDetector(
                 onTap: () => controller.onMarkAllRead(),
                 child: Text(
