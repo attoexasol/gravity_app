@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import '../../community/screens/community_page.dart';
 import '../../dashboard/screens/dashboard_view.dart';
@@ -6,6 +7,7 @@ import '../../dashboard/screens/sections/sync_status_section.dart';
 import '../../dashboard/controllers/dashboard_controller.dart';
 import '../../messages/screens/messages_page.dart';
 import '../../coach_dashboard/screens/coach_dashboard_screen.dart';
+import '../../notifications/controllers/notifications_controller.dart';
 import '../../widgets/main_app_bar.dart';
 import '../../widgets/main_bottom_nav.dart';
 import '../../widgets/main_drawer.dart';
@@ -25,13 +27,22 @@ class MainLayoutScreen extends GetView<MainLayoutController> {
                 controller.currentIndex.value == 3 ||
                 controller.currentIndex.value == 4)
             ? null
-            : MainAppBar(
-                userName: controller.userName.value,
-                onNotificationTap: controller.navigateToNotifications,
-                onMenuTap: () {
-                  Scaffold.of(context).openDrawer();
-                },
-                onSettingsTap: controller.navigateToSettings,
+            : PreferredSize(
+                preferredSize: Size.fromHeight(180.h),
+                child: Obx(() {
+                  final notificationCount = Get.isRegistered<NotificationsController>()
+                      ? Get.find<NotificationsController>().unreadCount.value
+                      : 0;
+                  return MainAppBar(
+                    userName: controller.userName.value,
+                    onNotificationTap: controller.navigateToNotifications,
+                    onMenuTap: () {
+                      Scaffold.of(context).openDrawer();
+                    },
+                    onSettingsTap: controller.navigateToSettings,
+                    notificationCount: notificationCount,
+                  );
+                }),
               ),
 
         // Drawer

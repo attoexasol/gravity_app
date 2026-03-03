@@ -8,6 +8,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
+import '../../notifications/controllers/notifications_controller.dart';
+import '../../widgets/notification_icon_button.dart';
 import '../controllers/messages_controller.dart';
 import '../../../data/model/message_user_model.dart';
 
@@ -82,10 +84,18 @@ class MessagesPage extends GetView<InboxController> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildHeaderIcon(
-                    icon: Icons.notifications_outlined,
-                    onTap: () => Get.toNamed('/notifications'),
-                  ),
+                  Obx(() {
+                    final count = Get.isRegistered<NotificationsController>()
+                        ? Get.find<NotificationsController>().unreadCount.value
+                        : 0;
+                    return NotificationIconButton(
+                      unreadCount: count,
+                      onTap: () => Get.toNamed('/notifications'),
+                      size: 44,
+                      iconSize: 22,
+                      icon: Icons.notifications_outlined,
+                    );
+                  }),
                   SizedBox(width: 12.w),
                   _buildHeaderIcon(
                     icon: Icons.settings_outlined,

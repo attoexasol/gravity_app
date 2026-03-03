@@ -5,6 +5,7 @@ import '../../presentation/consent/controllers/consent_controller.dart';
 import '../../presentation/goal_settings/controllers/goal_settings_controller.dart';
 import '../../presentation/login/controllers/login_controller.dart';
 import '../../presentation/messages/controllers/messages_controllers.dart';
+import '../../presentation/notifications/controllers/notifications_controller.dart';
 import '../../presentation/onboarding/controllers/onboarding_controller.dart';
 import '../../presentation/dashboard/controllers/dashboard_controller.dart';
 import '../../presentation/signup/controllers/signup_controller.dart';
@@ -61,6 +62,12 @@ class InitialBinding extends Bindings {
     // Meal Upload Controller
     Get.lazyPut<MealUploadController>(
       () => MealUploadController(),
+      fenix: true,
+    );
+
+    // Notifications Controller (for unread badge on Home, Community, AI Coach, Messages)
+    Get.lazyPut<NotificationsController>(
+      () => NotificationsController(),
       fenix: true,
     );
   }

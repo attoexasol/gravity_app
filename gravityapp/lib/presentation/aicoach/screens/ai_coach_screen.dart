@@ -6,6 +6,8 @@ import 'package:gravityapp/data/model/ai_coach.dart';
 import 'package:gravityapp/presentation/aicoach/screens/sections/quick_actions.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../app/theme/app_colors.dart';
+import '../../notifications/controllers/notifications_controller.dart';
+import '../../widgets/notification_icon_button.dart';
 import '../controllers/ai_coach_controller.dart';
 import '../../main_layout/controllers/main_layout_controller.dart';
 
@@ -311,44 +313,18 @@ class _AiCoachScreenState extends State<AiCoachScreen>
               // Right actions
               Row(
                 children: [
-                  InkWell(
-                    onTap: () {
-                      // Navigate to notifications
-                      Get.toNamed('/notifications');
-                    },
-                    borderRadius: BorderRadius.circular(10.r),
-                    child: Container(
-                      width: 40.w,
-                      height: 40.w,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(10.r),
-                      ),
-                      child: Stack(
-                        children: [
-                          Center(
-                            child: Icon(
-                              Icons.notifications,
-                              color: Colors.white,
-                              size: 22.sp,
-                            ),
-                          ),
-                          Positioned(
-                            top: 8.h,
-                            right: 8.w,
-                            child: Container(
-                              width: 8.w,
-                              height: 8.w,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFD4AF37),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  Obx(() {
+                    final count = Get.isRegistered<NotificationsController>()
+                        ? Get.find<NotificationsController>().unreadCount.value
+                        : 0;
+                    return NotificationIconButton(
+                      unreadCount: count,
+                      onTap: () => Get.toNamed('/notifications'),
+                      size: 40,
+                      iconSize: 22,
+                      icon: Icons.notifications_outlined,
+                    );
+                  }),
                   SizedBox(width: 8.w),
                   InkWell(
                     onTap: () {

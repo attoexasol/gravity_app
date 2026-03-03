@@ -10,6 +10,8 @@
   import '../../../app/theme/app_colors.dart';
   import '../../../data/model/comment.dart';
   import '../../../data/model/reply.dart';
+  import '../../notifications/controllers/notifications_controller.dart';
+  import '../../widgets/notification_icon_button.dart';
   import '../controllers/community_controller.dart';
   import 'sections/create_post_modal.dart';
   import 'sections/pinned_posts_bar.dart';
@@ -326,10 +328,18 @@
             ),
             Row(
               children: [
-                GestureDetector(
-                  onTap: () => Get.toNamed(AppRoutes.notifications),
-                  child: _buildHeaderIcon(Icons.notifications_none),
-                ),
+                Obx(() {
+                  final count = Get.isRegistered<NotificationsController>()
+                      ? Get.find<NotificationsController>().unreadCount.value
+                      : 0;
+                  return NotificationIconButton(
+                    unreadCount: count,
+                    onTap: () => Get.toNamed(AppRoutes.notifications),
+                    size: 44,
+                    iconSize: 22,
+                    icon: Icons.notifications_none,
+                  );
+                }),
                 SizedBox(width: 12.w),
                 GestureDetector(
                   onTap: () => Get.toNamed(AppRoutes.settings),

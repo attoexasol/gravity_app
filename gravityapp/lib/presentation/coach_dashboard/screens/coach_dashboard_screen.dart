@@ -3,6 +3,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:gravityapp/data/model/client_user.dart';
 import '../../../app/theme/app_text_styles.dart';
+import '../../notifications/controllers/notifications_controller.dart';
+import '../../widgets/notification_icon_button.dart';
 import '../controllers/coach_dashboard_controller.dart';
 
 class CoachDashboardScreen extends GetView<CoachDashboardController> {
@@ -89,51 +91,18 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
                   ),
                   Row(
                     children: [
-                      // Notifications Button
-                      GestureDetector(
-                        onTap: controller.navigateToNotifications,
-                        child: Container(
-                          width: 40.w,
-                          height: 40.h,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12.r),
-                          ),
-                          child: Stack(
-                            children: [
-                              Center(
-                                child: Icon(
-                                  Icons.notifications_outlined,
-                                  color: Colors.white,
-                                  size: 20.sp,
-                                ),
-                              ),
-                              // Notification Badge
-                              Positioned(
-                                top: 8.h,
-                                right: 8.w,
-                                child: Container(
-                                  width: 20.w,
-                                  height: 20.h,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      '2',
-                                      style: ResponsiveTextStyles.textXs.copyWith(
-                                        color: Colors.white,
-                                        fontSize: 10.sp,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      Obx(() {
+                        final count = Get.isRegistered<NotificationsController>()
+                            ? Get.find<NotificationsController>().unreadCount.value
+                            : 0;
+                        return NotificationIconButton(
+                          unreadCount: count,
+                          onTap: controller.navigateToNotifications,
+                          size: 40,
+                          iconSize: 20,
+                          icon: Icons.notifications_outlined,
+                        );
+                      }),
                       SizedBox(width: 12.w),
                       // Settings Button
                       GestureDetector(
