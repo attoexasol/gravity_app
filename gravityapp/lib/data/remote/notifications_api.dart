@@ -141,8 +141,16 @@ class NotificationsApi {
     final res = await _api.post('/notifications/unread-count', body: {'token': apiToken}, requireAuth: false);
     final data = res['data'];
     if (data is int) return data;
-    if (data is Map && data['count'] != null) return (data['count'] as num).toInt();
+    if (data is Map<String, dynamic>) {
+      final map = data;
+      if (map['count'] != null) return (map['count'] as num).toInt();
+      if (map['unread_count'] != null) return (map['unread_count'] as num).toInt();
+      if (map['unreadCount'] != null) return (map['unreadCount'] as num).toInt();
+      if (map['total'] != null) return (map['total'] as num).toInt();
+    }
     if (res['count'] != null) return (res['count'] as num).toInt();
+    if (res['unread_count'] != null) return (res['unread_count'] as num).toInt();
+    if (res['unreadCount'] != null) return (res['unreadCount'] as num).toInt();
     return 0;
   }
 

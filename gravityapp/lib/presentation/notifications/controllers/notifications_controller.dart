@@ -105,6 +105,7 @@ class NotificationsController extends GetxController {
       final page = await _api.listNotifications(apiToken: token, page: 1, perPage: _perPage);
       notifications.assignAll(_mapApiItems(page.items));
       _hasMore = page.hasMore;
+      _syncUnreadCountFromList();
     } on ApiException catch (e) {
       if (kDebugMode) debugPrint('Notifications API Error: ${e.message}');
       error.value = e.message;
@@ -115,6 +116,15 @@ class NotificationsController extends GetxController {
       notifications.clear();
     } finally {
       loading.value = false;
+    }
+  }
+
+  /// Ensures unreadCount is at least the number of unread items in the loaded list.
+  /// Fixes the case where the API returns 0 but the list contains unread notifications.
+  void _syncUnreadCountFromList() {
+    final fromList = notifications.where((n) => n.isUnread).length;
+    if (fromList > unreadCount.value) {
+      unreadCount.value = fromList;
     }
   }
 
@@ -131,6 +141,7 @@ class NotificationsController extends GetxController {
       final page = await _api.listNotifications(apiToken: token, page: 1, perPage: _perPage);
       notifications.assignAll(_mapApiItems(page.items));
       _hasMore = page.hasMore;
+      _syncUnreadCountFromList();
     } on ApiException catch (e) {
       error.value = e.message;
     } catch (e) {
@@ -149,6 +160,7 @@ class NotificationsController extends GetxController {
       final page = await _api.listNotifications(apiToken: token, page: _currentPage, perPage: _perPage);
       notifications.addAll(_mapApiItems(page.items));
       _hasMore = page.hasMore;
+      _syncUnreadCountFromList();
     } catch (e) {
       _currentPage -= 1;
       if (kDebugMode) debugPrint('Notifications loadMore error: $e');
