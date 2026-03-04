@@ -94,6 +94,8 @@ class CommunityController extends GetxController {
   final RxBool isUpdatingComment = false.obs;
   final RxString updateCommentError = ''.obs;
   final RxInt editingCommentId = 0.obs;
+  /// When non-zero, we're editing a reply; value is the parent comment id.
+  final RxInt editingReplyParentCommentId = 0.obs;
   final RxString editCommentText = ''.obs;
   final RxInt editCommentPostId = 0.obs;
   final TextEditingController editCommentTextController =
@@ -262,6 +264,15 @@ class CommunityController extends GetxController {
     return currentUserId > 0 && comment.commentBy == currentUserId;
   }
 
+  /// Check if the current user owns a reply (for edit/delete)
+  bool isCurrentUserReply(Reply reply) {
+    if (currentUserId <= 0) return false;
+    if (reply.replyBy != null) return reply.replyBy == currentUserId;
+    // Fallback: match by current user name if API didn't return replyBy
+    final name = PreferencesService.getUserName() ?? '';
+    return name.isNotEmpty && reply.user.name == name;
+  }
+
   /// Show comment actions bottom sheet (Edit/Delete)
   void showCommentActions(int postId, Comment comment) {
     if (!isCurrentUserComment(comment)) return;
@@ -369,6 +380,122 @@ class CommunityController extends GetxController {
                     ),
                   ),
                 ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Show reply actions bottom sheet (Edit/Delete)
+  void showReplyActions(int postId, Comment parentComment, Reply reply) {
+    if (!isCurrentUserReply(reply)) return;
+
+    Get.bottomSheet(
+      Builder(
+        builder: (BuildContext bottomSheetContext) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A2342).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Reply Actions',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0A2342),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(bottomSheetContext).pop();
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          openEditReply(postId, parentComment, reply);
+                        });
+                      },
+                      child: Container(
+                        width: 100,
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00B8A9).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Column(
+                          children: [
+                            Icon(
+                              Icons.edit_outlined,
+                              size: 32,
+                              color: Color(0xFF00B8A9),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Edit',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF0A2342),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(bottomSheetContext).pop();
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          confirmDeleteReply(postId, parentComment, reply);
+                        });
+                      },
+                      child: Container(
+                        width: 100,
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE53935).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Column(
+                          children: [
+                            Icon(
+                              Icons.delete_outlined,
+                              size: 32,
+                              color: Color(0xFFE53935),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Delete',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF0A2342),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -2051,11 +2178,15 @@ class CommunityController extends GetxController {
         }
 
         // Create the new reply object
+        final replyByUserId = response.data?['comment_by'] is int
+            ? response.data!['comment_by'] as int
+            : (PreferencesService.getUserId() ?? 0);
         final newReplyObj = Reply(
           id: replyId,
           user: PostUser(name: replyUserName, avatar: replyUserAvatar),
           text: response.data?['comments']?.toString() ?? newReply.value,
           timestamp: 'Just now',
+          replyBy: replyByUserId,
         );
 
         // Update postComments list
@@ -2307,12 +2438,16 @@ class CommunityController extends GetxController {
     final replyText = data['comments']?.toString() ?? '';
     final createdAt = data['created_at']?.toString() ?? '';
     final timestamp = _formatTimestamp(createdAt);
+    final replyBy = data['comment_by'] is int
+        ? data['comment_by'] as int
+        : int.tryParse(data['comment_by']?.toString() ?? '');
 
     return Reply(
       id: replyId,
       user: PostUser(name: userName, avatar: userAvatarUrl),
       text: replyText,
       timestamp: timestamp,
+      replyBy: replyBy,
     );
   }
 
@@ -2426,64 +2561,118 @@ class CommunityController extends GetxController {
       if (response.isSuccess) {
         debugPrint('✅ Comment updated successfully: ${response.message}');
 
-        // Update in postComments
-        final commentIndex = postComments.indexWhere(
-          (c) => c.id == editingCommentId.value,
-        );
-        if (commentIndex != -1) {
-          postComments[commentIndex] = postComments[commentIndex].copyWith(
-            text: editCommentText.value,
-          );
-          postComments.refresh();
-        }
+        final isEditingReply = editingReplyParentCommentId.value != 0;
+        final replyId = editingCommentId.value;
+        final newText = editCommentText.value;
 
-        // Update in posts list
-        final postIndex = posts.indexWhere(
-          (p) => p.id == editCommentPostId.value,
-        );
-        if (postIndex != -1) {
-          final postCommentIndex = posts[postIndex].comments.indexWhere(
-            (c) => c.id == editingCommentId.value,
+        if (isEditingReply) {
+          // Update reply inside parent comment's replies
+          final parentId = editingReplyParentCommentId.value;
+          final updateReplyInComment = (Comment c) {
+            if (c.id != parentId) return c;
+            final newReplies = c.replies.map((r) {
+              if (r.id == replyId) return r.copyWith(text: newText);
+              return r;
+            }).toList();
+            return c.copyWith(replies: newReplies);
+          };
+
+          final commentIndex = postComments.indexWhere((c) => c.id == parentId);
+          if (commentIndex != -1) {
+            postComments[commentIndex] =
+                updateReplyInComment(postComments[commentIndex]);
+            postComments.refresh();
+          }
+
+          final postIndex = posts.indexWhere(
+            (p) => p.id == editCommentPostId.value,
           );
-          if (postCommentIndex != -1) {
-            final updatedComments = [...posts[postIndex].comments];
-            updatedComments[postCommentIndex] =
-                updatedComments[postCommentIndex].copyWith(
-                  text: editCommentText.value,
-                );
-            posts[postIndex] = posts[postIndex].copyWith(
-              comments: updatedComments,
+          if (postIndex != -1) {
+            final postCommentIndex = posts[postIndex].comments.indexWhere(
+              (c) => c.id == parentId,
             );
-            posts.refresh();
+            if (postCommentIndex != -1) {
+              final updatedComments = [...posts[postIndex].comments];
+              updatedComments[postCommentIndex] =
+                  updateReplyInComment(updatedComments[postCommentIndex]);
+              posts[postIndex] = posts[postIndex].copyWith(
+                comments: updatedComments,
+              );
+              posts.refresh();
+            }
+          }
+
+          if (singlePost.value != null &&
+              singlePost.value!.id == editCommentPostId.value) {
+            final postCommentIndex = singlePost.value!.comments.indexWhere(
+              (c) => c.id == parentId,
+            );
+            if (postCommentIndex != -1) {
+              final updatedComments = [...singlePost.value!.comments];
+              updatedComments[postCommentIndex] =
+                  updateReplyInComment(updatedComments[postCommentIndex]);
+              singlePost.value = singlePost.value!.copyWith(
+                comments: updatedComments,
+              );
+            }
+          }
+        } else {
+          // Update top-level comment
+          final commentIndex = postComments.indexWhere(
+            (c) => c.id == replyId,
+          );
+          if (commentIndex != -1) {
+            postComments[commentIndex] = postComments[commentIndex].copyWith(
+              text: newText,
+            );
+            postComments.refresh();
+          }
+
+          final postIndex = posts.indexWhere(
+            (p) => p.id == editCommentPostId.value,
+          );
+          if (postIndex != -1) {
+            final postCommentIndex = posts[postIndex].comments.indexWhere(
+              (c) => c.id == replyId,
+            );
+            if (postCommentIndex != -1) {
+              final updatedComments = [...posts[postIndex].comments];
+              updatedComments[postCommentIndex] =
+                  updatedComments[postCommentIndex].copyWith(
+                    text: newText,
+                  );
+              posts[postIndex] = posts[postIndex].copyWith(
+                comments: updatedComments,
+              );
+              posts.refresh();
+            }
+          }
+
+          if (singlePost.value != null &&
+              singlePost.value!.id == editCommentPostId.value) {
+            final postCommentIndex = singlePost.value!.comments.indexWhere(
+              (c) => c.id == replyId,
+            );
+            if (postCommentIndex != -1) {
+              final updatedComments = [...singlePost.value!.comments];
+              updatedComments[postCommentIndex] =
+                  updatedComments[postCommentIndex].copyWith(
+                    text: newText,
+                  );
+              singlePost.value = singlePost.value!.copyWith(
+                comments: updatedComments,
+              );
+            }
           }
         }
 
-        // Update singlePost if it matches
-        if (singlePost.value != null &&
-            singlePost.value!.id == editCommentPostId.value) {
-          final postCommentIndex = singlePost.value!.comments.indexWhere(
-            (c) => c.id == editingCommentId.value,
-          );
-          if (postCommentIndex != -1) {
-            final updatedComments = [...singlePost.value!.comments];
-            updatedComments[postCommentIndex] =
-                updatedComments[postCommentIndex].copyWith(
-                  text: editCommentText.value,
-                );
-            singlePost.value = singlePost.value!.copyWith(
-              comments: updatedComments,
-            );
-          }
-        }
-
-        // Close edit mode
         closeEditComment();
 
         Get.snackbar(
           'Success',
           response.message.isNotEmpty
               ? response.message
-              : 'Comment updated successfully',
+              : (isEditingReply ? 'Reply updated' : 'Comment updated successfully'),
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: const Color(0xFF00B8A9),
           colorText: const Color(0xFFFFFFFF),
@@ -2529,15 +2718,26 @@ class CommunityController extends GetxController {
 
   /// Open edit comment mode
   void openEditComment(int postId, Comment comment) {
+    editingReplyParentCommentId.value = 0;
     editingCommentId.value = comment.id;
     editCommentPostId.value = postId;
     editCommentText.value = comment.text;
     editCommentTextController.text = comment.text;
   }
 
-  /// Close edit comment mode
+  /// Open edit reply mode
+  void openEditReply(int postId, Comment parentComment, Reply reply) {
+    editingReplyParentCommentId.value = parentComment.id;
+    editingCommentId.value = reply.id;
+    editCommentPostId.value = postId;
+    editCommentText.value = reply.text;
+    editCommentTextController.text = reply.text;
+  }
+
+  /// Close edit comment mode (and reply mode)
   void closeEditComment() {
     editingCommentId.value = 0;
+    editingReplyParentCommentId.value = 0;
     editCommentPostId.value = 0;
     editCommentText.value = '';
     editCommentTextController.clear();
@@ -2693,6 +2893,162 @@ class CommunityController extends GetxController {
         },
       ),
     );
+  }
+
+  /// Show delete reply confirmation dialog
+  void confirmDeleteReply(int postId, Comment parentComment, Reply reply) {
+    Get.dialog(
+      Builder(
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text(
+              'Delete Reply',
+              style: TextStyle(
+                color: Color(0xFF0A2342),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: const Text(
+              'Are you sure you want to delete this reply? This action cannot be undone.',
+              style: TextStyle(color: Color(0xFF0A2342)),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Color(0xFF0A2342)),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    deleteReply(postId, parentComment.id, reply.id);
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE53935),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Delete', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Delete a reply using API (same endpoint as delete comment; reply id is the comment_id)
+  Future<bool> deleteReply(int postId, int parentCommentId, int replyId) async {
+    isDeletingComment.value = true;
+    deleteCommentError.value = '';
+
+    try {
+      final apiToken = PreferencesService.getAuthToken();
+      if (apiToken == null || apiToken.isEmpty) {
+        deleteCommentError.value =
+            'Authentication required. Please login again.';
+        isDeletingComment.value = false;
+        return false;
+      }
+
+      final response = await _communityRepository.deletePostComment(
+        apiToken: apiToken,
+        commentId: replyId,
+      );
+
+      if (response.isSuccess) {
+        // Remove reply from parent comment's replies (do not remove parent)
+        final removeReplyFromComment = (Comment c) {
+          if (c.id != parentCommentId) return c;
+          return c.copyWith(
+            replies: c.replies.where((r) => r.id != replyId).toList(),
+          );
+        };
+
+        final commentIndex = postComments.indexWhere((c) => c.id == parentCommentId);
+        if (commentIndex != -1) {
+          postComments[commentIndex] =
+              removeReplyFromComment(postComments[commentIndex]);
+          postComments.refresh();
+        }
+
+        final postIndex = posts.indexWhere((p) => p.id == postId);
+        if (postIndex != -1) {
+          final postCommentIndex = posts[postIndex].comments.indexWhere(
+            (c) => c.id == parentCommentId,
+          );
+          if (postCommentIndex != -1) {
+            final updatedComments = [...posts[postIndex].comments];
+            updatedComments[postCommentIndex] =
+                removeReplyFromComment(updatedComments[postCommentIndex]);
+            posts[postIndex] = posts[postIndex].copyWith(
+              comments: updatedComments,
+            );
+            posts.refresh();
+          }
+        }
+
+        if (singlePost.value != null && singlePost.value!.id == postId) {
+          final postCommentIndex = singlePost.value!.comments.indexWhere(
+            (c) => c.id == parentCommentId,
+          );
+          if (postCommentIndex != -1) {
+            final updatedComments = [...singlePost.value!.comments];
+            updatedComments[postCommentIndex] =
+                removeReplyFromComment(updatedComments[postCommentIndex]);
+            singlePost.value = singlePost.value!.copyWith(
+              comments: updatedComments,
+            );
+          }
+        }
+
+        Get.snackbar(
+          'Success',
+          response.message.isNotEmpty
+              ? response.message
+              : 'Reply deleted successfully',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFF00B8A9),
+          colorText: const Color(0xFFFFFFFF),
+          duration: const Duration(seconds: 2),
+        );
+        return true;
+      } else {
+        deleteCommentError.value = response.message.isNotEmpty
+            ? response.message
+            : 'Failed to delete reply';
+        Get.snackbar(
+          'Error',
+          deleteCommentError.value,
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFFE53935),
+          colorText: const Color(0xFFFFFFFF),
+          duration: const Duration(seconds: 2),
+        );
+        return false;
+      }
+    } catch (e) {
+      deleteCommentError.value = 'An error occurred while deleting reply';
+      Get.snackbar(
+        'Error',
+        deleteCommentError.value,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFE53935),
+        colorText: const Color(0xFFFFFFFF),
+        duration: const Duration(seconds: 2),
+      );
+      return false;
+    } finally {
+      isDeletingComment.value = false;
+    }
   }
 
   /// Create a new post using API

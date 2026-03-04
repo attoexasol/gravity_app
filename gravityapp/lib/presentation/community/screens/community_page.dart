@@ -1734,7 +1734,7 @@
                 padding: EdgeInsets.only(left: 32.w, top: 12.h),
                 child: Column(
                   children: comment.replies
-                      .map((reply) => _buildReplyItem(reply))
+                      .map((reply) => _buildReplyItem(postId, comment, reply))
                       .toList(),
                 ),
               ),
@@ -1883,59 +1883,186 @@
       );
     }
 
-    Widget _buildReplyItem(Reply reply) {
-      return Container(
-        margin: EdgeInsets.only(bottom: 8.h),
-        padding: EdgeInsets.all(12.r),
-        decoration: BoxDecoration(
-          color: AppColors.inputBackground,
-          borderRadius: BorderRadius.circular(16.r),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    Widget _buildReplyItem(int postId, Comment parentComment, Reply reply) {
+      final replyUserName = reply.user?.name?.isNotEmpty == true
+          ? reply.user!.name
+          : 'Unknown User';
+      final replyAvatarUrl = reply.user?.avatar ?? '';
+
+      return GestureDetector(
+        onLongPress: () {
+          if (controller.isCurrentUserReply(reply)) {
+            controller.showReplyActions(postId, parentComment, reply);
+          }
+        },
+        child: Obx(() {
+          final isEditingReply =
+              controller.editingCommentId.value == reply.id &&
+                  controller.editingReplyParentCommentId.value == parentComment.id;
+          return Container(
+            margin: EdgeInsets.only(bottom: 8.h),
+            padding: EdgeInsets.all(12.r),
+            decoration: BoxDecoration(
+              color: AppColors.inputBackground,
+              borderRadius: BorderRadius.circular(16.r),
+              border: isEditingReply
+                  ? Border.all(color: const Color(0xFF00B8A9), width: 2)
+                  : null,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                UserAvatar(
-                  avatarUrl: reply.user.avatar,
-                  name: reply.user.name,
-                  size: 24.r,
+                Row(
+                  children: [
+                    UserAvatar(
+                      avatarUrl: replyAvatarUrl,
+                      name: replyUserName,
+                      size: 24.r,
+                    ),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            replyUserName,
+                            style: ResponsiveTextStyles.textXs.copyWith(
+                              color: const Color(0xFF0A2342),
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            reply.timestamp,
+                            style: TextStyle(
+                              fontSize: 10.sp,
+                              color: const Color(0xFF0A2342).withOpacity(0.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (controller.isCurrentUserReply(reply))
+                      Icon(
+                        Icons.more_horiz,
+                        size: 14.sp,
+                        color: const Color(0xFF0A2342).withOpacity(0.4),
+                      ),
+                  ],
                 ),
-                SizedBox(width: 8.w),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        reply.user.name,
-                        style: ResponsiveTextStyles.textXs.copyWith(
-                          color: const Color(0xFF0A2342),
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                SizedBox(height: 6.h),
+                if (isEditingReply)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: controller.editCommentTextController,
+                      onChanged: (value) =>
+                          controller.editCommentText.value = value,
+                      maxLines: 3,
+                      autofocus: true,
+                      enabled: !controller.isUpdatingComment.value,
+                      style: ResponsiveTextStyles.textXs.copyWith(
+                        color: const Color(0xFF0A2342),
                       ),
-                      Text(
-                        reply.timestamp,
-                        style: TextStyle(
-                          fontSize: 10.sp,
-                          color: const Color(0xFF0A2342).withOpacity(0.5),
+                      cursorColor: const Color(0xFF0A2342),
+                      decoration: InputDecoration(
+                        hintText: 'Edit your reply...',
+                        hintStyle: ResponsiveTextStyles.textXs.copyWith(
+                          color: const Color(0xFF0A2342).withOpacity(0.4),
                         ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12.r),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: EdgeInsets.all(10.r),
                       ),
-                    ],
+                    ),
+                    SizedBox(height: 8.h),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: controller.isUpdatingComment.value
+                              ? null
+                              : () => controller.closeEditComment(),
+                          style: TextButton.styleFrom(
+                            minimumSize: Size.zero,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 10.w,
+                              vertical: 6.h,
+                            ),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text(
+                            'Cancel',
+                            style: ResponsiveTextStyles.textXs.copyWith(
+                              color: const Color(0xFF0A2342).withOpacity(0.6),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 8.w),
+                        Obx(() {
+                          final isUpdating =
+                              controller.isUpdatingComment.value;
+                          final canSave = controller.editCommentText.value
+                              .trim()
+                              .isNotEmpty;
+                          return ElevatedButton(
+                            onPressed: (canSave && !isUpdating)
+                                ? () => controller.updateComment()
+                                : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00B8A9),
+                              disabledBackgroundColor: const Color(0xFF00B8A9)
+                                  .withOpacity(0.5),
+                              minimumSize: Size.zero,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 12.w,
+                                vertical: 6.h,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12.r),
+                              ),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: isUpdating
+                                ? SizedBox(
+                                    width: 14.sp,
+                                    height: 14.sp,
+                                    child: const CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    'Save',
+                                    style: ResponsiveTextStyles.textXs
+                                        .copyWith(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ],
+                )
+              else
+                Text(
+                  reply.text,
+                  style: ResponsiveTextStyles.textXs.copyWith(
+                    color: const Color(0xFF0A2342).withOpacity(0.8),
                   ),
                 ),
-              ],
-            ),
-            SizedBox(height: 6.h),
-            Text(
-              reply.text,
-              style: ResponsiveTextStyles.textXs.copyWith(
-                color: const Color(0xFF0A2342).withOpacity(0.8),
-              ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        );
+        }),
       );
     }
 
