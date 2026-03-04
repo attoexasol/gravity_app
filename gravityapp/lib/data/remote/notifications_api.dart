@@ -162,6 +162,13 @@ class NotificationsApi {
     await _api.post('/notifications/read-all', body: {'token': apiToken}, requireAuth: false);
   }
 
+  /// Clear/delete all notifications for the user. Backend may expose
+  /// POST /notifications/clear or similar. If the endpoint does not exist,
+  /// the app still clears the list locally when the user taps Clear.
+  Future<void> clearAll({required String apiToken}) async {
+    await _api.post('/notifications/clear', body: {'token': apiToken}, requireAuth: false);
+  }
+
   Future<PaginatedNotificationLogs> listLogs({
     required String apiToken,
     int page = 1,

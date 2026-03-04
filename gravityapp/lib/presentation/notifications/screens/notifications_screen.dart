@@ -15,7 +15,7 @@ class NotificationsScreen extends GetView<NotificationsController> {
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          _buildHeader(),
+          _buildHeader(context),
           Expanded(
             child: SafeArea(
               top: false,
@@ -79,13 +79,14 @@ class NotificationsScreen extends GetView<NotificationsController> {
               }),
             ),
           ),
+          _buildClearBar(context),
         ],
       ),
     );
   }
 
   /// Header uses same gradient as MainAppBar and extends under the status bar.
-  Widget _buildHeader() {
+  Widget _buildHeader(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -158,6 +159,69 @@ class NotificationsScreen extends GetView<NotificationsController> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Bottom bar with "Clear all" – similar to smartphone notification panel.
+  /// Only visible when there are notifications; tap shows confirmation then clears.
+  Widget _buildClearBar(BuildContext context) {
+    return Obx(() {
+      if (controller.notifications.isEmpty) return const SizedBox.shrink();
+      return SafeArea(
+        top: false,
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            border: Border(
+              top: BorderSide(
+                color: Colors.grey.withOpacity(0.2),
+                width: 1,
+              ),
+            ),
+          ),
+          child: TextButton(
+            onPressed: () => _showClearConfirmation(context),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.chart5,
+              padding: EdgeInsets.symmetric(vertical: 12.h),
+            ),
+            child: Text(
+              'Clear all',
+              style: AppTextStyles.textSm.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  void _showClearConfirmation(BuildContext context) {
+    if (controller.notifications.isEmpty) return;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear notifications?'),
+        content: const Text(
+          'All notifications will be removed from this list. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              controller.onClearAll();
+            },
+            child: const Text('Clear'),
+          ),
+        ],
       ),
     );
   }

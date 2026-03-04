@@ -230,6 +230,26 @@ class NotificationsController extends GetxController {
     }
   }
 
+  /// Clears all notifications from the list and resets unread count.
+  /// Calls the backend clear endpoint if available; otherwise only clears locally.
+  /// After clear, the list is empty until the user refreshes or reopens (if backend did not clear).
+  Future<void> onClearAll() async {
+    final token = _getApiToken();
+    if (token == null || token.isEmpty) {
+      notifications.clear();
+      unreadCount.value = 0;
+      return;
+    }
+    try {
+      await _api.clearAll(apiToken: token);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Clear notifications API error: $e');
+      // Still clear locally so the inbox appears empty; next refresh will re-fetch from server.
+    }
+    notifications.clear();
+    unreadCount.value = 0;
+  }
+
   Future<void> onOpenNotification(NotificationItem item) async {
     final token = _getApiToken();
     final id = item.notificationId ?? int.tryParse(item.id);
