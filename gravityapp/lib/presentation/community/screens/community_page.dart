@@ -456,8 +456,7 @@
                           final isLoading =
                               controller.isLoadingComments.value;
                           final totalCount =
-                              controller.currentPostCommentsCount ??
-                                  controller.postComments.length;
+                              controller.currentPostCommentsTotalFromList;
                           return Text(
                             isLoading
                                 ? 'Loading...'
@@ -1176,8 +1175,7 @@
                                 final isLoading =
                                     controller.isLoadingComments.value;
                                 final totalCount =
-                                    controller.currentPostCommentsCount ??
-                                        controller.postComments.length;
+                                    controller.currentPostCommentsTotalFromList;
                                 return Text(
                                   isLoading
                                       ? 'Loading...'

@@ -3774,8 +3774,13 @@ class CommunityController extends GetxController {
     return posts.firstWhereOrNull((p) => p.id == selectedPostId.value);
   }
 
-  /// Comment count for the current post: backend count if available, else null (UI uses postComments.length).
+  /// Comment count for the current post: backend count if available, else null (for initial display before comments are loaded).
   int? get currentPostCommentsCount => selectedPost?.commentsCount;
+
+  /// Live total comment count (top-level + replies) for the current post from loaded postComments.
+  /// Use this in the comments sheet header so the count updates when user adds/edits/deletes comments or replies.
+  int get currentPostCommentsTotalFromList =>
+      postComments.fold<int>(0, (sum, c) => sum + 1 + c.replies.length);
 
   /// Set the scroll controller for the Community page
   void setScrollController(ItemScrollController controller) {
