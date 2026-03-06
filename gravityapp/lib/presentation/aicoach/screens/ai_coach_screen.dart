@@ -325,24 +325,32 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                       icon: Icons.notifications_outlined,
                     );
                   }),
-                  SizedBox(width: 8.w),
-                  InkWell(
-                    onTap: () {
-                      // Navigate to settings
-                      Get.toNamed('/settings');
-                    },
-                    borderRadius: BorderRadius.circular(10.r),
-                    child: Container(
-                      width: 40.w,
-                      height: 40.w,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(10.r),
-                      ),
-                      child: Icon(
-                        Icons.settings,
-                        color: Colors.white,
-                        size: 22.sp,
+                  SizedBox(width: 12.w),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => Get.toNamed('/settings'),
+                      borderRadius: BorderRadius.circular(16.r),
+                      child: Container(
+                        width: 44.w,
+                        height: 44.h,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(16.r),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 8.r,
+                              offset: Offset(0, 2.h),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.settings_outlined,
+                          color: Colors.white,
+                          size: 22.sp,
+                        ),
                       ),
                     ),
                   ),

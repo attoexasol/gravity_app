@@ -249,15 +249,14 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
             clipBehavior: Clip.none,
             children: [
               SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(20.w, 44.h, 20.w, 20.h),
+                padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 20.h),
                 child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header: title + subtitle with meal icon, all left-aligned
-                SizedBox(height: 8.h),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                // Header: title row with close button on the right (matches Log Sleep / Add Weight)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       'Fasting Tracker',
@@ -266,23 +265,38 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
                         color: _kPrimaryDark,
                       ),
                     ),
-                    SizedBox(height: 8.h),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.restaurant_menu,
-                          size: 16.sp,
-                          color: _kPrimaryDark.withOpacity(0.6),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Container(
+                        padding: EdgeInsets.all(8.r),
+                        decoration: BoxDecoration(
+                          color: _kPrimaryDark.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10.r),
                         ),
-                        SizedBox(width: 8.w),
-                        Text(
-                          'Manage your daily meal plan',
-                          style: ResponsiveTextStyles.textSm.copyWith(
-                            color: _kPrimaryDark.withOpacity(0.6),
-                          ),
+                        child: Icon(
+                          Icons.close,
+                          size: 18.sp,
+                          color: _kPrimaryDark,
                         ),
-                      ],
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8.h),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.restaurant_menu,
+                      size: 24.sp,
+                      color: const Color(0xFFD4AF37),
+                    ),
+                    SizedBox(width: 8.w),
+                    Text(
+                      'Manage your daily meal plan',
+                      style: ResponsiveTextStyles.textSm.copyWith(
+                        color: _kPrimaryDark.withOpacity(0.6),
+                      ),
                     ),
                   ],
                 ),
@@ -488,26 +502,6 @@ class _FastingTrackerModalState extends State<FastingTrackerModal> {
               ],
             ),
               ),
-            // Close button
-            Positioned(
-              top: 0,
-              right: 0,
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Container(
-                  padding: EdgeInsets.all(8.r),
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(8.r),
-                  ),
-                  child: Icon(
-                    Icons.close,
-                    size: 20.sp,
-                    color: _kPrimaryDark.withOpacity(0.7),
-                  ),
-                ),
-              ),
-            ),
           ],
         ),
         ),

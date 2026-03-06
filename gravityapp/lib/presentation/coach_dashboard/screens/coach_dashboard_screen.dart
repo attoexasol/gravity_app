@@ -104,20 +104,32 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
                         );
                       }),
                       SizedBox(width: 12.w),
-                      // Settings Button
-                      GestureDetector(
-                        onTap: controller.navigateToSettings,
-                        child: Container(
-                          width: 40.w,
-                          height: 40.h,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12.r),
-                          ),
-                          child: Icon(
-                            Icons.settings_outlined,
-                            color: Colors.white,
-                            size: 20.sp,
+                      // Settings Button (matches MainAppBar style)
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: controller.navigateToSettings,
+                          borderRadius: BorderRadius.circular(16.r),
+                          child: Container(
+                            width: 44.w,
+                            height: 44.h,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.25),
+                              borderRadius: BorderRadius.circular(16.r),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.08),
+                                  blurRadius: 8.r,
+                                  offset: Offset(0, 2.h),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              Icons.settings_outlined,
+                              color: Colors.white,
+                              size: 22.sp,
+                            ),
                           ),
                         ),
                       ),

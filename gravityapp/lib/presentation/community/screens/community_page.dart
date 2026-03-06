@@ -341,10 +341,7 @@
                   );
                 }),
                 SizedBox(width: 12.w),
-                GestureDetector(
-                  onTap: () => Get.toNamed(AppRoutes.settings),
-                  child: _buildHeaderIcon(Icons.settings_outlined),
-                ),
+                _buildHeaderIcon(Icons.settings_outlined),
               ],
             ),
           ],
@@ -352,18 +349,30 @@
       );
     }
 
+    /// Settings icon in header — matches MainAppBar style (same size, radius, shadow).
     Widget _buildHeaderIcon(IconData icon) {
-      return Container(
-        width: 44.w,
-        height: 44.h,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.2),
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => Get.toNamed(AppRoutes.settings),
           borderRadius: BorderRadius.circular(16.r),
-        ),
-        child: Icon(
-          icon,
-          color: Colors.white,
-          size: 22.sp,
+          child: Container(
+            width: 44.w,
+            height: 44.h,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.25),
+              borderRadius: BorderRadius.circular(16.r),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 8.r,
+                  offset: Offset(0, 2.h),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 22.sp),
+          ),
         ),
       );
     }

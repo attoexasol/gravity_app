@@ -108,11 +108,13 @@ class _Header extends StatelessWidget {
           GestureDetector(
             onTap: onClose,
             child: Container(
-              width: 40.w,
-              height: 40.h,
+              // width: 40.w,
+              // height: 40.h,
+              padding: EdgeInsets.all(8.r),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.2),
-                shape: BoxShape.circle,
+                // shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(10.r),
               ),
               child: Icon(Icons.close, size: 24.sp, color: Colors.white),
             ),
