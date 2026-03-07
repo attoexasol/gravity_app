@@ -506,9 +506,20 @@ class CommunityPostsController extends GetxController {
       if (response.isSuccess && response.data != null) {
         final List<Post> fetchedPosts = _mapApiResponseToPosts(response.data!);
         if (fetchedPosts.isNotEmpty) {
-          if (_commentMapper != null) {
-            await _fetchCommentCountsForPosts(fetchedPosts);
-          }
+          // if (_commentMapper != null) {
+          //   await _fetchCommentCountsForPosts(fetchedPosts);
+          // }
+          if (fetchedPosts.isNotEmpty) {
+              posts.value = fetchedPosts;
+
+              if (onPostsLoadedCallback != null) {
+                onPostsLoadedCallback!();
+              }
+
+              if (loadUserPinnedPostsCallback != null) {
+                await loadUserPinnedPostsCallback!();
+              }
+            }
           posts.value = fetchedPosts;
           if (onPostsLoadedCallback != null) {
             onPostsLoadedCallback!();

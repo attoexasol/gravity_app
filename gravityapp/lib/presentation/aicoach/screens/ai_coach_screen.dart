@@ -320,7 +320,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                     return NotificationIconButton(
                       unreadCount: count,
                       onTap: () => Get.toNamed('/notifications'),
-                      size: 40,
+                      size: 44,
                       iconSize: 22,
                       icon: Icons.notifications_outlined,
                     );
