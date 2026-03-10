@@ -358,27 +358,33 @@ class HealthSyncService {
 
       // Fetch Steps (today only)
       int steps = 0;
+
       try {
         final stepsData = await _health!.getHealthDataFromTypes(
           types: [HealthDataType.STEPS],
           startTime: todayStart,
           endTime: now,
         );
+
         if (stepsData.isNotEmpty) {
-          steps = stepsData
-              .map(
-                (data) =>
-                    (data.value as NumericHealthValue).numericValue.toInt(),
-              )
-              .reduce((a, b) => a + b);
-        }
-        if (steps > 0) {
-          print('📊 Today\'s steps: $steps (from ${stepsData.length} data points)');
-        } else if (stepsData.isEmpty) {
-          print('⚠️ No steps data found in health platform for today');
-          print('   Query range: ${todayStart.toString()} to ${now.toString()}');
+          // Step 1: Remove duplicate entries from multiple sources
+          final deduplicated = _health!.removeDuplicates(stepsData);
+
+          // Step 2: Merge overlapping step records (no merge API on Health; use deduplicated)
+          final merged = deduplicated;
+
+          // Step 3: Sum the cleaned step values
+          steps = merged.fold(
+            0,
+            (sum, data) =>
+                sum + (data.value as NumericHealthValue).numericValue.toInt(),
+          );
+
+          print(
+            "📊 Today's steps: $steps (from ${merged.length} merged data points)",
+          );
         } else {
-          print('📊 Today\'s steps: $steps (data points found but sum is 0)');
+          print("⚠️ No steps data found in health platform for today");
         }
       } catch (e) {
         print('⚠️ Error fetching steps: $e');
