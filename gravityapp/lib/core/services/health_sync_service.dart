@@ -368,20 +368,28 @@ class HealthSyncService {
 
         if (stepsData.isNotEmpty) {
           // Step 1: Remove duplicate entries from multiple sources
-          final deduplicated = _health!.removeDuplicates(stepsData);
+          final cleaned = _health!.removeDuplicates(stepsData);
 
-          // Step 2: Merge overlapping step records (no merge API on Health; use deduplicated)
-          final merged = deduplicated;
+          // Step 2: Group by timestamp (dateFrom); per window take MAX to avoid double-counting
+          Map<String, int> timeBuckets = {};
+          for (var data in cleaned) {
+            final key = data.dateFrom.toIso8601String();
+            final value =
+                (data.value as NumericHealthValue).numericValue.toInt();
+            if (!timeBuckets.containsKey(key)) {
+              timeBuckets[key] = value;
+            } else {
+              if (value > timeBuckets[key]!) {
+                timeBuckets[key] = value;
+              }
+            }
+          }
 
-          // Step 3: Sum the cleaned step values
-          steps = merged.fold(
-            0,
-            (sum, data) =>
-                sum + (data.value as NumericHealthValue).numericValue.toInt(),
-          );
+          // Step 3: Sum the per-window max values
+          steps = timeBuckets.values.fold(0, (sum, v) => sum + v);
 
           print(
-            "📊 Today's steps: $steps (from ${merged.length} merged data points)",
+            "📊 Today's steps: $steps (from ${timeBuckets.length} merged data points)",
           );
         } else {
           print("⚠️ No steps data found in health platform for today");
