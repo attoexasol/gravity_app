@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:gravityapp/data/model/client_user.dart';
+import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../notifications/controllers/notifications_controller.dart';
 import '../../widgets/notification_icon_button.dart';
@@ -55,6 +56,105 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
     );
   }
 
+  // Widget _buildHeader() {
+  //   return Container(
+  //     decoration: BoxDecoration(
+  //       gradient: const LinearGradient(
+  //         begin: Alignment.topLeft,
+  //         end: Alignment.bottomRight,
+  //         colors: [Color(0xFF0A2342), Color(0xFF00B8A9)],
+  //       ),
+  //       borderRadius: BorderRadius.only(
+  //         bottomLeft: Radius.circular(40.r),
+  //         bottomRight: Radius.circular(40.r),
+  //       ),
+  //     ),
+  //     child: SafeArea(
+  //       bottom: false, // Don't apply bottom safe area padding
+  //       child: Padding(
+  //         padding: EdgeInsets.only(
+  //           top: 12.h,
+  //           bottom: 24.h,
+  //           left: 24.w,
+  //           right: 24.w,
+  //         ),
+  //         child: Column(
+  //           children: [
+  //             Row(
+  //               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //               children: [
+  //                 Text(
+  //                   'Coach Dashboard',
+  //                   style: ResponsiveTextStyles.textXl.copyWith(
+  //                     color: Colors.white,
+  //                     fontWeight: FontWeight.bold,
+  //                   ),
+  //                 ),
+  //                 Row(
+  //                   children: [
+  //                     Obx(() {
+  //                       final count = Get.isRegistered<NotificationsController>()
+  //                           ? Get.find<NotificationsController>().unreadCount.value
+  //                           : 0;
+  //                       return NotificationIconButton(
+  //                         unreadCount: count,
+  //                         onTap: controller.navigateToNotifications,
+  //                         size: 40,
+  //                         iconSize: 20,
+  //                         icon: Icons.notifications_outlined,
+  //                       );
+  //                     }),
+  //                     SizedBox(width: 12.w),
+  //                     // Settings Button (matches MainAppBar style)
+  //                     Material(
+  //                       color: Colors.transparent,
+  //                       child: InkWell(
+  //                         onTap: controller.navigateToSettings,
+  //                         borderRadius: BorderRadius.circular(16.r),
+  //                         child: Container(
+  //                           width: 44.w,
+  //                           height: 44.h,
+  //                           alignment: Alignment.center,
+  //                           decoration: BoxDecoration(
+  //                             color: Colors.white.withOpacity(0.25),
+  //                             borderRadius: BorderRadius.circular(16.r),
+  //                             boxShadow: [
+  //                               BoxShadow(
+  //                                 color: Colors.black.withOpacity(0.08),
+  //                                 blurRadius: 8.r,
+  //                                 offset: Offset(0, 2.h),
+  //                               ),
+  //                             ],
+  //                           ),
+  //                           child: Icon(
+  //                             Icons.settings_outlined,
+  //                             color: Colors.white,
+  //                             size: 22.sp,
+  //                           ),
+  //                         ),
+  //                       ),
+  //                     ),
+  //                   ],
+  //                 ),
+  //               ],
+  //             ),
+  //             SizedBox(height: 8.h),
+  //             Align(
+  //               alignment: Alignment.centerLeft,
+  //               child: Text(
+  //                 'User Compliance Overview',
+  //                 style: ResponsiveTextStyles.textSm.copyWith(
+  //                   color: const Color(0xFFD4AF37),
+  //                 ),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
+
   Widget _buildHeader() {
     return Container(
       decoration: BoxDecoration(
@@ -69,17 +169,18 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
         ),
       ),
       child: SafeArea(
-        bottom: false, // Don't apply bottom safe area padding
+        bottom: false,
         child: Padding(
           padding: EdgeInsets.only(
-            top: 12.h,
-            bottom: 24.h,
-            left: 24.w,
-            right: 24.w,
+            top: 4.h,
+            bottom: 16.h,
+            left: 20.w,
+            right: 20.w,
           ),
           child: Column(
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
@@ -92,19 +193,21 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
                   Row(
                     children: [
                       Obx(() {
-                        final count = Get.isRegistered<NotificationsController>()
-                            ? Get.find<NotificationsController>().unreadCount.value
-                            : 0;
+                        final count =
+                            Get.isRegistered<NotificationsController>()
+                                ? Get.find<NotificationsController>()
+                                    .unreadCount
+                                    .value
+                                : 0;
                         return NotificationIconButton(
                           unreadCount: count,
-                          onTap: controller.navigateToNotifications,
-                          size: 40,
-                          iconSize: 20,
+                          onTap: () => Get.toNamed(AppRoutes.notifications),
+                          size: 44,
+                          iconSize: 22,
                           icon: Icons.notifications_outlined,
                         );
                       }),
                       SizedBox(width: 12.w),
-                      // Settings Button (matches MainAppBar style)
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
@@ -282,8 +385,8 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
     final statusColor = user.status == 'high'
         ? const Color(0xFF22C55E)
         : user.status == 'medium'
-            ? const Color(0xFFF59E0B)
-            : const Color(0xFFEF4444);
+        ? const Color(0xFFF59E0B)
+        : const Color(0xFFEF4444);
 
     return Container(
       margin: EdgeInsets.only(bottom: 12.h),
@@ -292,10 +395,7 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24.r),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10.r,
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10.r),
         ],
       ),
       child: Column(
@@ -395,11 +495,7 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
                         ),
                       ],
                     )
-                  : Icon(
-                      Icons.check_circle,
-                      color: Colors.green,
-                      size: 20.sp,
-                    ),
+                  : Icon(Icons.check_circle, color: Colors.green, size: 20.sp),
             ],
           ),
           // Alerts Section
@@ -455,8 +551,8 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
                   color: user.todayScore >= 80
                       ? const Color(0xFF22C55E)
                       : user.todayScore >= 60
-                          ? const Color(0xFFF59E0B)
-                          : const Color(0xFFEF4444),
+                      ? const Color(0xFFF59E0B)
+                      : const Color(0xFFEF4444),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -467,4 +563,3 @@ class CoachDashboardScreen extends GetView<CoachDashboardController> {
     );
   }
 }
-

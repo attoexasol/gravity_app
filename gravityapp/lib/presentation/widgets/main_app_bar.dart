@@ -19,7 +19,8 @@ class MainAppBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => Size.fromHeight(180.h); // Reduced from 180.h
+  // Size get preferredSize => Size.fromHeight(180.h);
+  Size get preferredSize => Size.fromHeight(120.h); // Reduced from 180.h
 
   @override
   Widget build(BuildContext context) {
@@ -38,11 +39,17 @@ class MainAppBar extends StatelessWidget implements PreferredSizeWidget {
       child: SafeArea(
         bottom: false, // Don't apply bottom safe area padding
         child: Padding(
+          // padding: EdgeInsets.only(
+          //   left: 20.w,
+          //   right: 20.w,
+          //   top: 12.h,
+          //   bottom: 16.h,
+          // ),
           padding: EdgeInsets.only(
             left: 20.w,
             right: 20.w,
-            top: 12.h,
-            bottom: 16.h,
+            top: 4.h,
+            bottom: 10.h,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,10 +74,77 @@ class MainAppBar extends StatelessWidget implements PreferredSizeWidget {
                               color: Colors.transparent,
                               child: InkWell(
                                 onTap: onNotificationTap,
+                                borderRadius: BorderRadius.circular(16.r),
+                                child: Container(
+                                  width: 44.w,
+                                  height: 44.h,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.25),
+                                    borderRadius: BorderRadius.circular(16.r),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.08),
+                                        blurRadius: 8.r,
+                                        offset: Offset(0, 2.h),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    Icons.notifications_outlined,
+                                    color: Colors.white,
+                                    size: 22.sp,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (notificationCount > 0)
+                              Positioned(
+                                right: 2.w,
+                                top: 2.h,
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 5.w,
+                                    vertical: 2.h,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(10.r),
+                                  ),
+                                  constraints: BoxConstraints(
+                                    minWidth: 16.w,
+                                    minHeight: 16.h,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      notificationCount > 9
+                                          ? '9+'
+                                          : notificationCount.toString(),
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9.sp,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (onSettingsTap != null) ...[
+                        SizedBox(width: 12.w),
+                        Tooltip(
+                          message: 'Settings',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: onSettingsTap,
                               borderRadius: BorderRadius.circular(16.r),
                               child: Container(
                                 width: 44.w,
-                                height: 44.h,
+                                height: 44.h,                               
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
                                   color: Colors.white.withOpacity(0.25),
@@ -84,80 +158,13 @@ class MainAppBar extends StatelessWidget implements PreferredSizeWidget {
                                   ],
                                 ),
                                 child: Icon(
-                                  Icons.notifications_outlined,
+                                  Icons.settings_outlined,
                                   color: Colors.white,
                                   size: 22.sp,
                                 ),
                               ),
                             ),
                           ),
-                          if (notificationCount > 0)
-                            Positioned(
-                              right: 2.w,
-                              top: 2.h,
-                              child: Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 5.w,
-                                  vertical: 2.h,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.red,
-                                  borderRadius: BorderRadius.circular(10.r),
-                                ),
-                                constraints: BoxConstraints(
-                                  minWidth: 16.w,
-                                  minHeight: 16.h,
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    notificationCount > 9
-                                        ? '9+'
-                                        : notificationCount.toString(),
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9.sp,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                            ),
-                          ),
-                        ],
-                        ),
-                      ),
-                      if (onSettingsTap != null) ...[
-                        SizedBox(width: 12.w),
-                        Tooltip(
-                          message: 'Settings',
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: onSettingsTap,
-                            borderRadius: BorderRadius.circular(16.r),
-                            child: Container(
-                              width: 44.w,
-                              height: 44.h,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.25),
-                                borderRadius: BorderRadius.circular(16.r),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.08),
-                                    blurRadius: 8.r,
-                                    offset: Offset(0, 2.h),
-                                  ),
-                                ],
-                              ),
-                              child: Icon(
-                                Icons.settings_outlined,
-                                color: Colors.white,
-                                size: 22.sp,
-                              ),
-                            ),
-                          ),
-                        ),
                         ),
                       ],
                     ],
@@ -165,8 +172,7 @@ class MainAppBar extends StatelessWidget implements PreferredSizeWidget {
                 ],
               ),
 
-              SizedBox(height: 8.h),
-
+              // SizedBox(height: 8.h),
               // Welcome message
               Text(
                 'Welcome back,',

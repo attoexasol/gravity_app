@@ -19,7 +19,9 @@ class MessagesPage extends GetView<InboxController> {
   const MessagesPage({super.key});
 
   static const _headerGradient = [Color(0xFF00B8A9), Color(0xFF0A2342)];
-  static const _pad = 16.0;
+  // static const _pad = 16.0;
+  static const _headerPad = 20.0;
+  static const _contentPad = 16.0;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +32,10 @@ class MessagesPage extends GetView<InboxController> {
       children: [
         _buildHeader(context),
         Padding(
-          padding: EdgeInsets.symmetric(horizontal: _pad.w, vertical: 8.h),
+          padding: EdgeInsets.symmetric(
+            horizontal: _contentPad.w,
+            vertical: 8.h,
+          ),
           child: _buildSearchField(context),
         ),
         Expanded(
@@ -58,26 +63,34 @@ class MessagesPage extends GetView<InboxController> {
           colors: _headerGradient,
         ),
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(24.r),
-          bottomRight: Radius.circular(24.r),
+          bottomLeft: Radius.circular(40.r),
+          bottomRight: Radius.circular(40.r),
         ),
       ),
       child: SafeArea(
         bottom: false,
         child: Padding(
           padding: EdgeInsets.only(
-            left: _pad.w,
-            right: _pad.w,
+            left: _headerPad.w,
+            right: _headerPad.w,
             top: 12.h,
-            bottom: 18.h,
+            bottom: 16.h,
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Text(
+              //   'Messages',
+              //   style: ResponsiveTextStyles.textLg.copyWith(
+              //     color: Colors.white,
+              //     fontWeight: FontWeight.w600,
+              //   ),
+              // ),
               Text(
                 'Messages',
-                style: ResponsiveTextStyles.textLg.copyWith(
+                style: ResponsiveTextStyles.textXl.copyWith(
                   color: Colors.white,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
               const Spacer(),
@@ -111,7 +124,10 @@ class MessagesPage extends GetView<InboxController> {
   }
 
   /// Same icon container style as dashboard header: rounded, light background, shadow.
-  Widget _buildHeaderIcon({required IconData icon, required VoidCallback onTap}) {
+  Widget _buildHeaderIcon({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -155,10 +171,20 @@ class MessagesPage extends GetView<InboxController> {
         onChanged: controller.search,
         decoration: InputDecoration(
           hintText: 'Search...',
-          hintStyle: TextStyle(color: AppColors.mutedForeground, fontSize: 14.sp),
-          prefixIcon: Icon(Icons.search, size: 22.sp, color: AppColors.mutedForeground),
+          hintStyle: TextStyle(
+            color: AppColors.mutedForeground,
+            fontSize: 14.sp,
+          ),
+          prefixIcon: Icon(
+            Icons.search,
+            size: 22.sp,
+            color: AppColors.mutedForeground,
+          ),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: 16.w,
+            vertical: 14.h,
+          ),
         ),
       ),
     );
@@ -171,7 +197,11 @@ class MessagesPage extends GetView<InboxController> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.chat_bubble_outline, size: 64.sp, color: AppColors.mutedForeground),
+            Icon(
+              Icons.chat_bubble_outline,
+              size: 64.sp,
+              color: AppColors.mutedForeground,
+            ),
             SizedBox(height: 16.h),
             Text(
               'No users found',
@@ -185,7 +215,9 @@ class MessagesPage extends GetView<InboxController> {
               SizedBox(height: 8.h),
               Text(
                 'Try a different search',
-                style: ResponsiveTextStyles.textSm.copyWith(color: AppColors.mutedForeground),
+                style: ResponsiveTextStyles.textSm.copyWith(
+                  color: AppColors.mutedForeground,
+                ),
               ),
             ],
           ],
@@ -197,7 +229,7 @@ class MessagesPage extends GetView<InboxController> {
   Widget _buildUserList(BuildContext context, List<MessageUserModel> list) {
     return ListView.builder(
       controller: controller.scrollController,
-      padding: EdgeInsets.symmetric(horizontal: _pad.w, vertical: 8.h),
+      padding: EdgeInsets.symmetric(horizontal: _contentPad.w, vertical: 8.h),
       itemCount: list.length + (controller.isLoadingMore.value ? 1 : 0),
       itemBuilder: (context, index) {
         if (index >= list.length) {
@@ -234,7 +266,9 @@ class _UserRow extends StatelessWidget {
     return Obx(() {
       final hasUnread = controller.hasUnreadByUser[user.id] ?? false;
       final isOtherTyping = controller.typingByUser[user.id] ?? false;
-      final unreadCount = hasUnread ? (controller.unreadCountByUser[user.id] ?? 1) : 0;
+      final unreadCount = hasUnread
+          ? (controller.unreadCountByUser[user.id] ?? 1)
+          : 0;
       return StreamBuilder<bool>(
         stream: controller.userPresenceStream(otherUid),
         initialData: false,
@@ -263,7 +297,11 @@ class _UserRow extends StatelessWidget {
     bool isOtherTyping = false,
     bool isOnline = false,
   }) {
-    final displaySubtitle = isOtherTyping ? 'Typing...' : (subtitle != null && subtitle.isNotEmpty ? subtitle : 'Start conversation');
+    final displaySubtitle = isOtherTyping
+        ? 'Typing...'
+        : (subtitle != null && subtitle.isNotEmpty
+              ? subtitle
+              : 'Start conversation');
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -279,12 +317,16 @@ class _UserRow extends StatelessWidget {
                   CircleAvatar(
                     radius: 28.r,
                     backgroundColor: AppColors.muted,
-                    backgroundImage: user.profileImage != null && user.profileImage!.isNotEmpty
+                    backgroundImage:
+                        user.profileImage != null &&
+                            user.profileImage!.isNotEmpty
                         ? CachedNetworkImageProvider(user.profileImage!)
                         : null,
-                    child: user.profileImage == null || user.profileImage!.isEmpty
+                    child:
+                        user.profileImage == null || user.profileImage!.isEmpty
                         ? Text(
-                            (user.name.isNotEmpty ? user.name[0] : '?').toUpperCase(),
+                            (user.name.isNotEmpty ? user.name[0] : '?')
+                                .toUpperCase(),
                             style: TextStyle(
                               fontSize: 20.sp,
                               color: AppColors.mutedForeground,
@@ -300,7 +342,9 @@ class _UserRow extends StatelessWidget {
                       width: 14.w,
                       height: 14.w,
                       decoration: BoxDecoration(
-                        color: isOnline ? const Color(0xFF4ADE80) : AppColors.muted,
+                        color: isOnline
+                            ? const Color(0xFF4ADE80)
+                            : AppColors.muted,
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 2.w),
                       ),
@@ -311,12 +355,18 @@ class _UserRow extends StatelessWidget {
                       right: -4.w,
                       top: -4.h,
                       child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 6.w,
+                          vertical: 2.h,
+                        ),
                         decoration: const BoxDecoration(
                           color: Color(0xFF00B8A9),
                           shape: BoxShape.circle,
                         ),
-                        constraints: BoxConstraints(minWidth: 20.w, minHeight: 20.h),
+                        constraints: BoxConstraints(
+                          minWidth: 20.w,
+                          minHeight: 20.h,
+                        ),
                         child: Center(
                           child: Text(
                             unreadCount > 99 ? '99+' : '$unreadCount',
@@ -351,7 +401,9 @@ class _UserRow extends StatelessWidget {
                       style: ResponsiveTextStyles.textSm.copyWith(
                         color: isOtherTyping
                             ? AppColors.primary
-                            : (subtitle != null && subtitle.isNotEmpty ? AppColors.mutedForeground : AppColors.primary),
+                            : (subtitle != null && subtitle.isNotEmpty
+                                  ? AppColors.mutedForeground
+                                  : AppColors.primary),
                         fontStyle: isOtherTyping ? FontStyle.italic : null,
                       ),
                       maxLines: 1,

@@ -288,7 +288,9 @@
     Widget _buildCommunityHeader() {
       return Container(
         width: double.infinity,
-        padding: EdgeInsets.fromLTRB(24.w, 60.h, 24.w, 32.h),
+        // padding: EdgeInsets.fromLTRB(24.w, 60.h, 24.w, 32.h),
+        padding: EdgeInsets.fromLTRB(24.w, 38.h, 24.w, 18.h),
+
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
@@ -301,6 +303,9 @@
           borderRadius: BorderRadius.vertical(
             bottom: Radius.circular(40.r),
           ),
+          // borderRadius: BorderRadius.vertical(
+          //   bottom: Radius.circular(26.r),
+          // ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,

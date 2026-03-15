@@ -22,7 +22,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   // Initialize controller
   late final AiCoachController controller;
-  
+
   // Animation controllers for typing indicator dots
   late final AnimationController _dot1Controller;
   late final AnimationController _dot2Controller;
@@ -126,7 +126,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
       });
       return;
     }
-    
+
     final position = controller.messagesScrollController.position;
     controller.messagesScrollController.jumpTo(position.maxScrollExtent);
   }
@@ -175,13 +175,13 @@ class _AiCoachScreenState extends State<AiCoachScreen>
   /// Scroll to bottom of messages list
   void _scrollToBottom() {
     if (!controller.messagesScrollController.hasClients) return;
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!controller.messagesScrollController.hasClients) return;
-      
+
       final position = controller.messagesScrollController.position;
       final maxScroll = position.maxScrollExtent;
-      
+
       // Scroll to bottom to show most recent messages
       controller.messagesScrollController.animateTo(
         maxScroll,
@@ -281,144 +281,157 @@ class _AiCoachScreenState extends State<AiCoachScreen>
       child: SafeArea(
         bottom: false, // Don't apply bottom safe area padding
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+          // padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+          padding: EdgeInsets.only(
+            left: 20.w,
+            right: 20.w,
+            top: 4.h,
+            bottom: 10.h,
+          ),
           child: Column(
-        children: [
-          // Top row with back button and actions
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Back button
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _safeBack(),
-                  borderRadius: BorderRadius.circular(20.r),
-                  child: Container(
-                    width: 40.w,
-                    height: 40.w,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20.r),
-                    ),
-                    child: Icon(
-                      Icons.arrow_back,
-                      color: Colors.white,
-                      size: 22.sp,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Right actions
+              // Top row with back button and actions
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Obx(() {
-                    final count = Get.isRegistered<NotificationsController>()
-                        ? Get.find<NotificationsController>().unreadCount.value
-                        : 0;
-                    return NotificationIconButton(
-                      unreadCount: count,
-                      onTap: () => Get.toNamed('/notifications'),
-                      size: 44,
-                      iconSize: 22,
-                      icon: Icons.notifications_outlined,
-                    );
-                  }),
-                  SizedBox(width: 12.w),
+                  // Back button
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () => Get.toNamed('/settings'),
-                      borderRadius: BorderRadius.circular(16.r),
+                      onTap: () => _safeBack(),
+                      borderRadius: BorderRadius.circular(20.r),
                       child: Container(
-                        width: 44.w,
-                        height: 44.h,
-                        alignment: Alignment.center,
+                        width: 40.w,
+                        height: 40.w,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.25),
-                          borderRadius: BorderRadius.circular(16.r),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 8.r,
-                              offset: Offset(0, 2.h),
-                            ),
-                          ],
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20.r),
                         ),
                         child: Icon(
-                          Icons.settings_outlined,
+                          Icons.arrow_back,
                           color: Colors.white,
                           size: 22.sp,
                         ),
                       ),
                     ),
                   ),
+
+                  // Right actions
+                  Row(
+                    children: [
+                      Obx(() {
+                        final count =
+                            Get.isRegistered<NotificationsController>()
+                            ? Get.find<NotificationsController>()
+                                  .unreadCount
+                                  .value
+                            : 0;
+                        return NotificationIconButton(
+                          unreadCount: count,
+                          onTap: () => Get.toNamed('/notifications'),
+                          size: 44,
+                          iconSize: 22,
+                          icon: Icons.notifications_outlined,
+                        );
+                      }),
+                      SizedBox(width: 12.w),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => Get.toNamed('/settings'),
+                          borderRadius: BorderRadius.circular(16.r),
+                          child: Container(
+                            width: 44.w,
+                            height: 44.h,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.25),
+                              borderRadius: BorderRadius.circular(16.r),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.08),
+                                  blurRadius: 8.r,
+                                  offset: Offset(0, 2.h),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              Icons.settings_outlined,
+                              color: Colors.white,
+                              size: 22.sp,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              // SizedBox(height: 16.h),
+              SizedBox(height: 8.h),
+              // AI Coach Title
+              Row(
+                children: [
+                  Container(
+                    width: 40.w,
+                    height: 40.w,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.psychology,
+                      color: Colors.white,
+                      size: 24.sp,
+                    ),
+                  ),
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'AI Coach',
+                          style: ResponsiveTextStyles.textLg.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        SizedBox(height: 2.h),
+                        Row(
+                          children: [
+                            Container(
+                              width: 8.w,
+                              height: 8.w,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFD4AF37),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            SizedBox(width: 6.w),
+                            Flexible(
+                              child: Text(
+                                'Always available',
+                                style: ResponsiveTextStyles.textXs.copyWith(
+                                  color: Colors.white.withOpacity(0.8),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ],
           ),
-
-          SizedBox(height: 16.h),
-
-          // AI Coach Title
-          Row(
-            children: [
-              Container(
-                width: 40.w,
-                height: 40.w,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.psychology, color: Colors.white, size: 24.sp),
-              ),
-              SizedBox(width: 12.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'AI Coach',
-                      style: ResponsiveTextStyles.textLg.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    SizedBox(height: 2.h),
-                    Row(
-                      children: [
-                        Container(
-                          width: 8.w,
-                          height: 8.w,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFD4AF37),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        SizedBox(width: 6.w),
-                        Flexible(
-                          child: Text(
-                            'Always available',
-                            style: ResponsiveTextStyles.textXs.copyWith(
-                              color: Colors.white.withOpacity(0.8),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      ),
+        ),
       ),
     );
   }
@@ -503,12 +516,14 @@ class _AiCoachScreenState extends State<AiCoachScreen>
       // Set initial scroll position to bottom immediately (no animation)
       // This ensures the latest message is visible when screen opens
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (controller.messages.isNotEmpty && 
+        if (controller.messages.isNotEmpty &&
             controller.messagesScrollController.hasClients) {
           final position = controller.messagesScrollController.position;
           if (position.pixels != position.maxScrollExtent) {
             // Only jump if not already at bottom (to avoid unnecessary jumps)
-            controller.messagesScrollController.jumpTo(position.maxScrollExtent);
+            controller.messagesScrollController.jumpTo(
+              position.maxScrollExtent,
+            );
           }
         }
       });
@@ -552,220 +567,237 @@ class _AiCoachScreenState extends State<AiCoachScreen>
               : MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-          // AI avatar
-          if (!isUser) ...[
-            Container(
-              width: 32.w,
-              height: 32.w,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF6C63FF), Color(0xFF00B8A9)],
+            // AI avatar
+            if (!isUser) ...[
+              Container(
+                width: 32.w,
+                height: 32.w,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF6C63FF), Color(0xFF00B8A9)],
+                  ),
+                  shape: BoxShape.circle,
                 ),
-                shape: BoxShape.circle,
+                child: Icon(Icons.psychology, color: Colors.white, size: 18.sp),
               ),
-              child: Icon(Icons.psychology, color: Colors.white, size: 18.sp),
-            ),
-            SizedBox(width: 8.w),
-          ],
+              SizedBox(width: 8.w),
+            ],
 
-          // Message content
-          Flexible(
-            child: Column(
-              crossAxisAlignment: isUser
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
-              children: [
-                // Sender name (for AI only)
-                if (!isUser)
-                  Padding(
-                    padding: EdgeInsets.only(left: 4.w, bottom: 4.h),
-                    child: Text(
-                      'AI Coach',
-                      style: ResponsiveTextStyles.textXs.copyWith(
-                        color: const Color(0xFF0A2342).withOpacity(0.6),
+            // Message content
+            Flexible(
+              child: Column(
+                crossAxisAlignment: isUser
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                children: [
+                  // Sender name (for AI only)
+                  if (!isUser)
+                    Padding(
+                      padding: EdgeInsets.only(left: 4.w, bottom: 4.h),
+                      child: Text(
+                        'AI Coach',
+                        style: ResponsiveTextStyles.textXs.copyWith(
+                          color: const Color(0xFF0A2342).withOpacity(0.6),
+                        ),
                       ),
                     ),
-                  ),
 
-                // Message bubble
-                Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.7,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: isUser
-                        ? const LinearGradient(
-                            colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                          )
-                        : null,
-                    color: isUser ? null : Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(20.r),
-                      topRight: Radius.circular(20.r),
-                      bottomLeft: Radius.circular(isUser ? 20.r : 4.r),
-                      bottomRight: Radius.circular(isUser ? 4.r : 20.r),
+                  // Message bubble
+                  Container(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.7,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10.r,
-                        offset: Offset(0, 2.h),
+                    decoration: BoxDecoration(
+                      gradient: isUser
+                          ? const LinearGradient(
+                              colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+                            )
+                          : null,
+                      color: isUser ? null : Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(20.r),
+                        topRight: Radius.circular(20.r),
+                        bottomLeft: Radius.circular(isUser ? 20.r : 4.r),
+                        bottomRight: Radius.circular(isUser ? 4.r : 20.r),
                       ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Image (if present) - supports both local file path and network URL
-                      if (message.hasImage) ...[
-                        GestureDetector(
-                          onTap: () {
-                            if (message.imagePath != null) {
-                              _showImageFullscreen(message.imagePath!);
-                            } else if (message.imageUrl != null) {
-                              _showImageFullscreenUrl(message.imageUrl!);
-                            }
-                          },
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(20.r),
-                              topRight: Radius.circular(20.r),
-                              bottomLeft: (message.hasText || message.hasNutrition) ? Radius.circular(0) : Radius.circular(isUser ? 20.r : 4.r),
-                              bottomRight: (message.hasText || message.hasNutrition) ? Radius.circular(0) : Radius.circular(isUser ? 4.r : 20.r),
-                            ),
-                            child: message.imagePath != null
-                                ? Image.file(
-                                    File(message.imagePath!),
-                                    width: double.infinity,
-                                    height: 200.h,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        width: double.infinity,
-                                        height: 200.h,
-                                        color: Colors.grey[300],
-                                        child: Icon(
-                                          Icons.broken_image,
-                                          color: Colors.grey[600],
-                                          size: 40.sp,
-                                        ),
-                                      );
-                                    },
-                                  )
-                                : Image.network(
-                                    message.imageUrl!,
-                                    width: double.infinity,
-                                    height: 200.h,
-                                    fit: BoxFit.cover,
-                                    loadingBuilder: (context, child, loadingProgress) {
-                                      if (loadingProgress == null) return child;
-                                      return Container(
-                                        width: double.infinity,
-                                        height: 200.h,
-                                        color: Colors.grey[200],
-                                        child: Center(
-                                          child: CircularProgressIndicator(
-                                            value: loadingProgress.expectedTotalBytes != null
-                                                ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                                                : null,
-                                            color: const Color(0xFF00B8A9),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        width: double.infinity,
-                                        height: 200.h,
-                                        color: Colors.grey[300],
-                                        child: Icon(
-                                          Icons.broken_image,
-                                          color: Colors.grey[600],
-                                          size: 40.sp,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                          ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10.r,
+                          offset: Offset(0, 2.h),
                         ),
                       ],
-                      // Nutrition badge (for AI responses with nutrition data)
-                      if (!isUser && message.hasNutrition) ...[
-                        Container(
-                          width: double.infinity,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 16.w,
-                            vertical: 10.h,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF00B8A9).withOpacity(0.1),
-                            border: Border(
-                              bottom: BorderSide(
-                                color: const Color(0xFF00B8A9).withOpacity(0.2),
-                                width: 1,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Image (if present) - supports both local file path and network URL
+                        if (message.hasImage) ...[
+                          GestureDetector(
+                            onTap: () {
+                              if (message.imagePath != null) {
+                                _showImageFullscreen(message.imagePath!);
+                              } else if (message.imageUrl != null) {
+                                _showImageFullscreenUrl(message.imageUrl!);
+                              }
+                            },
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(20.r),
+                                topRight: Radius.circular(20.r),
+                                bottomLeft:
+                                    (message.hasText || message.hasNutrition)
+                                    ? Radius.circular(0)
+                                    : Radius.circular(isUser ? 20.r : 4.r),
+                                bottomRight:
+                                    (message.hasText || message.hasNutrition)
+                                    ? Radius.circular(0)
+                                    : Radius.circular(isUser ? 4.r : 20.r),
                               ),
+                              child: message.imagePath != null
+                                  ? Image.file(
+                                      File(message.imagePath!),
+                                      width: double.infinity,
+                                      height: 200.h,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                            return Container(
+                                              width: double.infinity,
+                                              height: 200.h,
+                                              color: Colors.grey[300],
+                                              child: Icon(
+                                                Icons.broken_image,
+                                                color: Colors.grey[600],
+                                                size: 40.sp,
+                                              ),
+                                            );
+                                          },
+                                    )
+                                  : Image.network(
+                                      message.imageUrl!,
+                                      width: double.infinity,
+                                      height: 200.h,
+                                      fit: BoxFit.cover,
+                                      loadingBuilder: (context, child, loadingProgress) {
+                                        if (loadingProgress == null)
+                                          return child;
+                                        return Container(
+                                          width: double.infinity,
+                                          height: 200.h,
+                                          color: Colors.grey[200],
+                                          child: Center(
+                                            child: CircularProgressIndicator(
+                                              value:
+                                                  loadingProgress
+                                                          .expectedTotalBytes !=
+                                                      null
+                                                  ? loadingProgress
+                                                            .cumulativeBytesLoaded /
+                                                        loadingProgress
+                                                            .expectedTotalBytes!
+                                                  : null,
+                                              color: const Color(0xFF00B8A9),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                            return Container(
+                                              width: double.infinity,
+                                              height: 200.h,
+                                              color: Colors.grey[300],
+                                              child: Icon(
+                                                Icons.broken_image,
+                                                color: Colors.grey[600],
+                                                size: 40.sp,
+                                              ),
+                                            );
+                                          },
+                                    ),
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.local_fire_department,
-                                color: const Color(0xFF00B8A9),
-                                size: 18.sp,
-                              ),
-                              SizedBox(width: 8.w),
-                              Text(
-                                '${message.nutrition} calories',
-                                style: ResponsiveTextStyles.textSm.copyWith(
-                                  color: const Color(0xFF00B8A9),
-                                  fontWeight: FontWeight.w600,
+                        ],
+                        // Nutrition badge (for AI responses with nutrition data)
+                        if (!isUser && message.hasNutrition) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 16.w,
+                              vertical: 10.h,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00B8A9).withOpacity(0.1),
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: const Color(
+                                    0xFF00B8A9,
+                                  ).withOpacity(0.2),
+                                  width: 1,
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      // Text (if present)
-                      if (message.hasText)
-                        Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 16.w,
-                            vertical: 12.h,
-                          ),
-                          child: Text(
-                            message.text!,
-                            style: ResponsiveTextStyles.textSm.copyWith(
-                              color: isUser
-                                  ? Colors.white
-                                  : const Color(0xFF0A2342).withOpacity(0.8),
-                              height: 1.4,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.local_fire_department,
+                                  color: const Color(0xFF00B8A9),
+                                  size: 18.sp,
+                                ),
+                                SizedBox(width: 8.w),
+                                Text(
+                                  '${message.nutrition} calories',
+                                  style: ResponsiveTextStyles.textSm.copyWith(
+                                    color: const Color(0xFF00B8A9),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                ),
-
-                // Timestamp
-                Padding(
-                  padding: EdgeInsets.only(
-                    left: isUser ? 0 : 4.w,
-                    right: isUser ? 4.w : 0,
-                    top: 4.h,
-                  ),
-                  child: Text(
-                    controller.formatTime(message.timestamp),
-                    style: TextStyle(
-                      fontSize: 10.sp,
-                      color: const Color(0xFF0A2342).withOpacity(0.4),
+                        ],
+                        // Text (if present)
+                        if (message.hasText)
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 16.w,
+                              vertical: 12.h,
+                            ),
+                            child: Text(
+                              message.text!,
+                              style: ResponsiveTextStyles.textSm.copyWith(
+                                color: isUser
+                                    ? Colors.white
+                                    : const Color(0xFF0A2342).withOpacity(0.8),
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                ),
-              ],
+
+                  // Timestamp
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: isUser ? 0 : 4.w,
+                      right: isUser ? 4.w : 0,
+                      top: 4.h,
+                    ),
+                    child: Text(
+                      controller.formatTime(message.timestamp),
+                      style: TextStyle(
+                        fontSize: 10.sp,
+                        color: const Color(0xFF0A2342).withOpacity(0.4),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );
@@ -806,7 +838,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                   borderRadius: BorderRadius.circular(2.r),
                 ),
               ),
-              
+
               // Delete option
               ListTile(
                 leading: Icon(
@@ -824,10 +856,10 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                 onTap: () async {
                   // Close bottom sheet immediately
                   Get.back();
-                  
+
                   // Wait for bottom sheet to fully close before proceeding
                   await Future.delayed(const Duration(milliseconds: 200));
-                  
+
                   // Show confirmation dialog before deleting
                   final shouldDelete = await Get.dialog<bool>(
                     Dialog(
@@ -854,7 +886,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                               ),
                             ),
                             SizedBox(height: 20.h),
-                            
+
                             // Title
                             Text(
                               'Delete Message?',
@@ -864,7 +896,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                               ),
                             ),
                             SizedBox(height: 12.h),
-                            
+
                             // Message
                             Text(
                               'This action cannot be undone. The message will be permanently deleted.',
@@ -875,7 +907,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                               ),
                             ),
                             SizedBox(height: 24.h),
-                            
+
                             // Buttons
                             Row(
                               children: [
@@ -884,43 +916,55 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                                   child: OutlinedButton(
                                     onPressed: () => Get.back(result: false),
                                     style: OutlinedButton.styleFrom(
-                                      padding: EdgeInsets.symmetric(vertical: 14.h),
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 14.h,
+                                      ),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12.r),
+                                        borderRadius: BorderRadius.circular(
+                                          12.r,
+                                        ),
                                       ),
                                       side: BorderSide(
-                                        color: const Color(0xFF0A2342).withOpacity(0.2),
+                                        color: const Color(
+                                          0xFF0A2342,
+                                        ).withOpacity(0.2),
                                       ),
                                     ),
                                     child: Text(
                                       'Cancel',
-                                      style: ResponsiveTextStyles.textSm.copyWith(
-                                        color: const Color(0xFF0A2342),
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                      style: ResponsiveTextStyles.textSm
+                                          .copyWith(
+                                            color: const Color(0xFF0A2342),
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                   ),
                                 ),
                                 SizedBox(width: 12.w),
-                                
+
                                 // Delete button
                                 Expanded(
                                   child: ElevatedButton(
                                     onPressed: () => Get.back(result: true),
                                     style: ElevatedButton.styleFrom(
-                                      padding: EdgeInsets.symmetric(vertical: 14.h),
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 14.h,
+                                      ),
                                       backgroundColor: const Color(0xFFE53935),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12.r),
+                                        borderRadius: BorderRadius.circular(
+                                          12.r,
+                                        ),
                                       ),
                                       elevation: 0,
                                     ),
                                     child: Text(
                                       'Delete',
-                                      style: ResponsiveTextStyles.textSm.copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                      style: ResponsiveTextStyles.textSm
+                                          .copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                   ),
                                 ),
@@ -932,14 +976,14 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                     ),
                     barrierDismissible: true,
                   );
-                  
+
                   // Only delete if user confirmed
                   if (shouldDelete == true) {
                     await controller.deleteMessage(message);
                   }
                 },
               ),
-              
+
               SizedBox(height: 8.h),
             ],
           ),
@@ -951,7 +995,6 @@ class _AiCoachScreenState extends State<AiCoachScreen>
       enableDrag: true,
     );
   }
-
 
   Widget _buildTypingIndicator() {
     return Padding(
@@ -1036,7 +1079,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
         // Create a bouncing effect: goes from 0 to 1 and back
         final value = dotController.value;
         final offset = -5 * (value < 0.5 ? value * 2 : (1 - value) * 2);
-        
+
         return Transform.translate(
           offset: Offset(0, offset),
           child: Container(
@@ -1054,152 +1097,158 @@ class _AiCoachScreenState extends State<AiCoachScreen>
 
   Widget _buildInputArea() {
     return Container(
-          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border(
-              top: BorderSide(
-                color: const Color(0xFF0A2342).withOpacity(0.1),
-                width: 1,
+      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(
+            color: const Color(0xFF0A2342).withOpacity(0.1),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10.r,
+            offset: Offset(0, -2.h),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Avatar
+          // Container(
+          //   width: 40.w,
+          //   height: 40.w,
+          //   decoration: BoxDecoration(
+          //     color: AppColors.inputBackground,
+          //     shape: BoxShape.circle,
+          //   ),
+          //   child: Icon(
+          //     Icons.person,
+          //     color: const Color(0xFF0A2342).withOpacity(0.5),
+          //     size: 20.sp,
+          //   ),
+          // ),
+          // SizedBox(width: 12.w),
+
+          // Attachment button
+          InkWell(
+            onTap: controller.showImagePickerOptions,
+            borderRadius: BorderRadius.circular(20.r),
+            child: Container(
+              width: 40.w,
+              height: 40.w,
+              decoration: BoxDecoration(
+                color: AppColors.inputBackground,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.attach_file,
+                color: const Color(0xFF0A2342).withOpacity(0.6),
+                size: 20.sp,
               ),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10.r,
-                offset: Offset(0, -2.h),
-              ),
-            ],
           ),
-          child: Row(
-            children: [
-              // Avatar
-              // Container(
-              //   width: 40.w,
-              //   height: 40.w,
-              //   decoration: BoxDecoration(
-              //     color: AppColors.inputBackground,
-              //     shape: BoxShape.circle,
-              //   ),
-              //   child: Icon(
-              //     Icons.person,
-              //     color: const Color(0xFF0A2342).withOpacity(0.5),
-              //     size: 20.sp,
-              //   ),
-              // ),
-              // SizedBox(width: 12.w),
+          SizedBox(width: 8.w),
 
-              // Attachment button
-              InkWell(
-                onTap: controller.showImagePickerOptions,
-                borderRadius: BorderRadius.circular(20.r),
-                child: Container(
-                  width: 40.w,
-                  height: 40.w,
-                  decoration: BoxDecoration(
-                    color: AppColors.inputBackground,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.attach_file,
-                    color: const Color(0xFF0A2342).withOpacity(0.6),
-                    size: 20.sp,
-                  ),
-                ),
-              ),
-              SizedBox(width: 8.w),
-
-              // Input field
-              Expanded(
-                child: Obx(
-                  () => TextField(
-                    controller: controller.messageController,
-                    focusNode: controller
-                        .messageFocusNode, // Connect FocusNode for focus detection
-                    onChanged: (value) => controller.inputMessage.value = value,
-                    onSubmitted: (_) {
-                      final hasText = controller.inputMessage.value.trim().isNotEmpty;
-                      final hasImage = controller.selectedImage.value != null;
-                      if ((hasText || hasImage) &&
-                          !controller.isSending.value &&
-                          !controller.isSendingImage.value) {
-                        controller.sendMessage();
-                      }
-                    },
-                    enabled: !controller.isSending.value && !controller.isSendingImage.value,
-                    maxLines: null,
-                    style: ResponsiveTextStyles.textSm.copyWith(
-                      color: const Color(0xFF0A2342), // Dark text color
-                    ),
-                    cursorColor: const Color(0xFF0A2342), // Dark cursor
-                    decoration: InputDecoration(
-                      hintText: 'Ask your AI coach',
-                      hintStyle: ResponsiveTextStyles.textSm.copyWith(
-                        color: const Color(0xFF0A2342).withOpacity(0.4),
-                      ),
-                      filled: true,
-                      fillColor: AppColors.inputBackground,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24.r),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16.w,
-                        vertical: 12.h,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(width: 8.w),
-
-              // Send button
-              Obx(() {
-                final hasText = controller.inputMessage.value.trim().isNotEmpty;
-                final hasImage = controller.selectedImage.value != null;
-                final canSend = (hasText || hasImage) &&
+          // Input field
+          Expanded(
+            child: Obx(
+              () => TextField(
+                controller: controller.messageController,
+                focusNode: controller
+                    .messageFocusNode, // Connect FocusNode for focus detection
+                onChanged: (value) => controller.inputMessage.value = value,
+                onSubmitted: (_) {
+                  final hasText = controller.inputMessage.value
+                      .trim()
+                      .isNotEmpty;
+                  final hasImage = controller.selectedImage.value != null;
+                  if ((hasText || hasImage) &&
+                      !controller.isSending.value &&
+                      !controller.isSendingImage.value) {
+                    controller.sendMessage();
+                  }
+                },
+                enabled:
                     !controller.isSending.value &&
-                    !controller.isSendingImage.value;
-                final isSending = controller.isSending.value || controller.isSendingImage.value;
-                return InkWell(
-                  onTap: canSend ? controller.sendMessage : null,
-                  borderRadius: BorderRadius.circular(20.r),
-                  child: Container(
-                    width: 48.w,
-                    height: 48.w,
-                    decoration: BoxDecoration(
-                      gradient: (canSend || isSending)
-                          ? const LinearGradient(
-                              colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
-                            )
-                          : null,
-                      color: (canSend || isSending)
-                          ? null
-                          : const Color(0xFF0A2342).withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: isSending
-                        ? SizedBox(
-                            width: 20.sp,
-                            height: 20.sp,
-                            child: const CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Icon(
-                            Icons.send,
-                            color: canSend
-                                ? Colors.white
-                                : const Color(0xFF0A2342).withOpacity(0.4),
-                            size: 22.sp,
-                          ),
+                    !controller.isSendingImage.value,
+                maxLines: null,
+                style: ResponsiveTextStyles.textSm.copyWith(
+                  color: const Color(0xFF0A2342), // Dark text color
+                ),
+                cursorColor: const Color(0xFF0A2342), // Dark cursor
+                decoration: InputDecoration(
+                  hintText: 'Ask your AI coach',
+                  hintStyle: ResponsiveTextStyles.textSm.copyWith(
+                    color: const Color(0xFF0A2342).withOpacity(0.4),
                   ),
-                );
-              }),
-            ],
+                  filled: true,
+                  fillColor: AppColors.inputBackground,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24.r),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 16.w,
+                    vertical: 12.h,
+                  ),
+                ),
+              ),
+            ),
           ),
-        );
+          SizedBox(width: 8.w),
+
+          // Send button
+          Obx(() {
+            final hasText = controller.inputMessage.value.trim().isNotEmpty;
+            final hasImage = controller.selectedImage.value != null;
+            final canSend =
+                (hasText || hasImage) &&
+                !controller.isSending.value &&
+                !controller.isSendingImage.value;
+            final isSending =
+                controller.isSending.value || controller.isSendingImage.value;
+            return InkWell(
+              onTap: canSend ? controller.sendMessage : null,
+              borderRadius: BorderRadius.circular(20.r),
+              child: Container(
+                width: 48.w,
+                height: 48.w,
+                decoration: BoxDecoration(
+                  gradient: (canSend || isSending)
+                      ? const LinearGradient(
+                          colors: [Color(0xFF00B8A9), Color(0xFF0A2342)],
+                        )
+                      : null,
+                  color: (canSend || isSending)
+                      ? null
+                      : const Color(0xFF0A2342).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: isSending
+                    ? SizedBox(
+                        width: 20.sp,
+                        height: 20.sp,
+                        child: const CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Icon(
+                        Icons.send,
+                        color: canSend
+                            ? Colors.white
+                            : const Color(0xFF0A2342).withOpacity(0.4),
+                        size: 22.sp,
+                      ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
   }
 
   /// Show image in fullscreen (local file)
@@ -1211,10 +1260,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
           children: [
             Center(
               child: InteractiveViewer(
-                child: Image.file(
-                  File(imagePath),
-                  fit: BoxFit.contain,
-                ),
+                child: Image.file(File(imagePath), fit: BoxFit.contain),
               ),
             ),
             Positioned(
@@ -1230,11 +1276,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                     color: Colors.black.withOpacity(0.6),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.close,
-                    color: Colors.white,
-                    size: 24.sp,
-                  ),
+                  child: Icon(Icons.close, color: Colors.white, size: 24.sp),
                 ),
               ),
             ),
@@ -1265,7 +1307,8 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                       child: Center(
                         child: CircularProgressIndicator(
                           value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                              ? loadingProgress.cumulativeBytesLoaded /
+                                    loadingProgress.expectedTotalBytes!
                               : null,
                           color: const Color(0xFF00B8A9),
                         ),
@@ -1315,11 +1358,7 @@ class _AiCoachScreenState extends State<AiCoachScreen>
                     color: Colors.black.withOpacity(0.6),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.close,
-                    color: Colors.white,
-                    size: 24.sp,
-                  ),
+                  child: Icon(Icons.close, color: Colors.white, size: 24.sp),
                 ),
               ),
             ),

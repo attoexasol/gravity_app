@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:gravityapp/data/model/client_user.dart';
+import '../../../app/routes/app_routes.dart';
 
 class CoachDashboardController extends GetxController {
   // Sample user data - in production, this would come from an API
@@ -108,8 +109,7 @@ class CoachDashboardController extends GetxController {
 
   // Navigate to notifications
   void navigateToNotifications() {
-    // TODO: Implement navigation to notifications
-    Get.snackbar('Notifications', 'Notifications feature coming soon');
+    Get.toNamed(AppRoutes.notifications);
   }
 
   // Navigate to settings

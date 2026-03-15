@@ -35,12 +35,15 @@ class SettingsPage extends GetView<SettingsController> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Account Section
-                    Obx(() => AccountSection(
-                      name: controller.user.value.name,
-                      email: controller.user.value.email,
-                      initials: controller.user.value.initials,
-                      profileImagePath: controller.user.value.profileImagePath,
-                    )),
+                    Obx(
+                      () => AccountSection(
+                        name: controller.user.value.name,
+                        email: controller.user.value.email,
+                        initials: controller.user.value.initials,
+                        profileImagePath:
+                            controller.user.value.profileImagePath,
+                      ),
+                    ),
                     SizedBox(height: 24.h),
 
                     // Wellness Goals Section
@@ -98,10 +101,12 @@ class SettingsPage extends GetView<SettingsController> {
         ),
       ),
       padding: EdgeInsets.only(
-        left: 24.w,
-        right: 24.w,
+        // left: 24.w,
+        // right: 24.w,
+        left: 20.w,
+        right: 20.w,
         top: MediaQuery.of(context).padding.top + 12.h,
-        bottom: 32.h,
+        bottom: 16.h,
       ),
       child: Row(
         children: [
