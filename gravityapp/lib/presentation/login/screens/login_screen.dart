@@ -25,7 +25,8 @@ class LoginScreen extends GetView<LoginController> {
             left: 0,
             right: 0,
             child: Container(
-              height: size.height * 0.30,
+              // height: size.height * 0.30,
+              height: size.height * 0.25,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -40,7 +41,8 @@ class LoginScreen extends GetView<LoginController> {
               padding: EdgeInsets.only(
                 left: 24,
                 right: 24,
-                top: statusBarHeight + 56,
+                // top: statusBarHeight + 56,
+                top: statusBarHeight + 30,
                 bottom: 48,
               ),
               child: Column(
@@ -72,7 +74,9 @@ class LoginScreen extends GetView<LoginController> {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    SizedBox(height: size.height * 0.18),
+                    // SizedBox(height: size.height * 0.18),
+                    // SizedBox(height: size.height * 0.14),
+                    SizedBox(height: size.height * 0.14),
                     // LOGIN CARD
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),

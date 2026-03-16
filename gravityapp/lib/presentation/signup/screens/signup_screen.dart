@@ -22,7 +22,8 @@ class SignupScreen extends GetView<SignupController> {
             left: 0,
             right: 0,
             child: Container(
-              height: size.height * 0.30,
+              // height: size.height * 0.30,
+              height: size.height * 0.28,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -94,7 +95,8 @@ class SignupScreen extends GetView<SignupController> {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    SizedBox(height: size.height * 0.18),
+                    // SizedBox(height: size.height * 0.18),
+                    SizedBox(height: size.height * 0.17),
 
                     // SIGNUP CARD
                     Padding(
@@ -149,6 +151,32 @@ class SignupScreen extends GetView<SignupController> {
                     // LOGIN LINK
                     _buildLoginLink(),
                   ],
+                ),
+              ),
+            ),
+          ),
+
+          // Tappable back button overlay (on top of scroll so it receives taps)
+          Positioned(
+            left: 24,
+            top: MediaQuery.of(context).padding.top + 8,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: controller.navigateToLogin,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.arrow_back,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
               ),
             ),
