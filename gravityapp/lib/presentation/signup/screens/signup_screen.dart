@@ -34,7 +34,13 @@ class SignupScreen extends GetView<SignupController> {
                   bottomRight: Radius.circular(40),
                 ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 25),
+              // padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 25),
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: MediaQuery.of(context).padding.top + 8,
+                bottom: 32,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -60,7 +66,8 @@ class SignupScreen extends GetView<SignupController> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  // const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   Text(
                     'Create Account',
                     style: TextStyle(
