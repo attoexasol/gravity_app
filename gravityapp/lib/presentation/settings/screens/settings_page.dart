@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
+import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_text_styles.dart';
+import '../../notifications/controllers/notifications_controller.dart';
 import '../controllers/settings_controller.dart';
 import 'sections/account_section.dart';
 import 'sections/section_title_widget.dart';
@@ -398,8 +399,10 @@ class SettingsPage extends GetView<SettingsController> {
                     ],
                   ),
           ),
-          // Notification Logs Expanded
-          if (controller.showNotificationLogs.value) _buildNotificationLogs(),
+          // Accordion: expand/collapse Recent Notification Activity
+          Obx(() => controller.showNotificationLogs.value
+              ? _buildNotificationLogs()
+              : const SizedBox.shrink()),
         ],
       ),
     );
@@ -431,97 +434,136 @@ class SettingsPage extends GetView<SettingsController> {
             ),
           ),
           SizedBox(height: 12.h),
-          SizedBox(
-            height: 240.h,
-            child: Obx(() {
-              final logs = controller.getNotificationLogs();
-              if (logs.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No notifications yet',
-                    style: ResponsiveTextStyles.textSm.copyWith(
-                      color: const Color(0xFF0A2342).withOpacity(0.4),
-                    ),
-                  ),
-                );
-              }
-              return ListView.builder(
-                itemCount: logs.length > 10 ? 10 : logs.length,
-                itemBuilder: (context, index) {
-                  final log = logs[index];
-                  return Container(
-                    margin: EdgeInsets.only(bottom: 8.h),
-                    padding: EdgeInsets.all(12.w),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF5F6FA),
-                      borderRadius: BorderRadius.circular(12.r),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              log.status == 'success'
-                                  ? Icons.check_circle
-                                  : log.status == 'permission_denied'
-                                  ? Icons.notifications_off
-                                  : Icons.error,
-                              size: 16.sp,
-                              color: log.status == 'success'
-                                  ? const Color(0xFF00B8A9)
-                                  : log.status == 'permission_denied'
-                                  ? Colors.orange
-                                  : Colors.red,
-                            ),
-                            SizedBox(width: 8.w),
-                            Expanded(
-                              child: Text(
-                                log.title,
-                                style: ResponsiveTextStyles.textSm.copyWith(
-                                  color: const Color(0xFF0A2342),
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 2.h),
-                        Text(
-                          log.body,
-                          style: ResponsiveTextStyles.textSm.copyWith(
-                            color: const Color(0xFF0A2342).withOpacity(0.6),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        SizedBox(height: 2.h),
-                        Text(
-                          DateFormat('MMM d, y h:mm a').format(log.timestamp),
-                          style: ResponsiveTextStyles.textXs.copyWith(
-                            color: const Color(0xFF0A2342).withOpacity(0.4),
-                          ),
-                        ),
-                        if (log.error != null) ...[
-                          SizedBox(height: 4.h),
-                          Text(
-                            log.error!,
-                            style: ResponsiveTextStyles.textXs.copyWith(
-                              color: Colors.red,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  );
-                },
-              );
-            }),
+          _buildNotificationLogsContent(),
+          SizedBox(height: 12.h),
+          Center(
+            child: TextButton(
+              onPressed: () => Get.toNamed(AppRoutes.notifications),
+              child: Text(
+                'See all →',
+                style: ResponsiveTextStyles.textSm.copyWith(
+                  color: const Color(0xFF00B8A9),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildNotificationLogsContent() {
+    if (!Get.isRegistered<NotificationsController>()) {
+      Get.put(NotificationsController());
+    }
+    final notificationsController = Get.find<NotificationsController>();
+    return Obx(() {
+      final loading = notificationsController.loading.value;
+      final error = notificationsController.error.value;
+      final logs = notificationsController.notifications.take(5).toList();
+
+      if (loading && logs.isEmpty) {
+        return SizedBox(
+          height: 200.h,
+          child: const Center(child: CircularProgressIndicator()),
+        );
+      }
+      if (error != null && logs.isEmpty) {
+        return Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 24.h),
+            child: Text(
+              error,
+              textAlign: TextAlign.center,
+              style: ResponsiveTextStyles.textSm.copyWith(
+                color: const Color(0xFF0A2342).withOpacity(0.6),
+              ),
+            ),
+          ),
+        );
+      }
+      if (logs.isEmpty) {
+        return Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 24.h),
+            child: Text(
+              'No notifications yet',
+              style: ResponsiveTextStyles.textSm.copyWith(
+                color: const Color(0xFF0A2342).withOpacity(0.4),
+              ),
+            ),
+          ),
+        );
+      }
+      return Column(
+        children: logs.map((item) {
+          return Container(
+            margin: EdgeInsets.only(bottom: 8.h),
+            padding: EdgeInsets.all(12.w),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F6FA),
+              borderRadius: BorderRadius.circular(12.r),
+              border: item.isUnread
+                  ? Border(
+                      left: BorderSide(
+                        color: const Color(0xFF00B8A9),
+                        width: 4,
+                      ),
+                    )
+                  : null,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.title,
+                        style: ResponsiveTextStyles.textSm.copyWith(
+                          color: const Color(0xFF0A2342),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      item.timeText,
+                      style: ResponsiveTextStyles.textXs.copyWith(
+                        color: const Color(0xFF0A2342).withOpacity(0.4),
+                      ),
+                    ),
+                    if (item.isUnread) ...[
+                      SizedBox(width: 6.w),
+                      Container(
+                        width: 8.w,
+                        height: 8.h,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF00B8A9),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  item.description,
+                  style: ResponsiveTextStyles.textSm.copyWith(
+                    color: const Color(0xFF0A2342).withOpacity(0.6),
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      );
+    });
   }
 
   Widget _buildPrivacySection() {
