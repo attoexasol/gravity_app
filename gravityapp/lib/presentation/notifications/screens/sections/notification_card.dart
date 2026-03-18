@@ -31,12 +31,7 @@ class NotificationCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20.r),
           boxShadow: AppShadows.shadowSm,
           border: item.isUnread
-              ? Border(
-                  left: BorderSide(
-                    color: AppColors.primary,
-                    width: 4,
-                  ),
-                )
+              ? Border(left: BorderSide(color: AppColors.primary, width: 4))
               : null,
         ),
         child: ClipRRect(
@@ -56,14 +51,13 @@ class NotificationCard extends StatelessWidget {
                         SizedBox(width: 12.w),
                         Expanded(
                           child: Padding(
-                            padding: EdgeInsets.only(right: 52.w),
+                            padding: EdgeInsets.only(right: 1.w,top: 10.h),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 // Title row: title (left) | time (right)
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Expanded(
                                       child: Text(
@@ -76,7 +70,7 @@ class NotificationCard extends StatelessWidget {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                    //SizedBox(width: 8.w),
+                                    SizedBox(width: 8.w),
                                     Text(
                                       item.timeText,
                                       style: AppTextStyles.textXs.copyWith(
@@ -128,7 +122,8 @@ class NotificationCard extends StatelessWidget {
               // Top-right of card: 3-dot | unread dot only
               Positioned(
                 top: -8.w,
-                right: 12.w,
+                // right: 20.w,
+                right: 15.w,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -218,10 +213,7 @@ class NotificationCard extends StatelessWidget {
         return LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.chart2,
-            AppColors.chart2.withOpacity(0.7),
-          ],
+          colors: [AppColors.chart2, AppColors.chart2.withOpacity(0.7)],
         );
       case NotificationType.offer:
         return LinearGradient(
@@ -234,19 +226,13 @@ class NotificationCard extends StatelessWidget {
         return LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.chart3,
-            AppColors.chart3.withOpacity(0.8),
-          ],
+          colors: [AppColors.chart3, AppColors.chart3.withOpacity(0.8)],
         );
       case NotificationType.reminder:
         return LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.primary,
-            AppColors.chart2,
-          ],
+          colors: [AppColors.primary, AppColors.chart2],
         );
     }
   }
