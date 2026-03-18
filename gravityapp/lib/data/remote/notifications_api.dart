@@ -162,11 +162,44 @@ class NotificationsApi {
     await _api.post('/notifications/read-all', body: {'token': apiToken}, requireAuth: false);
   }
 
-  /// Clear/delete all notifications for the user. Backend may expose
-  /// POST /notifications/clear or similar. If the endpoint does not exist,
-  /// the app still clears the list locally when the user taps Clear.
+  /// Clear all notifications for the user (POST /notifications/clear-all).
   Future<void> clearAll({required String apiToken}) async {
-    await _api.post('/notifications/clear', body: {'token': apiToken}, requireAuth: false);
+    final res = await _api.post('/notifications/clear-all', body: {
+      'token': apiToken,
+    }, requireAuth: false);
+    final status = res['status'];
+    final ok = status == true ||
+        status == 1 ||
+        status == 'true' ||
+        status == '1';
+    if (!ok) {
+      throw ApiException(
+        message: res['message']?.toString() ?? 'Could not clear notifications',
+        statusCode: 200,
+      );
+    }
+  }
+
+  /// Delete a single notification by id (POST body: token, notification_id).
+  Future<void> deleteNotification({
+    required String apiToken,
+    required int notificationId,
+  }) async {
+    final res = await _api.post('/notifications/delete', body: {
+      'token': apiToken,
+      'notification_id': notificationId,
+    }, requireAuth: false);
+    final status = res['status'];
+    final ok = status == true ||
+        status == 1 ||
+        status == 'true' ||
+        status == '1';
+    if (!ok) {
+      throw ApiException(
+        message: res['message']?.toString() ?? 'Could not delete notification',
+        statusCode: 200,
+      );
+    }
   }
 
   Future<PaginatedNotificationLogs> listLogs({

@@ -230,33 +230,74 @@ class NotificationsController extends GetxController {
     }
   }
 
-  /// Removes a single notification from the list (local only; backend delete not implemented).
-  void deleteNotification(NotificationItem item) {
-    final wasUnread = item.isUnread;
-    notifications.removeWhere((n) => n.id == item.id);
-    if (wasUnread && unreadCount.value > 0) {
-      unreadCount.value -= 1;
+  /// Deletes a notification via API, then removes it from the list.
+  Future<void> deleteNotification(NotificationItem item) async {
+    final token = _getApiToken();
+    final id = item.notificationId ?? int.tryParse(item.id);
+    if (id == null || id <= 0) {
+      Get.snackbar('Error', 'Could not delete this notification');
+      return;
+    }
+    if (token == null || token.isEmpty) {
+      Get.snackbar('Error', 'Please sign in to delete notifications');
+      return;
+    }
+    try {
+      await _api.deleteNotification(apiToken: token, notificationId: id);
+      final wasUnread = item.isUnread;
+      notifications.removeWhere((n) => n.id == item.id);
+      if (wasUnread && unreadCount.value > 0) {
+        unreadCount.value -= 1;
+      }
+      Get.snackbar(
+        'Success',
+        'Notification deleted successfully',
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 2),
+      );
+    } on ApiException catch (e) {
+      Get.snackbar('Error', e.message, snackPosition: SnackPosition.BOTTOM);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Delete notification error: $e');
+      Get.snackbar(
+        'Error',
+        'Failed to delete notification',
+        snackPosition: SnackPosition.BOTTOM,
+      );
     }
   }
 
-  /// Clears all notifications from the list and resets unread count.
-  /// Calls the backend clear endpoint if available; otherwise only clears locally.
-  /// After clear, the list is empty until the user refreshes or reopens (if backend did not clear).
+  /// Clears all notifications via API, then empties the list.
   Future<void> onClearAll() async {
     final token = _getApiToken();
     if (token == null || token.isEmpty) {
-      notifications.clear();
-      unreadCount.value = 0;
+      Get.snackbar(
+        'Error',
+        'Please sign in to clear notifications',
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return;
     }
     try {
       await _api.clearAll(apiToken: token);
+      notifications.clear();
+      unreadCount.value = 0;
+      Get.snackbar(
+        'Success',
+        'All notifications cleared successfully',
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 2),
+      );
+    } on ApiException catch (e) {
+      Get.snackbar('Error', e.message, snackPosition: SnackPosition.BOTTOM);
     } catch (e) {
       if (kDebugMode) debugPrint('Clear notifications API error: $e');
-      // Still clear locally so the inbox appears empty; next refresh will re-fetch from server.
+      Get.snackbar(
+        'Error',
+        'Failed to clear notifications',
+        snackPosition: SnackPosition.BOTTOM,
+      );
     }
-    notifications.clear();
-    unreadCount.value = 0;
   }
 
   Future<void> onOpenNotification(NotificationItem item) async {
