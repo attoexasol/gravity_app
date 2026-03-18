@@ -129,33 +129,44 @@ class NotificationCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     if (onDelete != null) ...[
-                      PopupMenuButton<String>(
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 0,
-                          minHeight: 0,
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          splashFactory: NoSplash.splashFactory,
                         ),
-                        icon: Icon(
-                          Icons.more_horiz,
-                          size: 20.sp,
-                          color: AppColors.mutedForeground,
-                        ),
-                        onSelected: (value) {
-                          if (value == 'delete') {
-                            onDelete?.call();
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem<String>(
-                            value: 'delete',
-                            child: Icon(
-                              Icons.delete_outline,
-                              color: AppColors.destructive,
-                            ),
+                        child: PopupMenuButton<String>(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 0,
+                            minHeight: 0,
                           ),
-                        ],
+                          elevation: 0,
+                          color: AppColors.card,
+                          surfaceTintColor: Colors.transparent,
+                          icon: Icon(
+                            Icons.more_horiz,
+                            size: 20.sp,
+                            color: AppColors.mutedForeground,
+                          ),
+                          onSelected: (value) {
+                            if (value == 'delete') {
+                              onDelete?.call();
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem<String>(
+                              value: 'delete',
+                              child: Icon(
+                                Icons.delete_outline,
+                                size: 30.sp,
+                                color: AppColors.destructive,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      //SizedBox(width: 6.w),
+                      SizedBox(width: 6.w),
                     ],
                     if (item.isUnread)
                       Container(
