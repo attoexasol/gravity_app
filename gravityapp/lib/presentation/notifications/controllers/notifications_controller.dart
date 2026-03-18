@@ -230,6 +230,15 @@ class NotificationsController extends GetxController {
     }
   }
 
+  /// Removes a single notification from the list (local only; backend delete not implemented).
+  void deleteNotification(NotificationItem item) {
+    final wasUnread = item.isUnread;
+    notifications.removeWhere((n) => n.id == item.id);
+    if (wasUnread && unreadCount.value > 0) {
+      unreadCount.value -= 1;
+    }
+  }
+
   /// Clears all notifications from the list and resets unread count.
   /// Calls the backend clear endpoint if available; otherwise only clears locally.
   /// After clear, the list is empty until the user refreshes or reopens (if backend did not clear).

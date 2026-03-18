@@ -71,6 +71,7 @@ class NotificationsScreen extends GetView<NotificationsController> {
                       return NotificationCard(
                         item: item,
                         onTap: () => controller.onOpenNotification(item),
+                        onDelete: () => controller.deleteNotification(item),
                       );
                     },
                     ),

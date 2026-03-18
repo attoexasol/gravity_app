@@ -10,10 +10,12 @@ class NotificationCard extends StatelessWidget {
     super.key,
     required this.item,
     required this.onTap,
+    this.onDelete,
   });
 
   final NotificationItem item;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -39,87 +41,140 @@ class NotificationCard extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(20.r),
-          child: Padding(
-            padding: EdgeInsets.all(16.w),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Padding(
+                padding: EdgeInsets.all(16.w),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildIconContainer(),
-                    SizedBox(width: 12.w),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  item.title,
-                                  style: AppTextStyles.textBase.copyWith(
-                                    color: AppColors.cardForeground,
-                                    fontWeight: FontWeight.w600,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildIconContainer(),
+                        SizedBox(width: 12.w),
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(right: 52.w),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Title row: title (left) | time (right)
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        item.title,
+                                        style: AppTextStyles.textBase.copyWith(
+                                          color: AppColors.cardForeground,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    //SizedBox(width: 8.w),
+                                    Text(
+                                      item.timeText,
+                                      style: AppTextStyles.textXs.copyWith(
+                                        color: AppColors.mutedForeground,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 6.h),
+                                Text(
+                                  item.description,
+                                  style: AppTextStyles.textSm.copyWith(
+                                    color: AppColors.mutedForeground,
                                   ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                              Text(
-                                item.timeText,
-                                style: AppTextStyles.textXs.copyWith(
-                                  color: AppColors.mutedForeground,
-                                ),
-                              ),
-                              if (item.isUnread) ...[
-                                SizedBox(width: 6.w),
-                                Container(
-                                  width: 8.w,
-                                  height: 8.h,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
+                                if (item.isHighPriority) ...[
+                                  SizedBox(height: 8.h),
+                                  _buildHighPriorityPill(),
+                                ],
                               ],
-                            ],
-                          ),
-                          SizedBox(height: 4.h),
-                          Text(
-                            item.description,
-                            style: AppTextStyles.textSm.copyWith(
-                              color: AppColors.mutedForeground,
                             ),
                           ),
-                          if (item.isHighPriority) ...[
-                            SizedBox(height: 8.h),
-                            _buildHighPriorityPill(),
-                          ],
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
+                    if (item.actionText != null) ...[
+                      SizedBox(height: 12.h),
+                      Divider(
+                        color: AppColors.primary.withOpacity(0.1),
+                        height: 1,
+                        thickness: 1,
+                      ),
+                      SizedBox(height: 8.h),
+                      Text(
+                        item.actionText!,
+                        style: AppTextStyles.textSm.copyWith(
+                          color: isPayment
+                              ? AppColors.destructive
+                              : AppColors.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                if (item.actionText != null) ...[
-                  SizedBox(height: 12.h),
-                  Divider(
-                    color: AppColors.primary.withOpacity(0.1),
-                    height: 1,
-                    thickness: 1,
-                  ),
-                  SizedBox(height: 8.h),
-                  Text(
-                    item.actionText!,
-                    style: AppTextStyles.textSm.copyWith(
-                      color: isPayment
-                          ? AppColors.destructive
-                          : AppColors.primary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+              ),
+              // Top-right of card: 3-dot | unread dot only
+              Positioned(
+                top: -8.w,
+                right: 12.w,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (onDelete != null) ...[
+                      PopupMenuButton<String>(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 0,
+                          minHeight: 0,
+                        ),
+                        icon: Icon(
+                          Icons.more_horiz,
+                          size: 20.sp,
+                          color: AppColors.mutedForeground,
+                        ),
+                        onSelected: (value) {
+                          if (value == 'delete') {
+                            onDelete?.call();
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem<String>(
+                            value: 'delete',
+                            child: Icon(
+                              Icons.delete_outline,
+                              color: AppColors.destructive,
+                            ),
+                          ),
+                        ],
+                      ),
+                      //SizedBox(width: 6.w),
+                    ],
+                    if (item.isUnread)
+                      Container(
+                        width: 8.w,
+                        height: 8.h,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -128,8 +183,8 @@ class NotificationCard extends StatelessWidget {
 
   Widget _buildIconContainer() {
     return Container(
-      width: 40.w,
-      height: 40.h,
+      width: 35.w,
+      height: 35.h,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: _gradientForType(item.type),
