@@ -51,7 +51,7 @@ class NotificationCard extends StatelessWidget {
                         SizedBox(width: 12.w),
                         Expanded(
                           child: Padding(
-                            padding: EdgeInsets.only(right: 1.w,top: 10.h),
+                            padding: EdgeInsets.only(right: 1.w, top: 10.h),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -136,7 +136,7 @@ class NotificationCard extends StatelessWidget {
                           splashFactory: NoSplash.splashFactory,
                         ),
                         child: PopupMenuButton<String>(
-                          padding: EdgeInsets.zero,
+                          // padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(
                             minWidth: 0,
                             minHeight: 0,
@@ -155,12 +155,26 @@ class NotificationCard extends StatelessWidget {
                             }
                           },
                           itemBuilder: (context) => [
+                            // PopupMenuItem<String>(
+                            //   value: 'delete',
+                            //   child: Icon(
+                            //     Icons.delete_outline,
+                            //     size: 30.sp,
+                            //     // size: 20.sp,
+                            //     color: AppColors.destructive,
+                            //   ),
+                            // ),
                             PopupMenuItem<String>(
                               value: 'delete',
-                              child: Icon(
-                                Icons.delete_outline,
-                                size: 30.sp,
-                                color: AppColors.destructive,
+                              padding:
+                                  EdgeInsets.zero, // 🔥 remove default padding
+                              child: Center(
+                                // 🔥 keep icon centered
+                                child: Icon(
+                                  Icons.delete_outline,
+                                  size: 30.sp,
+                                  color: AppColors.destructive,
+                                ),
                               ),
                             ),
                           ],

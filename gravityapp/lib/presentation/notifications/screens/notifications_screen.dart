@@ -20,10 +20,13 @@ class NotificationsScreen extends GetView<NotificationsController> {
             child: SafeArea(
               top: false,
               child: Obx(() {
-                if (controller.loading.value && controller.notifications.isEmpty) {
+                if (controller.loading.value &&
+                    controller.notifications.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (controller.error.value != null && controller.notifications.isEmpty) {
+
+                if (controller.error.value != null &&
+                    controller.notifications.isEmpty) {
                   return Center(
                     child: Padding(
                       padding: EdgeInsets.all(24.w),
@@ -31,7 +34,8 @@ class NotificationsScreen extends GetView<NotificationsController> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            controller.error.value ?? 'Something went wrong',
+                            controller.error.value ??
+                                'Something went wrong',
                             textAlign: TextAlign.center,
                             style: AppTextStyles.textSm,
                           ),
@@ -45,48 +49,61 @@ class NotificationsScreen extends GetView<NotificationsController> {
                     ),
                   );
                 }
+
                 final list = controller.notifications;
+
                 return RefreshIndicator(
                   onRefresh: () => controller.refreshList(),
                   child: NotificationListener<ScrollNotification>(
                     onNotification: (notification) {
                       if (notification is ScrollEndNotification) {
                         final m = notification.metrics;
-                        if (m.pixels >= m.maxScrollExtent - 200) controller.loadMore();
+                        if (m.pixels >= m.maxScrollExtent - 200) {
+                          controller.loadMore();
+                        }
                       }
                       return false;
                     },
                     child: ListView.builder(
-                      padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 24.h),
-                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                      itemCount: list.length + (controller.loadingMore.value ? 1 : 0),
+                      padding: EdgeInsets.fromLTRB(
+                          16.w, 16.h, 16.w, 24.h),
+                      physics: const AlwaysScrollableScrollPhysics(
+                        parent: BouncingScrollPhysics(),
+                      ),
+                      itemCount: list.length +
+                          (controller.loadingMore.value ? 1 : 0),
                       itemBuilder: (context, index) {
-                      if (index >= list.length) {
-                        return Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16.h),
-                          child: const Center(child: CircularProgressIndicator()),
+                        if (index >= list.length) {
+                          return Padding(
+                            padding:
+                                EdgeInsets.symmetric(vertical: 16.h),
+                            child: const Center(
+                                child: CircularProgressIndicator()),
+                          );
+                        }
+
+                        final item = list[index];
+
+                        return NotificationCard(
+                          item: item,
+                          onTap: () =>
+                              controller.onOpenNotification(item),
+                          onDelete: () =>
+                              controller.deleteNotification(item),
                         );
-                      }
-                      final item = list[index];
-                      return NotificationCard(
-                        item: item,
-                        onTap: () => controller.onOpenNotification(item),
-                        onDelete: () => controller.deleteNotification(item),
-                      );
-                    },
+                      },
                     ),
                   ),
                 );
               }),
             ),
           ),
-          _buildClearBar(context),
         ],
       ),
     );
   }
 
-  /// Header uses same gradient as MainAppBar and extends under the status bar.
+  /// 🔹 Header with 3-dot menu (Mark all read + Clear all)
   Widget _buildHeader(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
@@ -102,10 +119,12 @@ class NotificationsScreen extends GetView<NotificationsController> {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+          padding:
+              EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              /// 🔙 Back button
               GestureDetector(
                 onTap: controller.onBack,
                 child: Container(
@@ -122,11 +141,13 @@ class NotificationsScreen extends GetView<NotificationsController> {
                   ),
                 ),
               ),
+
               SizedBox(width: 12.w),
+
+              /// 🔹 Title + unread count
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
@@ -140,23 +161,77 @@ class NotificationsScreen extends GetView<NotificationsController> {
                     Obx(() => Text(
                           '${controller.unreadCount.value} unread',
                           style: AppTextStyles.textSm.copyWith(
-                            color: Colors.white.withOpacity(0.9),
+                            color:
+                                Colors.white.withOpacity(0.9),
                           ),
                         )),
                   ],
                 ),
               ),
+
               SizedBox(width: 12.w),
-              GestureDetector(
-                onTap: () => controller.onMarkAllRead(),
-                child: Text(
-                  'Mark all read',
-                  style: AppTextStyles.textSm.copyWith(
-                    color: AppColors.chart5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
+
+              /// 🔥 3-dot menu
+              Obx(() => PopupMenuButton<String>(
+                    enabled:
+                        controller.notifications.isNotEmpty,
+                    onSelected: (value) {
+                      if (value == 'mark_all') {
+                        controller.onMarkAllRead();
+                      } else if (value == 'clear_all') {
+                        _showClearConfirmation(context);
+                      }
+                    },
+                    icon: Icon(
+                      Icons.more_vert,
+                      color: Colors.white,
+                      size: 22.sp,
+                    ),
+                    color: AppColors.card,
+                    constraints: const BoxConstraints(
+                      minWidth: 160,
+                    ),
+                    itemBuilder: (context) => [
+                      /// Mark all read
+                      PopupMenuItem(
+                        value: 'mark_all',
+                        child: Row(
+                          children: [
+                            Icon(Icons.done_all,
+                                size: 18.sp,
+                                color: AppColors.primary),
+                            SizedBox(width: 10.w),
+                            Text(
+                              'Mark all read',
+                              style: AppTextStyles.textSm,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      /// Clear all
+                      PopupMenuItem(
+                        value: 'clear_all',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_sweep,
+                                size: 18.sp,
+                                color:
+                                    AppColors.destructive),
+                            SizedBox(width: 10.w),
+                            Text(
+                              'Clear all',
+                              style: AppTextStyles.textSm
+                                  .copyWith(
+                                color:
+                                    AppColors.destructive,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  )),
             ],
           ),
         ),
@@ -164,45 +239,10 @@ class NotificationsScreen extends GetView<NotificationsController> {
     );
   }
 
-  /// Bottom bar with "Clear all" – similar to smartphone notification panel.
-  /// Only visible when there are notifications; tap shows confirmation then clears.
-  Widget _buildClearBar(BuildContext context) {
-    return Obx(() {
-      if (controller.notifications.isEmpty) return const SizedBox.shrink();
-      return SafeArea(
-        top: false,
-        child: Container(
-          width: double.infinity,
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            border: Border(
-              top: BorderSide(
-                color: Colors.grey.withOpacity(0.2),
-                width: 1,
-              ),
-            ),
-          ),
-          child: TextButton(
-            onPressed: () => _showClearConfirmation(context),
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.chart5,
-              padding: EdgeInsets.symmetric(vertical: 12.h),
-            ),
-            child: Text(
-              'Clear all',
-              style: AppTextStyles.textSm.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      );
-    });
-  }
-
+  /// 🔥 Confirmation dialog
   void _showClearConfirmation(BuildContext context) {
     if (controller.notifications.isEmpty) return;
+
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -212,7 +252,8 @@ class NotificationsScreen extends GetView<NotificationsController> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () =>
+                Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
           TextButton(
