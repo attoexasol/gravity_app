@@ -4,18 +4,59 @@ import 'package:get/get.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../controllers/login_controller.dart';
 
+/// Layout metrics for login — adapts to screen size and avoids keyboard overflow.
+class _LoginLayout {
+  _LoginLayout._(this.size, this.shortestSide);
+
+  final Size size;
+  final double shortestSide;
+
+  factory _LoginLayout.of(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return _LoginLayout._(media.size, media.size.shortestSide);
+  }
+
+  bool get isCompact => shortestSide < 360;
+  bool get isMedium => shortestSide >= 360 && shortestSide < 420;
+
+  double get horizontalPadding => isCompact ? 16.0 : (isMedium ? 20.0 : 24.0);
+
+  double get cardInnerPadding => isCompact ? 20.0 : (isMedium ? 28.0 : 32.0);
+
+  double get titleFontSize => isCompact ? 24.0 : (isMedium ? 28.0 : 32.0);
+
+  /// Gradient header height — clamped so short phones still fit.
+  double get headerHeight {
+    final h = size.height;
+    final fraction = h < 560 ? 0.24 : 0.26;
+    return (h * fraction).clamp(180.0, 320.0);
+  }
+
+  /// Space above the white card — scales down on short screens.
+  double get cardTopSpacer {
+    final h = size.height;
+    return (h * 0.15).clamp(88.0, 200.0);
+  }
+
+  double get roleGap => isCompact ? 10.0 : 16.0;
+
+  double get fieldVerticalPadding => isCompact ? 12.0 : 16.0;
+
+  double get primaryButtonHeight => isCompact ? 50.0 : 56.0;
+}
+
 class LoginScreen extends GetView<LoginController> {
   const LoginScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Ensure controller is available - GetView automatically handles this
-    ///Get.put(LoginController());
-    final size = MediaQuery.of(context).size;
-    final isSmallScreen = size.width < 600;
-    final statusBarHeight = MediaQuery.of(context).padding.top;
+    final layout = _LoginLayout.of(context);
+    final media = MediaQuery.of(context);
+    final viewInsets = media.viewInsets;
+    final statusBarHeight = media.padding.top;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: const Color(0xFFF5F6FA),
       body: Stack(
         children: [
@@ -25,8 +66,7 @@ class LoginScreen extends GetView<LoginController> {
             left: 0,
             right: 0,
             child: Container(
-              // height: size.height * 0.30,
-              height: size.height * 0.25,
+              height: layout.headerHeight,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -39,11 +79,10 @@ class LoginScreen extends GetView<LoginController> {
                 ),
               ),
               padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
-                // top: statusBarHeight + 56,
-                top: statusBarHeight + 30,
-                bottom: 48,
+                left: layout.horizontalPadding,
+                right: layout.horizontalPadding,
+                top: statusBarHeight + (layout.isCompact ? 20 : 30),
+                bottom: layout.isCompact ? 36 : 48,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,11 +91,11 @@ class LoginScreen extends GetView<LoginController> {
                     'Welcome Back',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: isSmallScreen ? 28 : 32,
+                      fontSize: layout.titleFontSize,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: layout.isCompact ? 6 : 8),
                   Text(
                     'Sign in to continue your wellness journey',
                     style: AppTextStyles.textBase.copyWith(
@@ -71,81 +110,102 @@ class LoginScreen extends GetView<LoginController> {
           // FOREGROUND LOGIN CARD (SCROLLABLE & INDEPENDENT)
           Positioned.fill(
             child: SafeArea(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    // SizedBox(height: size.height * 0.18),
-                    // SizedBox(height: size.height * 0.14),
-                    SizedBox(height: size.height * 0.14),
-                    // LOGIN CARD
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 600),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(28),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 20,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        padding: EdgeInsets.all(isSmallScreen ? 24 : 32),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildRoleSelection(),
-                            const SizedBox(height: 24),
-                            _buildEmailField(),
-                            const SizedBox(height: 16),
-                            _buildPasswordField(),
-                            const SizedBox(height: 12),
-                            _buildForgotPasswordLink(),
-                            const SizedBox(height: 24),
-                            _buildLoginButton(context),
-                            const SizedBox(height: 24),
-                            _buildDivider(),
-                            const SizedBox(height: 24),
-                            _buildSocialButtons(isSmallScreen),
-                            const SizedBox(height: 24),
-                            _buildPrivacyText(),
-                          ],
-                        ),
+              bottom: false,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    physics: const ClampingScrollPhysics(),
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        bottom: viewInsets.bottom + 24,
                       ),
-                    ),
-
-                    const SizedBox(height: 32),
-
-                    // SIGN UP LINK
-                    GestureDetector(
-                      onTap: controller.navigateToSignUp,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 32),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              "Don't have an account? ",
-                              style: AppTextStyles.textBase.copyWith(
-                                color: const Color(0xFF0A2342).withOpacity(0.6),
+                      child: Column(
+                        children: [
+                          SizedBox(height: layout.cardTopSpacer),
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: layout.horizontalPadding,
+                            ),
+                            child: Center(
+                              child: Container(
+                                constraints: BoxConstraints(
+                                  maxWidth: 600,
+                                  minWidth: 0,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(28),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.08),
+                                      blurRadius: 20,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                padding: EdgeInsets.all(layout.cardInnerPadding),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildRoleSelection(layout),
+                                    SizedBox(height: layout.isCompact ? 20 : 24),
+                                    _buildEmailField(layout),
+                                    SizedBox(height: layout.isCompact ? 12 : 16),
+                                    _buildPasswordField(layout),
+                                    SizedBox(height: layout.isCompact ? 10 : 12),
+                                    _buildForgotPasswordLink(),
+                                    SizedBox(height: layout.isCompact ? 20 : 24),
+                                    _buildLoginButton(context, layout),
+                                    SizedBox(height: layout.isCompact ? 20 : 24),
+                                    _buildDivider(layout),
+                                    SizedBox(height: layout.isCompact ? 20 : 24),
+                                    _buildSocialButtons(layout),
+                                    SizedBox(height: layout.isCompact ? 20 : 24),
+                                    _buildPrivacyText(),
+                                  ],
+                                ),
                               ),
                             ),
-                            Text(
-                              'Sign Up',
-                              style: AppTextStyles.textBase.copyWith(
-                                color: const Color(0xFF00B8A9),
-                                fontWeight: FontWeight.w600,
+                          ),
+
+                          SizedBox(height: layout.isCompact ? 24 : 32),
+
+                          // SIGN UP LINK
+                          GestureDetector(
+                            onTap: controller.navigateToSignUp,
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                bottom: 24 + media.padding.bottom,
+                              ),
+                              child: Wrap(
+                                alignment: WrapAlignment.center,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Text(
+                                    "Don't have an account? ",
+                                    style: AppTextStyles.textBase.copyWith(
+                                      color: const Color(0xFF0A2342)
+                                          .withOpacity(0.6),
+                                    ),
+                                  ),
+                                  Text(
+                                    'Sign Up',
+                                    style: AppTextStyles.textBase.copyWith(
+                                      color: const Color(0xFF00B8A9),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           ),
@@ -154,13 +214,14 @@ class LoginScreen extends GetView<LoginController> {
     );
   }
 
-  Widget _buildRoleSelection() {
+  Widget _buildRoleSelection(_LoginLayout layout) {
     final controller = this.controller;
     return Obx(
       () => Row(
         children: [
           Expanded(
             child: _buildRoleCard(
+              layout: layout,
               label: 'Customer',
               description: 'Track my wellness',
               icon: Icons.person,
@@ -169,9 +230,10 @@ class LoginScreen extends GetView<LoginController> {
               onTap: () => controller.selectRole(UserType.customer),
             ),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: layout.roleGap),
           Expanded(
             child: _buildRoleCard(
+              layout: layout,
               label: 'Coach',
               description: 'Manage clients',
               icon: Icons.manage_accounts,
@@ -186,6 +248,7 @@ class LoginScreen extends GetView<LoginController> {
   }
 
   Widget _buildRoleCard({
+    required _LoginLayout layout,
     required String label,
     required String description,
     required IconData icon,
@@ -193,11 +256,15 @@ class LoginScreen extends GetView<LoginController> {
     required Color accentColor,
     required VoidCallback onTap,
   }) {
+    final pad = layout.isCompact ? 12.0 : 16.0;
+    final iconSize = layout.isCompact ? 22.0 : 24.0;
+    final circle = layout.isCompact ? 44.0 : 48.0;
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(pad),
         decoration: BoxDecoration(
           color: isSelected ? accentColor.withOpacity(0.05) : Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -211,8 +278,8 @@ class LoginScreen extends GetView<LoginController> {
         child: Column(
           children: [
             Container(
-              width: 48,
-              height: 48,
+              width: circle,
+              height: circle,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: isSelected
@@ -231,10 +298,10 @@ class LoginScreen extends GetView<LoginController> {
                 color: isSelected
                     ? Colors.white
                     : const Color(0xFF0A2342).withOpacity(0.4),
-                size: 24,
+                size: iconSize,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: layout.isCompact ? 8 : 12),
             Text(
               label,
               style: AppTextStyles.textBase.copyWith(
@@ -243,14 +310,17 @@ class LoginScreen extends GetView<LoginController> {
                     ? accentColor
                     : const Color(0xFF0A2342).withOpacity(0.6),
               ),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: layout.isCompact ? 2 : 4),
             Text(
               description,
               style: AppTextStyles.textXs.copyWith(
                 color: const Color(0xFF0A2342).withOpacity(0.4),
               ),
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -258,8 +328,7 @@ class LoginScreen extends GetView<LoginController> {
     );
   }
 
-  Widget _buildEmailField() {
-    // Use controller from GetView
+  Widget _buildEmailField(_LoginLayout layout) {
     final controller = this.controller;
 
     return Column(
@@ -275,10 +344,11 @@ class LoginScreen extends GetView<LoginController> {
         TextField(
           controller: controller.emailController,
           keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
           style: AppTextStyles.textBase.copyWith(
-            color: const Color(0xFF0A2342), // Dark text color
+            color: const Color(0xFF0A2342),
           ),
-          cursorColor: const Color(0xFF0A2342), // Dark cursor
+          cursorColor: const Color(0xFF0A2342),
           decoration: InputDecoration(
             hintText: 'your.email@example.com',
             hintStyle: AppTextStyles.textBase.copyWith(
@@ -290,6 +360,7 @@ class LoginScreen extends GetView<LoginController> {
             ),
             filled: true,
             fillColor: Colors.white,
+            isDense: layout.isCompact,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide(
@@ -311,9 +382,9 @@ class LoginScreen extends GetView<LoginController> {
                 width: 2,
               ),
             ),
-            contentPadding: const EdgeInsets.symmetric(
+            contentPadding: EdgeInsets.symmetric(
               horizontal: 16,
-              vertical: 16,
+              vertical: layout.fieldVerticalPadding,
             ),
           ),
         ),
@@ -321,8 +392,7 @@ class LoginScreen extends GetView<LoginController> {
     );
   }
 
-  Widget _buildPasswordField() {
-    // Use controller from GetView
+  Widget _buildPasswordField(_LoginLayout layout) {
     final controller = this.controller;
 
     return Column(
@@ -339,10 +409,11 @@ class LoginScreen extends GetView<LoginController> {
           () => TextField(
             controller: controller.passwordController,
             obscureText: !controller.isPasswordVisible.value,
+            textInputAction: TextInputAction.done,
             style: AppTextStyles.textBase.copyWith(
-              color: const Color(0xFF0A2342), // Dark text color
+              color: const Color(0xFF0A2342),
             ),
-            cursorColor: const Color(0xFF0A2342), // Dark cursor
+            cursorColor: const Color(0xFF0A2342),
             decoration: InputDecoration(
               hintText: '••••••••',
               hintStyle: AppTextStyles.textBase.copyWith(
@@ -363,6 +434,7 @@ class LoginScreen extends GetView<LoginController> {
               ),
               filled: true,
               fillColor: Colors.white,
+              isDense: layout.isCompact,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(
@@ -384,9 +456,9 @@ class LoginScreen extends GetView<LoginController> {
                   width: 2,
                 ),
               ),
-              contentPadding: const EdgeInsets.symmetric(
+              contentPadding: EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical: 16,
+                vertical: layout.fieldVerticalPadding,
               ),
             ),
           ),
@@ -412,14 +484,16 @@ class LoginScreen extends GetView<LoginController> {
     );
   }
 
-  Widget _buildLoginButton(BuildContext context) {
+  Widget _buildLoginButton(BuildContext context, _LoginLayout layout) {
     final controller = this.controller;
     return Obx(
       () => SizedBox(
         width: double.infinity,
-        height: 56,
+        height: layout.primaryButtonHeight,
         child: ElevatedButton(
-          onPressed: controller.isLoading.value ? null : () => controller.handleLogin(context),
+          onPressed: controller.isLoading.value
+              ? null
+              : () => controller.handleLogin(context),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF00B8A9),
             foregroundColor: Colors.white,
@@ -449,7 +523,15 @@ class LoginScreen extends GetView<LoginController> {
     );
   }
 
-  Widget _buildDivider() {
+  Widget _buildDivider(_LoginLayout layout) {
+    final labelStyle = layout.isCompact
+        ? AppTextStyles.textSm.copyWith(
+            color: const Color(0xFF0A2342).withOpacity(0.4),
+            fontSize: 12,
+          )
+        : AppTextStyles.textSm.copyWith(
+            color: const Color(0xFF0A2342).withOpacity(0.4),
+          );
     return Row(
       children: [
         Expanded(
@@ -459,12 +541,12 @@ class LoginScreen extends GetView<LoginController> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: EdgeInsets.symmetric(
+            horizontal: layout.isCompact ? 10 : 16,
+          ),
           child: Text(
             'or continue with',
-            style: AppTextStyles.textSm.copyWith(
-              color: const Color(0xFF0A2342).withOpacity(0.4),
-            ),
+            style: labelStyle,
           ),
         ),
         Expanded(
@@ -477,7 +559,7 @@ class LoginScreen extends GetView<LoginController> {
     );
   }
 
-  Widget _buildSocialButtons(bool isSmallScreen) {
+  Widget _buildSocialButtons(_LoginLayout layout) {
     final controller = this.controller;
     return Obx(
       () => Column(
@@ -486,21 +568,23 @@ class LoginScreen extends GetView<LoginController> {
             children: [
               Expanded(
                 child: _buildSocialButton(
+                  layout: layout,
                   label: 'Google',
                   onTap: controller.isLoading.value
                       ? null
                       : controller.handleGoogleLogin,
-                  child: _GoogleLogo(),
+                  child: _GoogleLogo(compact: layout.isCompact),
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: layout.roleGap),
               Expanded(
                 child: _buildSocialButton(
+                  layout: layout,
                   label: 'Apple',
                   onTap: controller.isLoading.value
                       ? null
                       : controller.handleAppleLogin,
-                  child: _AppleLogo(),
+                  child: _AppleLogo(compact: layout.isCompact),
                 ),
               ),
             ],
@@ -511,6 +595,7 @@ class LoginScreen extends GetView<LoginController> {
   }
 
   Widget _buildSocialButton({
+    required _LoginLayout layout,
     required String label,
     required VoidCallback? onTap,
     required Widget child,
@@ -522,7 +607,9 @@ class LoginScreen extends GetView<LoginController> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: EdgeInsets.symmetric(
+            vertical: layout.isCompact ? 10 : 12,
+          ),
           decoration: BoxDecoration(
             border: Border.all(
               color: const Color(0xFF0A2342).withOpacity(0.1),
@@ -532,14 +619,24 @@ class LoginScreen extends GetView<LoginController> {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               child,
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: AppTextStyles.textBase.copyWith(
-                  color: const Color(0xFF0A2342),
-                  fontWeight: FontWeight.w500,
+              SizedBox(width: layout.isCompact ? 6 : 8),
+              Flexible(
+                child: Text(
+                  label,
+                  style: layout.isCompact
+                      ? AppTextStyles.textBase.copyWith(
+                          color: const Color(0xFF0A2342),
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        )
+                      : AppTextStyles.textBase.copyWith(
+                          color: const Color(0xFF0A2342),
+                          fontWeight: FontWeight.w500,
+                        ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -562,47 +659,33 @@ class LoginScreen extends GetView<LoginController> {
 
 // Google Logo SVG Component
 class _GoogleLogo extends StatelessWidget {
+  const _GoogleLogo({this.compact = false});
+
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
+    final s = compact ? 18.0 : 20.0;
     return SvgPicture.asset(
       'assets/images/google_logo.svg',
-      width: 20,
-      height: 20,
+      width: s,
+      height: s,
     );
   }
-}
-
-class _GoogleLogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Google logo colors and simple representation
-    final paint = Paint()..style = PaintingStyle.fill;
-
-    // Simplified Google "G" logo using circle
-    paint.color = const Color(0xFF4285F4);
-    canvas.drawCircle(
-      Offset(size.width / 2, size.height / 2),
-      size.width / 2,
-      paint,
-    );
-
-    // White center
-    paint.color = Colors.white;
-    canvas.drawCircle(
-      Offset(size.width / 2, size.height / 2),
-      size.width / 3,
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // Apple Logo
 class _AppleLogo extends StatelessWidget {
+  const _AppleLogo({this.compact = false});
+
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
-    return const Icon(Icons.apple, color: Color(0xFF0A2342), size: 20);
+    return Icon(
+      Icons.apple,
+      color: const Color(0xFF0A2342),
+      size: compact ? 18 : 20,
+    );
   }
 }

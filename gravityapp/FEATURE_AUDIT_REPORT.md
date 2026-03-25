@@ -44,7 +44,7 @@
 - **Evidence Found:**  
   - `LoginController.handleLogin()` → `AuthRepository.login()` (POST `/user/login` with device info)  
   - Token save (TokenManager + PreferencesService), session init (SessionManager), Firebase custom token sign-in and Firestore user sync, FCM sync, profile image fetch (`getSingleUser`), consent/goals check, navigation to Goal Settings or Home  
-  - `lib/presentation/login/screens/login_screen.dart`, validation (`validateEmail`, `validatePassword`), error display  
+  - `lib/presentation/auth/screens/login_screen.dart`, validation (`validateEmail`, `validatePassword`), error display  
 - **Reasoning:** End-to-end: UI, validation, API, token/session persistence, Firebase/FCM, and post-login navigation.
 
 - **Feature Name:** Sign up (email/password)  
@@ -67,7 +67,7 @@
 - **Evidence Found:**  
   - `ForgotPasswordController.handleForgotPassword()` → `AuthRepository.sendOtp(email)` (POST `/send-email-otp`)  
   - Email validation, success → `Get.toNamed(AppRoutes.otpVerification, parameters: {'email': email})`  
-  - `lib/presentation/login/screens/forgot_password_screen.dart`, route and binding in `AppPages`  
+  - `lib/presentation/auth/screens/forgot_password_screen.dart`, route and binding in `AppPages`  
 - **Reasoning:** UI, API, validation, and navigation to OTP screen are implemented.
 
 - **Feature Name:** OTP verification  
@@ -75,7 +75,7 @@
 - **Evidence Found:**  
   - `OtpVerificationController.handleVerifyOtp()` → `AuthRepository.verifyOtp(email, otp)` (POST `/verify-email-otp`)  
   - Resend OTP with 60s countdown, validation (6 digits), success → `Get.toNamed(AppRoutes.resetPassword, parameters: {'email': email.value})`  
-  - `lib/presentation/login/screens/otp_verification_screen.dart`  
+  - `lib/presentation/auth/screens/otp_verification_screen.dart`  
 - **Reasoning:** Full flow: API, validation, resend, and navigation to reset password.
 
 - **Feature Name:** Reset password  
@@ -83,7 +83,7 @@
 - **Evidence Found:**  
   - `ResetPasswordController.handleResetPassword()` → `AuthRepository.resetPassword()` (POST `/forget-password` with email, password, password_confirmation)  
   - Email from route params, password/confirm validation, success → `Get.offAllNamed(AppRoutes.login)`  
-  - `lib/presentation/login/screens/reset_password_screen.dart`  
+  - `lib/presentation/auth/screens/reset_password_screen.dart`  
 - **Reasoning:** API and UI flow are complete.
 
 - **Feature Name:** Logout  

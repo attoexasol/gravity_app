@@ -3,7 +3,7 @@ import '../../presentation/aicoach/controllers/ai_coach_controller.dart';
 import '../../presentation/main_layout/controllers/main_layout_controller.dart';
 import '../../presentation/consent/controllers/consent_controller.dart';
 import '../../presentation/goal_settings/controllers/goal_settings_controller.dart';
-import '../../presentation/login/controllers/login_controller.dart';
+import '../../presentation/auth/controllers/login_controller.dart';
 import '../../presentation/messages/controllers/messages_controllers.dart';
 import '../../presentation/notifications/controllers/notifications_controller.dart';
 import '../../presentation/onboarding/controllers/onboarding_controller.dart';

@@ -67,8 +67,8 @@ class PaginatedNotificationLogs {
   });
 }
 
-/// Notifications API – all requests send [token] in body (custom auth).
-class NotificationsApi {
+/// Notifications repository – all requests send [token] in body (custom auth).
+class NotificationsRepository {
   final ApiService _api = ApiService();
 
   Future<void> storeDeviceToken({

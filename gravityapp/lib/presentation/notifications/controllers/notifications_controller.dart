@@ -3,7 +3,7 @@ import 'package:get/get.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../data/model/notification_preferences.dart';
-import '../../../data/remote/notifications_api.dart';
+import '../../../data/repositories/notifications_repository.dart';
 
 enum NotificationType {
   message,
@@ -65,7 +65,7 @@ class NotificationItem {
 }
 
 class NotificationsController extends GetxController {
-  final NotificationsApi _api = NotificationsApi();
+  final NotificationsRepository _api = NotificationsRepository();
 
   final RxList<NotificationItem> notifications = <NotificationItem>[].obs;
   final RxInt unreadCount = 0.obs;

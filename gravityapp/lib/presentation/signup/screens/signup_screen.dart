@@ -4,26 +4,67 @@ import 'package:get/get.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../controllers/signup_controller.dart';
 
+/// Layout metrics for signup — adapts to screen size and avoids keyboard overflow.
+class _SignupLayout {
+  _SignupLayout._(this.size, this.shortestSide);
+
+  final Size size;
+  final double shortestSide;
+
+  factory _SignupLayout.of(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return _SignupLayout._(media.size, media.size.shortestSide);
+  }
+
+  bool get isCompact => shortestSide < 360;
+  bool get isMedium => shortestSide >= 360 && shortestSide < 420;
+
+  double get horizontalPadding => isCompact ? 16.0 : (isMedium ? 20.0 : 24.0);
+
+  double get cardInnerPadding => isCompact ? 20.0 : (isMedium ? 28.0 : 32.0);
+
+  double get titleFontSize => isCompact ? 24.0 : (isMedium ? 28.0 : 32.0);
+
+  double get headerHeight {
+    final h = size.height;
+    final fraction = h < 560 ? 0.26 : 0.28;
+    return (h * fraction).clamp(200.0, 340.0);
+  }
+
+  double get cardTopSpacer {
+    final h = size.height;
+    return (h * 0.16).clamp(96.0, 220.0);
+  }
+
+  double get roleGap => isCompact ? 10.0 : 16.0;
+
+  double get fieldVerticalPadding => isCompact ? 12.0 : 16.0;
+
+  double get primaryButtonHeight => isCompact ? 50.0 : 56.0;
+}
+
 class SignupScreen extends GetView<SignupController> {
   const SignupScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final isSmallScreen = size.width < 600;
+    final layout = _SignupLayout.of(context);
+    final media = MediaQuery.of(context);
+    final viewInsets = media.viewInsets;
+    final topPad = media.padding.top;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: const Color(0xFFF5F6FA),
       body: Stack(
         children: [
-          // BACKGROUND HEADER
+          // BACKGROUND HEADER (visual only — back control is overlay below)
           Positioned(
             top: 0,
             left: 0,
             right: 0,
             child: Container(
-              // height: size.height * 0.30,
-              height: size.height * 0.28,
+              height: layout.headerHeight,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -35,49 +76,24 @@ class SignupScreen extends GetView<SignupController> {
                   bottomRight: Radius.circular(40),
                 ),
               ),
-              // padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 25),
               padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
-                top: MediaQuery.of(context).padding.top + 8,
-                bottom: 32,
+                left: layout.horizontalPadding,
+                right: layout.horizontalPadding,
+                top: topPad + 48,
+                bottom: layout.isCompact ? 24 : 32,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Back button
-                  Row(
-                    children: [
-                      InkWell(
-                        onTap: controller.navigateToLogin,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.arrow_back,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  // const SizedBox(height: 16),
-                  const SizedBox(height: 8),
                   Text(
                     'Create Account',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: isSmallScreen ? 28 : 32,
+                      fontSize: layout.titleFontSize,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: layout.isCompact ? 6 : 8),
                   Text(
                     'Start your wellness journey today',
                     style: AppTextStyles.textBase.copyWith(
@@ -92,74 +108,108 @@ class SignupScreen extends GetView<SignupController> {
           // FOREGROUND SIGNUP CARD (SCROLLABLE)
           Positioned.fill(
             child: SafeArea(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    // SizedBox(height: size.height * 0.18),
-                    SizedBox(height: size.height * 0.17),
-
-                    // SIGNUP CARD
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 600),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(28),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 20,
-                              offset: const Offset(0, 4),
+              bottom: false,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    physics: const ClampingScrollPhysics(),
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        bottom: viewInsets.bottom + 24,
+                      ),
+                      child: Column(
+                        children: [
+                          SizedBox(height: layout.cardTopSpacer),
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: layout.horizontalPadding,
                             ),
-                          ],
-                        ),
-                        padding: EdgeInsets.all(isSmallScreen ? 24 : 32),
-                        child: Obx(
-                          () => controller.isSignupSuccess.value
-                              ? _buildSuccessContent(isSmallScreen)
-                              : Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildRoleSelection(),
-                                    const SizedBox(height: 24),
-                                    _buildFullNameField(),
-                                    const SizedBox(height: 16),
-                                    _buildEmailField(),
-                                    const SizedBox(height: 16),
-                                    _buildPhoneField(),
-                                    const SizedBox(height: 16),
-                                    _buildPasswordField(),
-                                    const SizedBox(height: 16),
-                                    _buildConfirmPasswordField(),
-                                    const SizedBox(height: 24),
-                                    _buildSignupButton(),
-                                    const SizedBox(height: 24),
-                                    _buildDivider(),
-                                    const SizedBox(height: 24),
-                                    _buildSocialButtons(isSmallScreen),
-                                    const SizedBox(height: 24),
-                                    _buildTermsText(),
+                            child: Center(
+                              child: Container(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 600,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(28),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.08),
+                                      blurRadius: 20,
+                                      offset: const Offset(0, 4),
+                                    ),
                                   ],
                                 ),
-                        ),
+                                padding: EdgeInsets.all(layout.cardInnerPadding),
+                                child: Obx(
+                                  () => controller.isSignupSuccess.value
+                                      ? _buildSuccessContent(layout)
+                                      : Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            _buildRoleSelection(layout),
+                                            SizedBox(
+                                                height:
+                                                    layout.isCompact ? 20 : 24),
+                                            _buildFullNameField(layout),
+                                            SizedBox(
+                                                height:
+                                                    layout.isCompact ? 12 : 16),
+                                            _buildEmailField(layout),
+                                            SizedBox(
+                                                height:
+                                                    layout.isCompact ? 12 : 16),
+                                            _buildPhoneField(layout),
+                                            SizedBox(
+                                                height:
+                                                    layout.isCompact ? 12 : 16),
+                                            _buildPasswordField(layout),
+                                            SizedBox(
+                                                height:
+                                                    layout.isCompact ? 12 : 16),
+                                            _buildConfirmPasswordField(layout),
+                                            SizedBox(
+                                                height:
+                                                    layout.isCompact ? 20 : 24),
+                                            _buildSignupButton(layout),
+                                            SizedBox(
+                                                height:
+                                                    layout.isCompact ? 20 : 24),
+                                            _buildDivider(layout),
+                                            SizedBox(
+                                                height:
+                                                    layout.isCompact ? 20 : 24),
+                                            _buildSocialButtons(layout),
+                                            SizedBox(
+                                                height:
+                                                    layout.isCompact ? 20 : 24),
+                                            _buildTermsText(),
+                                          ],
+                                        ),
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          SizedBox(height: layout.isCompact ? 24 : 32),
+
+                          _buildLoginLink(media.padding.bottom),
+                        ],
                       ),
                     ),
-
-                    const SizedBox(height: 32),
-
-                    // LOGIN LINK
-                    _buildLoginLink(),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           ),
 
-          // Tappable back button overlay (on top of scroll so it receives taps)
+          // Back button above scroll so it stays tappable
           Positioned(
-            left: 24,
-            top: MediaQuery.of(context).padding.top + 8,
+            left: layout.horizontalPadding,
+            top: topPad + 8,
             child: Material(
               color: Colors.transparent,
               child: InkWell(
@@ -188,7 +238,7 @@ class SignupScreen extends GetView<SignupController> {
 
   // ---------- ROLE SELECTION ----------
 
-  Widget _buildRoleSelection() {
+  Widget _buildRoleSelection(_SignupLayout layout) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -198,13 +248,14 @@ class SignupScreen extends GetView<SignupController> {
             color: const Color(0xFF0A2342).withOpacity(0.6),
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: layout.isCompact ? 10 : 12),
         Obx(() {
           final selected = controller.selectedRole.value;
           return Row(
             children: [
               Expanded(
                 child: _buildRoleCard(
+                  layout: layout,
                   label: 'Customer',
                   description: 'Track my wellness',
                   icon: Icons.person,
@@ -213,9 +264,10 @@ class SignupScreen extends GetView<SignupController> {
                   onTap: () => controller.selectRole(UserType.customer),
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: layout.roleGap),
               Expanded(
                 child: _buildRoleCard(
+                  layout: layout,
                   label: 'Coach',
                   description: 'Manage clients',
                   icon: Icons.manage_accounts,
@@ -232,6 +284,7 @@ class SignupScreen extends GetView<SignupController> {
   }
 
   Widget _buildRoleCard({
+    required _SignupLayout layout,
     required String label,
     required String description,
     required IconData icon,
@@ -239,11 +292,15 @@ class SignupScreen extends GetView<SignupController> {
     required Color accentColor,
     required VoidCallback onTap,
   }) {
+    final pad = layout.isCompact ? 12.0 : 16.0;
+    final iconSize = layout.isCompact ? 22.0 : 24.0;
+    final circle = layout.isCompact ? 44.0 : 48.0;
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(pad),
         decoration: BoxDecoration(
           color: isSelected ? accentColor.withOpacity(0.05) : Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -257,8 +314,8 @@ class SignupScreen extends GetView<SignupController> {
         child: Column(
           children: [
             Container(
-              width: 48,
-              height: 48,
+              width: circle,
+              height: circle,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: isSelected
@@ -277,10 +334,10 @@ class SignupScreen extends GetView<SignupController> {
                 color: isSelected
                     ? Colors.white
                     : const Color(0xFF0A2342).withOpacity(0.4),
-                size: 24,
+                size: iconSize,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: layout.isCompact ? 8 : 12),
             Text(
               label,
               style: AppTextStyles.textBase.copyWith(
@@ -289,14 +346,17 @@ class SignupScreen extends GetView<SignupController> {
                     ? accentColor
                     : const Color(0xFF0A2342).withOpacity(0.6),
               ),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: layout.isCompact ? 2 : 4),
             Text(
               description,
               style: AppTextStyles.textXs.copyWith(
                 color: const Color(0xFF0A2342).withOpacity(0.4),
               ),
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -306,7 +366,7 @@ class SignupScreen extends GetView<SignupController> {
 
   // ---------- FIELDS ----------
 
-  Widget _buildFullNameField() {
+  Widget _buildFullNameField(_SignupLayout layout) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -320,11 +380,13 @@ class SignupScreen extends GetView<SignupController> {
         TextField(
           controller: controller.fullNameController,
           keyboardType: TextInputType.name,
+          textInputAction: TextInputAction.next,
           style: AppTextStyles.textBase.copyWith(
-            color: const Color(0xFF0A2342), // Dark text color
+            color: const Color(0xFF0A2342),
           ),
-          cursorColor: const Color(0xFF0A2342), // Dark cursor
+          cursorColor: const Color(0xFF0A2342),
           decoration: _baseInputDecoration(
+            layout: layout,
             hint: 'John Doe',
             icon: Icons.person_outline,
           ),
@@ -333,7 +395,7 @@ class SignupScreen extends GetView<SignupController> {
     );
   }
 
-  Widget _buildEmailField() {
+  Widget _buildEmailField(_SignupLayout layout) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -347,11 +409,13 @@ class SignupScreen extends GetView<SignupController> {
         TextField(
           controller: controller.emailController,
           keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
           style: AppTextStyles.textBase.copyWith(
-            color: const Color(0xFF0A2342), // Dark text color
+            color: const Color(0xFF0A2342),
           ),
-          cursorColor: const Color(0xFF0A2342), // Dark cursor
+          cursorColor: const Color(0xFF0A2342),
           decoration: _baseInputDecoration(
+            layout: layout,
             hint: 'your.email@example.com',
             icon: Icons.mail_outline,
           ),
@@ -360,7 +424,7 @@ class SignupScreen extends GetView<SignupController> {
     );
   }
 
-  Widget _buildPhoneField() {
+  Widget _buildPhoneField(_SignupLayout layout) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -374,11 +438,13 @@ class SignupScreen extends GetView<SignupController> {
         TextField(
           controller: controller.phoneController,
           keyboardType: TextInputType.phone,
+          textInputAction: TextInputAction.next,
           style: AppTextStyles.textBase.copyWith(
-            color: const Color(0xFF0A2342), // Dark text color
+            color: const Color(0xFF0A2342),
           ),
-          cursorColor: const Color(0xFF0A2342), // Dark cursor
+          cursorColor: const Color(0xFF0A2342),
           decoration: _baseInputDecoration(
+            layout: layout,
             hint: '+1 (555) 000-0000',
             icon: Icons.phone_outlined,
           ),
@@ -388,6 +454,7 @@ class SignupScreen extends GetView<SignupController> {
   }
 
   InputDecoration _baseInputDecoration({
+    required _SignupLayout layout,
     required String hint,
     required IconData icon,
   }) {
@@ -399,6 +466,7 @@ class SignupScreen extends GetView<SignupController> {
       prefixIcon: Icon(icon, color: const Color(0xFF00B8A9)),
       filled: true,
       fillColor: Colors.white,
+      isDense: layout.isCompact,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide(
@@ -417,11 +485,14 @@ class SignupScreen extends GetView<SignupController> {
         borderRadius: BorderRadius.circular(16),
         borderSide: const BorderSide(color: Color(0xFF00B8A9), width: 2),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: layout.fieldVerticalPadding,
+      ),
     );
   }
 
-  Widget _buildPasswordField() {
+  Widget _buildPasswordField(_SignupLayout layout) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -436,10 +507,11 @@ class SignupScreen extends GetView<SignupController> {
           return TextField(
             controller: controller.passwordController,
             obscureText: !controller.isPasswordVisible.value,
+            textInputAction: TextInputAction.next,
             style: AppTextStyles.textBase.copyWith(
-              color: const Color(0xFF0A2342), // Dark text color
+              color: const Color(0xFF0A2342),
             ),
-            cursorColor: const Color(0xFF0A2342), // Dark cursor
+            cursorColor: const Color(0xFF0A2342),
             decoration: InputDecoration(
               hintText: '••••••••',
               hintStyle: AppTextStyles.textBase.copyWith(
@@ -460,6 +532,7 @@ class SignupScreen extends GetView<SignupController> {
               ),
               filled: true,
               fillColor: Colors.white,
+              isDense: layout.isCompact,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(
@@ -478,9 +551,9 @@ class SignupScreen extends GetView<SignupController> {
                 borderRadius: BorderRadius.all(Radius.circular(16)),
                 borderSide: BorderSide(color: Color(0xFF00B8A9), width: 2),
               ),
-              contentPadding: const EdgeInsets.symmetric(
+              contentPadding: EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical: 16,
+                vertical: layout.fieldVerticalPadding,
               ),
             ),
           );
@@ -496,7 +569,7 @@ class SignupScreen extends GetView<SignupController> {
     );
   }
 
-  Widget _buildConfirmPasswordField() {
+  Widget _buildConfirmPasswordField(_SignupLayout layout) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -525,6 +598,7 @@ class SignupScreen extends GetView<SignupController> {
               TextField(
                 controller: controller.confirmPasswordController,
                 obscureText: !controller.isConfirmPasswordVisible.value,
+                textInputAction: TextInputAction.done,
                 decoration: InputDecoration(
                   hintText: '••••••••',
                   hintStyle: AppTextStyles.textBase.copyWith(
@@ -545,6 +619,7 @@ class SignupScreen extends GetView<SignupController> {
                   ),
                   filled: true,
                   fillColor: Colors.white,
+                  isDense: layout.isCompact,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide(color: borderColor, width: 2),
@@ -557,9 +632,9 @@ class SignupScreen extends GetView<SignupController> {
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide(color: focusedColor, width: 2),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
+                  contentPadding: EdgeInsets.symmetric(
                     horizontal: 16,
-                    vertical: 16,
+                    vertical: layout.fieldVerticalPadding,
                   ),
                 ),
               ),
@@ -578,14 +653,14 @@ class SignupScreen extends GetView<SignupController> {
 
   // ---------- SIGNUP BUTTON ----------
 
-  Widget _buildSignupButton() {
+  Widget _buildSignupButton(_SignupLayout layout) {
     return Obx(() {
       final isBusy = controller.isLoading.value;
       final isEnabled = controller.isFormValid.value && !isBusy;
 
       return SizedBox(
         width: double.infinity,
-        height: 56,
+        height: layout.primaryButtonHeight,
         child: ElevatedButton(
           onPressed: isEnabled ? controller.handleSignup : null,
           style: ElevatedButton.styleFrom(
@@ -623,7 +698,15 @@ class SignupScreen extends GetView<SignupController> {
 
   // ---------- DIVIDER & SOCIAL ----------
 
-  Widget _buildDivider() {
+  Widget _buildDivider(_SignupLayout layout) {
+    final labelStyle = layout.isCompact
+        ? AppTextStyles.textSm.copyWith(
+            color: const Color(0xFF0A2342).withOpacity(0.4),
+            fontSize: 12,
+          )
+        : AppTextStyles.textSm.copyWith(
+            color: const Color(0xFF0A2342).withOpacity(0.4),
+          );
     return Row(
       children: [
         Expanded(
@@ -633,12 +716,12 @@ class SignupScreen extends GetView<SignupController> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: EdgeInsets.symmetric(
+            horizontal: layout.isCompact ? 10 : 16,
+          ),
           child: Text(
             'or continue with',
-            style: AppTextStyles.textSm.copyWith(
-              color: const Color(0xFF0A2342).withOpacity(0.4),
-            ),
+            style: labelStyle,
           ),
         ),
         Expanded(
@@ -651,24 +734,26 @@ class SignupScreen extends GetView<SignupController> {
     );
   }
 
-  Widget _buildSocialButtons(bool isSmallScreen) {
+  Widget _buildSocialButtons(_SignupLayout layout) {
     return Obx(() {
       final isBusy = controller.isLoading.value;
       return Row(
         children: [
           Expanded(
             child: _buildSocialButton(
+              layout: layout,
               label: 'Google',
               onTap: isBusy ? null : controller.handleGoogleSignup,
-              child: _GoogleLogo(),
+              child: _GoogleLogo(compact: layout.isCompact),
             ),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: layout.roleGap),
           Expanded(
             child: _buildSocialButton(
+              layout: layout,
               label: 'Apple',
               onTap: isBusy ? null : controller.handleAppleSignup,
-              child: _AppleLogo(),
+              child: _AppleLogo(compact: layout.isCompact),
             ),
           ),
         ],
@@ -677,6 +762,7 @@ class SignupScreen extends GetView<SignupController> {
   }
 
   Widget _buildSocialButton({
+    required _SignupLayout layout,
     required String label,
     required VoidCallback? onTap,
     required Widget child,
@@ -688,7 +774,9 @@ class SignupScreen extends GetView<SignupController> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: EdgeInsets.symmetric(
+            vertical: layout.isCompact ? 10 : 12,
+          ),
           decoration: BoxDecoration(
             border: Border.all(
               color: const Color(0xFF0A2342).withOpacity(0.1),
@@ -698,14 +786,24 @@ class SignupScreen extends GetView<SignupController> {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               child,
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: AppTextStyles.textBase.copyWith(
-                  color: const Color(0xFF0A2342),
-                  fontWeight: FontWeight.w500,
+              SizedBox(width: layout.isCompact ? 6 : 8),
+              Flexible(
+                child: Text(
+                  label,
+                  style: layout.isCompact
+                      ? AppTextStyles.textBase.copyWith(
+                          color: const Color(0xFF0A2342),
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        )
+                      : AppTextStyles.textBase.copyWith(
+                          color: const Color(0xFF0A2342),
+                          fontWeight: FontWeight.w500,
+                        ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -746,11 +844,12 @@ class SignupScreen extends GetView<SignupController> {
     );
   }
 
-  Widget _buildLoginLink() {
+  Widget _buildLoginLink(double bottomInset) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 32),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      padding: EdgeInsets.only(bottom: 24 + bottomInset),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           Text(
             "Already have an account? ",
@@ -775,39 +874,36 @@ class SignupScreen extends GetView<SignupController> {
 
   // ---------- SUCCESS CONTENT ----------
 
-  Widget _buildSuccessContent(bool isSmallScreen) {
+  Widget _buildSuccessContent(_SignupLayout layout) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const SizedBox(height: 20),
-        // Success Icon
+        SizedBox(height: layout.isCompact ? 12 : 20),
         Container(
-          width: 80,
-          height: 80,
+          width: layout.isCompact ? 72 : 80,
+          height: layout.isCompact ? 72 : 80,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: const Color(0xFF00B8A9).withOpacity(0.1),
           ),
-          child: const Icon(
+          child: Icon(
             Icons.check_circle,
-            color: Color(0xFF00B8A9),
-            size: 50,
+            color: const Color(0xFF00B8A9),
+            size: layout.isCompact ? 44 : 50,
           ),
         ),
-        const SizedBox(height: 24),
-        // Success Title
+        SizedBox(height: layout.isCompact ? 20 : 24),
         Text(
           'Account Created!',
           style: AppTextStyles.textBase.copyWith(
-            fontSize: isSmallScreen ? 24 : 28,
+            fontSize: layout.isCompact ? 22 : (layout.isMedium ? 26 : 28),
             fontWeight: FontWeight.bold,
             color: const Color(0xFF0A2342),
           ),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 12),
-        // Success Message
+        SizedBox(height: layout.isCompact ? 8 : 12),
         Text(
           'Your account has been successfully created. You can now sign in to continue.',
           style: AppTextStyles.textBase.copyWith(
@@ -815,11 +911,10 @@ class SignupScreen extends GetView<SignupController> {
           ),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 32),
-        // Back to Login Button
+        SizedBox(height: layout.isCompact ? 24 : 32),
         SizedBox(
           width: double.infinity,
-          height: 56,
+          height: layout.primaryButtonHeight,
           child: ElevatedButton(
             onPressed: controller.navigateToLoginAfterSignup,
             style: ElevatedButton.styleFrom(
@@ -839,56 +934,43 @@ class SignupScreen extends GetView<SignupController> {
             ),
           ),
         ),
-        const SizedBox(height: 20),
+        SizedBox(height: layout.isCompact ? 12 : 20),
       ],
     );
   }
 }
 
-// ---------- GOOGLE LOGO (simple custom paint) ----------
+// ---------- GOOGLE LOGO ----------
 
 class _GoogleLogo extends StatelessWidget {
+  const _GoogleLogo({this.compact = false});
+
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
+    final s = compact ? 18.0 : 20.0;
     return SvgPicture.asset(
       'assets/images/google_logo.svg',
-      width: 20,
-      height: 20,
+      width: s,
+      height: s,
     );
   }
-}
-
-class _GoogleLogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
-
-    // Outer colored circle
-    paint.color = const Color(0xFF4285F4);
-    canvas.drawCircle(
-      Offset(size.width / 2, size.height / 2),
-      size.width / 2,
-      paint,
-    );
-
-    // Inner white circle
-    paint.color = Colors.white;
-    canvas.drawCircle(
-      Offset(size.width / 2, size.height / 2),
-      size.width / 3,
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // ---------- APPLE LOGO ----------
 
 class _AppleLogo extends StatelessWidget {
+  const _AppleLogo({this.compact = false});
+
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
-    return const Icon(Icons.apple, color: Color(0xFF0A2342), size: 20);
+    return Icon(
+      Icons.apple,
+      color: const Color(0xFF0A2342),
+      size: compact ? 18 : 20,
+    );
   }
 }

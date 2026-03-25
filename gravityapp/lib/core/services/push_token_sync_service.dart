@@ -6,7 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import '../../app/routes/app_routes.dart';
-import '../../data/remote/notifications_api.dart';
+import '../../data/repositories/notifications_repository.dart';
 import '../../presentation/main_layout/controllers/main_layout_controller.dart';
 import 'device_manager.dart';
 import 'preferences_service.dart';
@@ -19,7 +19,7 @@ class PushTokenSyncService {
   factory PushTokenSyncService() => _instance;
   PushTokenSyncService._internal();
 
-  final NotificationsApi _api = NotificationsApi();
+  final NotificationsRepository _api = NotificationsRepository();
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   static const String _channelId = 'gravity_push';
   static const String _channelName = 'Gravity Notifications';

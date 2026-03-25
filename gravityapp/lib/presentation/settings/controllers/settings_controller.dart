@@ -18,7 +18,7 @@ import '../../../core/services/health_sync_service.dart'
     show HealthSyncService, HealthPlatform, SyncActivity;
 import '../../../data/model/health_permissions.dart';
 import '../../../data/model/notification_preferences.dart';
-import '../../../data/remote/notifications_api.dart';
+import '../../../data/repositories/notifications_repository.dart';
 import '../../../data/repositories/goals_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../core/services/api_service.dart';
@@ -34,7 +34,7 @@ class SettingsController extends GetxController {
   final AuthRepository _authRepository = AuthRepository();
   final ImagePicker _imagePicker = ImagePicker();
   final ApiService _apiService = ApiService();
-  final NotificationsApi _notificationsApi = NotificationsApi();
+  final NotificationsRepository _notificationsApi = NotificationsRepository();
 
   // Notification preferences
   final Rx<NotificationPreferences> notificationPrefs =
